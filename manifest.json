@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Anti Pop-Under & Clickjack",
+  "version": "1.0.0",
+  "author": "HuyTran1002",
+  "description": "Ngăn chặn hiệu quả các quảng cáo nhảy trang, cửa sổ ẩn tự động khi nhấp chuột trên website. Phát triển bởi HuyTran1002.",
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "ISOLATED"
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Anti Pop-Under"
+  }
+}

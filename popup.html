@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anti Pop-Under</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="24" height="24" rx="6" fill="url(#logoGrad)"/>
+          <path d="M12 7V17M7 12H17" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#FF5252"/>
+              <stop offset="1" stop-color="#FF7A00"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="brand-text">
+          <h1>AntiPop</h1>
+          <span class="version">v1.0.0</span>
+        </div>
+      </div>
+      
+      <!-- Sleek Toggle Switch -->
+      <label class="switch-container">
+        <input type="checkbox" id="power-toggle" checked>
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <!-- Main Status and Counter Card -->
+    <main class="main-content">
+      <div class="status-card" id="status-card">
+        <div class="glow-effect"></div>
+        <div class="status-header">
+          <span class="status-badge" id="status-badge">Đang bảo vệ</span>
+        </div>
+        
+        <div class="counter-container">
+          <div class="counter-value" id="blocked-count">0</div>
+          <div class="counter-label">Quảng cáo đã chặn</div>
+        </div>
+      </div>
+      
+      <!-- Site Toggle Card -->
+      <div class="site-toggle-container">
+        <span class="site-toggle-label" id="site-toggle-label">Chặn trên trang này</span>
+        <label class="switch-container">
+          <input type="checkbox" id="site-toggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Action Section -->
+      <section class="section">
+        <div class="section-title">
+          <span>Lịch sử chặn gần đây</span>
+          <button class="clear-btn" id="clear-history-btn" title="Xóa lịch sử">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="history-list" id="history-list">
+          <!-- Dynamically populated or empty state -->
+          <div class="empty-state" id="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <p>Không phát hiện quảng cáo ẩn. Duyệt web an toàn!</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span>Bảo vệ thời gian thực</span>
+        <div class="pulse-indicator"></div>
+      </div>
+      <div style="font-size: 9px; color: var(--text-mute); font-weight: 700; letter-spacing: 0.2px; text-transform: none;">
+        by <span style="color: var(--accent-color);">HuyTran1002</span>
+      </div>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
