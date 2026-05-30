@@ -450,6 +450,7 @@
       const tagName = el.tagName.toLowerCase();
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
       if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) return true;
+      if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
 
       if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable]')) return true;
       const style = window.getComputedStyle(el);
@@ -619,6 +620,14 @@
       }
     }
 
+    // Check if the element is inside a player structure or near a video element
+    try {
+      const playerContainer = el.closest('div, section');
+      if (playerContainer && playerContainer.querySelector('video')) {
+        return false;
+      }
+    } catch(e) {}
+
     try {
       if (el.querySelector('video, audio, canvas, iframe, embed, object')) {
         return false;
@@ -686,6 +695,8 @@
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
       // Check common player container classes
       if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) return true;
+      // Check if it is inside a video container or near a video element
+      if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
       
       // Traverse up to find any element matching play button keywords
       let curr = el;
