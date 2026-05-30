@@ -610,7 +610,7 @@
     }
     
     const tagName = el.tagName.toLowerCase();
-    if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) {
+    if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img'].includes(tagName)) {
       return false;
     }
 
@@ -620,13 +620,24 @@
       }
     }
 
-    // Check if the element is inside a player structure or near a video element
+    // Check if the element is inside a player structure or near a video/iframe element
     try {
       const playerContainer = el.closest('div, section');
-      if (playerContainer && playerContainer.querySelector('video')) {
-        return false;
+      if (playerContainer && (playerContainer.querySelector('video') || playerContainer.querySelector('iframe'))) {
+        if (tagName !== 'a' || el.querySelector('svg, img, i') || el.closest('[class*="icon"], [class*="btn"], [class*="control"], [class*="play"], [class*="player"]')) {
+          return false;
+        }
       }
     } catch(e) {}
+
+    // Check if the element itself contains graphic icons or has control class names
+    try {
+      if (el.querySelector('svg, img, i, canvas') || 
+          el.closest('[class*="icon"], [class*="btn"], [class*="control"], [class*="play"], [class*="player"], [class*="fullscreen"]') ||
+          (el.className && typeof el.className === 'string' && (el.className.includes('btn') || el.className.includes('control') || el.className.includes('play')))) {
+        return false;
+      }
+    } catch (e) {}
 
     try {
       if (el.querySelector('video, audio, canvas, iframe, embed, object')) {
