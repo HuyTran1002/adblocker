@@ -394,6 +394,24 @@
     }, true); // Use capturing phase to get it before other scripts
   });
 
+  // Intercept natural form submissions (often used by popunder scripts on player clicks)
+  window.addEventListener('submit', (e) => {
+    if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+    
+    const form = e.target;
+    if (form && form.tagName && form.tagName.toLowerCase() === 'form') {
+      const action = form.getAttribute('action') || '';
+      const isTargetBlank = (form.getAttribute('target') || '').toLowerCase() === '_blank';
+      
+      if (!checkNavigationOrPopup(action, isTargetBlank ? 'form.submit._blank' : 'form.submit')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[Anti Pop-Under] Prevented ad form submission to:', action);
+      }
+    }
+  }, true);
+
   // Communication Handshake with content.js (Isolated World)
 
   window.addEventListener('message', (event) => {
@@ -1465,7 +1483,21 @@
       }
     }
 
+    function scanAndRemoveClickjacks() {
+      if (!isEnabled()) return;
+      try {
+        const anchors = document.querySelectorAll('a');
+        anchors.forEach(el => {
+          if (isClickjackOverlay(el)) {
+            console.log('[Anti Pop-Under] Auto-removed clickjack overlay before click:', el);
+            el.remove();
+          }
+        });
+      } catch (e) {}
+    }
+
     setInterval(cleanOverlays, 200);
+    setInterval(scanAndRemoveClickjacks, 300);
   }
 
   runYouTubeAdSkipper();
