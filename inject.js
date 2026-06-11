@@ -2,6 +2,229 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
+  // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
+  (function() {
+    const falsyProps = [
+      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker', 
+      'isAdblock', 'isAdBlock', 'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled'
+    ];
+    falsyProps.forEach(prop => {
+      try {
+        Object.defineProperty(window, prop, {
+          get() { return false; },
+          set(val) { /* ignore */ },
+          configurable: true
+        });
+      } catch(e) {}
+    });
+
+    const mockGlobals = {
+      adsbygoogle: [],
+      google_ad_client: 'ca-pub-mock',
+      google_ad_slot: '1234567890',
+      google_ad_width: 728,
+      google_ad_height: 90,
+      google_analytics: { getTracker: () => ({ _trackPageview: () => {} }) },
+      ga: function() { if (arguments[0] && typeof arguments[arguments.length - 1] === 'function') { try { arguments[arguments.length - 1](); } catch(e){} } },
+      gaClassic: {},
+      _gaq: { push: function(arr) { if (arr && arr[0] === '_setCallback' && typeof arr[1] === 'function') { try { arr[1](); } catch(e){} } } }
+    };
+    
+    Object.keys(mockGlobals).forEach(key => {
+      try {
+        if (!(key in window)) {
+          window[key] = mockGlobals[key];
+        }
+      } catch(e) {}
+    });
+
+    function isAdUrl(urlStr) {
+      if (!urlStr) return false;
+      try {
+        const lower = String(urlStr).toLowerCase();
+        const keywords = [
+          'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads', 
+          'popcash', 'propellerads', 'exoclick', 'clktag', 'onclickads', 'exdynsrv', 
+          'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo', 
+          'highperformancegate', 'highcpmgate', 'greatcpmgate', 'eclick.vn', 'novanet.vn'
+        ];
+        return keywords.some(kw => lower.includes(kw));
+      } catch(e) {
+        return false;
+      }
+    }
+
+    try {
+      const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+      if (srcDescriptor && srcDescriptor.set) {
+        Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+          get: srcDescriptor.get,
+          set: function(val) {
+            if (typeof val === 'string' && isAdUrl(val)) {
+              console.log('[Anti Pop-Under] Intercepted and mocked script src:', val);
+              srcDescriptor.set.call(this, 'data:text/javascript;base64,console.log("Mocked ad script");');
+              return;
+            }
+            srcDescriptor.set.call(this, val);
+          },
+          configurable: true,
+          enumerable: true
+        });
+      }
+    } catch(e) {}
+
+    try {
+      const originalSetAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(name, value) {
+        if (this.tagName && this.tagName.toLowerCase() === 'script' && name.toLowerCase() === 'src') {
+          if (typeof value === 'string' && isAdUrl(value)) {
+            console.log('[Anti Pop-Under] Intercepted script setAttribute(src):', value);
+            originalSetAttribute.call(this, name, 'data:text/javascript;base64,console.log("Mocked ad script");');
+            return;
+          }
+        }
+        originalSetAttribute.call(this, name, value);
+      };
+    } catch(e) {}
+
+    function isAdBait(el) {
+      if (!el || !el.tagName) return false;
+      try {
+        const id = (el.id || '').toLowerCase();
+        const className = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        const name = (el.getAttribute && el.getAttribute('name') || '').toLowerCase();
+        
+        const keywords = ['adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box', 'sponsored', 'ad-holder', 'qc-holder', 'ad-container'];
+        if (keywords.some(kw => id.includes(kw) || className.includes(kw) || name.includes(kw))) {
+          return true;
+        }
+        if (id === 'ad' || id === 'ads' || className === 'ad' || className === 'ads') {
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    try {
+      const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight').get;
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        get() {
+          const h = originalOffsetHeight.call(this);
+          if (h === 0 && isAdBait(this)) {
+            return 250;
+          }
+          return h;
+        },
+        configurable: true
+      });
+
+      const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth').get;
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        get() {
+          const w = originalOffsetWidth.call(this);
+          if (w === 0 && isAdBait(this)) {
+            return 300;
+          }
+          return w;
+        },
+        configurable: true
+      });
+
+      const originalClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight').get;
+      Object.defineProperty(Element.prototype, 'clientHeight', {
+        get() {
+          const h = originalClientHeight.call(this);
+          if (h === 0 && isAdBait(this)) {
+            return 250;
+          }
+          return h;
+        },
+        configurable: true
+      });
+
+      const originalClientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth').get;
+      Object.defineProperty(Element.prototype, 'clientWidth', {
+        get() {
+          const w = originalClientWidth.call(this);
+          if (w === 0 && isAdBait(this)) {
+            return 300;
+          }
+          return w;
+        },
+        configurable: true
+      });
+    } catch(e) {}
+
+    try {
+      const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function() {
+        const rect = originalGetBoundingClientRect.call(this);
+        if (rect.height === 0 && isAdBait(this)) {
+          return {
+            top: rect.top,
+            left: rect.left,
+            right: rect.left + 300,
+            bottom: rect.top + 250,
+            width: 300,
+            height: 250,
+            x: rect.left,
+            y: rect.top,
+            toJSON: () => {}
+          };
+        }
+        return rect;
+      };
+    } catch(e) {}
+
+    try {
+      const originalGetComputedStyle = window.getComputedStyle;
+      window.getComputedStyle = function(el, pseudoElt) {
+        const style = originalGetComputedStyle.call(this, el, pseudoElt);
+        if (el && isAdBait(el)) {
+          return new Proxy(style, {
+            get(target, prop) {
+              if (prop === 'display') {
+                const val = target.display;
+                return val === 'none' ? 'block' : val;
+              }
+              if (prop === 'visibility') {
+                const val = target.visibility;
+                return val === 'hidden' ? 'visible' : val;
+              }
+              if (prop === 'opacity') {
+                const val = target.opacity;
+                return val === '0' ? '1' : val;
+              }
+              if (prop === 'getPropertyValue') {
+                return function(propertyName) {
+                  if (propertyName === 'display') {
+                    const val = target.getPropertyValue('display');
+                    return val === 'none' ? 'block' : val;
+                  }
+                  if (propertyName === 'visibility') {
+                    const val = target.getPropertyValue('visibility');
+                    return val === 'hidden' ? 'visible' : val;
+                  }
+                  if (propertyName === 'opacity') {
+                    const val = target.getPropertyValue('opacity');
+                    return val === '0' ? '1' : val;
+                  }
+                  return target.getPropertyValue(propertyName);
+                };
+              }
+              const val = Reflect.get(target, prop);
+              if (typeof val === 'function') {
+                return val.bind(target);
+              }
+              return val;
+            }
+          });
+        }
+        return style;
+      };
+    } catch(e) {}
+  })();
+
   // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
   let initialPlayerResponse = undefined;
   let initialData = undefined;
@@ -50,392 +273,6 @@
     return true;
   }
 
-  function getYouTubeBlockedEventKey(obj) {
-    const host = window.location.hostname;
-    let id = 'unknown';
-    try {
-      if (obj && typeof obj === 'object') {
-        if (obj.playerResponse && obj.playerResponse.videoDetails && obj.playerResponse.videoDetails.videoId) {
-          id = obj.playerResponse.videoDetails.videoId;
-        } else if (obj.videoDetails && obj.videoDetails.videoId) {
-          id = obj.videoDetails.videoId;
-        } else if (obj.videoId) {
-          id = obj.videoId;
-        }
-      }
-    } catch (e) {}
-    return `${host}|payload|${id}`;
-  }
-
-  // YouTube Player Response Interceptor to completely prevent ads from existing
-  function cleanPlayerResponse(obj) {
-    if (!isEnabled()) return obj;
-    if (!obj || typeof obj !== 'object') return obj;
-    let stripped = false;
-    try {
-      if (obj.adPlacements && obj.adPlacements.length > 0) {
-        obj.adPlacements = [];
-        stripped = true;
-      }
-      if (obj.playerAds && obj.playerAds.length > 0) {
-        obj.playerAds = [];
-        stripped = true;
-      }
-      if (obj.adSlots && obj.adSlots.length > 0) {
-        obj.adSlots = [];
-        stripped = true;
-      }
-      if (obj.adSignals && Object.keys(obj.adSignals).length > 0) {
-        obj.adSignals = {};
-        stripped = true;
-      }
-
-      // Check and clean nested playerResponse
-      if (obj.playerResponse && typeof obj.playerResponse === 'object') {
-        const pr = obj.playerResponse;
-        if (pr.adPlacements && pr.adPlacements.length > 0) { pr.adPlacements = []; stripped = true; }
-        if (pr.playerAds && pr.playerAds.length > 0) { pr.playerAds = []; stripped = true; }
-        if (pr.adSlots && pr.adSlots.length > 0) { pr.adSlots = []; stripped = true; }
-        if (pr.adSignals && Object.keys(pr.adSignals).length > 0) { pr.adSignals = {}; stripped = true; }
-      }
-
-      if (stripped) {
-        console.log('[Anti Pop-Under] Cleaned ads from player response data.');
-        try {
-          const eventKey = getYouTubeBlockedEventKey(obj);
-          if (shouldReportBlockedEvent(eventKey)) {
-            reportBlocked('YouTube Video Ad', 'Ngăn chặn quảng cáo YouTube xuất hiện');
-          }
-        } catch (e) {}
-      }
-    } catch (e) {
-      console.warn('[Anti Pop-Under] Error cleaning player response:', e);
-    }
-    return obj;
-  }
-
-  function cleanInitialData(obj) {
-    if (!isEnabled()) return obj;
-    if (!obj || typeof obj !== 'object') return obj;
-    try {
-      if (obj.adPlacements) obj.adPlacements = [];
-      if (obj.playerAds) obj.playerAds = [];
-      if (obj.playerResponse && typeof obj.playerResponse === 'object') {
-        const pr = obj.playerResponse;
-        if (pr.adPlacements) pr.adPlacements = [];
-        if (pr.playerAds) pr.playerAds = [];
-      }
-    } catch(e) {}
-    return obj;
-  }
-
-  // 1. Hook JSON.parse to catch all parsed config strings and fetch payloads dynamically
-  const originalParse = JSON.parse;
-  JSON.parse = function(text, reviver) {
-    const obj = originalParse(text, reviver);
-    if (!isEnabled()) return obj;
-    try {
-      if (obj && typeof obj === 'object') {
-        let stripped = false;
-        
-        // Clean player response
-        if (obj.adPlacements && obj.adPlacements.length > 0) { obj.adPlacements = []; stripped = true; }
-        if (obj.playerAds && obj.playerAds.length > 0) { obj.playerAds = []; stripped = true; }
-        if (obj.adSlots && obj.adSlots.length > 0) { obj.adSlots = []; stripped = true; }
-        if (obj.adSignals && Object.keys(obj.adSignals).length > 0) { obj.adSignals = {}; stripped = true; }
-
-        // Clean playerResponse wrapper
-        if (obj.playerResponse && typeof obj.playerResponse === 'object') {
-          const pr = obj.playerResponse;
-          if (pr.adPlacements && pr.adPlacements.length > 0) { pr.adPlacements = []; stripped = true; }
-          if (pr.playerAds && pr.playerAds.length > 0) { pr.playerAds = []; stripped = true; }
-          if (pr.adSlots && pr.adSlots.length > 0) { pr.adSlots = []; stripped = true; }
-          if (pr.adSignals && Object.keys(pr.adSignals).length > 0) { pr.adSignals = {}; stripped = true; }
-        }
-
-        // Clean inner player response strings in ytplayer configs
-        if (obj.config && obj.config.args && typeof obj.config.args === 'object') {
-          const args = obj.config.args;
-          if (args.player_response && typeof args.player_response === 'string') {
-            try {
-              let pr = originalParse(args.player_response);
-              if (pr && typeof pr === 'object') {
-                if (pr.adPlacements && pr.adPlacements.length > 0) pr.adPlacements = [];
-                if (pr.playerAds && pr.playerAds.length > 0) pr.playerAds = [];
-                if (pr.adSlots && pr.adSlots.length > 0) pr.adSlots = [];
-                if (pr.adSignals && Object.keys(pr.adSignals).length > 0) pr.adSignals = {};
-                args.player_response = JSON.stringify(pr);
-                stripped = true;
-              }
-            } catch(e) {}
-          }
-        }
-
-        if (stripped) {
-          console.log('[Anti Pop-Under] Stripped ads via JSON.parse hook');
-          try {
-            const eventKey = getYouTubeBlockedEventKey(obj);
-            if (shouldReportBlockedEvent(eventKey)) {
-              reportBlocked('YouTube Video Ad', 'Ngăn chặn quảng cáo YouTube xuất hiện');
-            }
-          } catch (e) {}
-        }
-      }
-    } catch (e) {
-      console.warn('[Anti Pop-Under] Error in JSON.parse hook:', e);
-    }
-    return obj;
-  };
-
-  // Hook Object.defineProperty to intercept ytInitialPlayerResponse, ytInitialData, and ytplayer
-  const originalDefineProperty = Object.defineProperty;
-  Object.defineProperty = function(obj, prop, descriptor) {
-    if (obj === window && (prop === 'ytInitialPlayerResponse' || prop === 'ytInitialData' || prop === 'ytplayer')) {
-      try {
-        if (descriptor) {
-          if ('value' in descriptor) {
-            if (prop === 'ytInitialPlayerResponse') {
-              initialPlayerResponse = cleanPlayerResponse(descriptor.value);
-            } else if (prop === 'ytInitialData') {
-              initialData = cleanInitialData(descriptor.value);
-            } else if (prop === 'ytplayer') {
-              ytplayer = descriptor.value;
-              if (ytplayer) interceptYtplayerConfig(ytplayer);
-            }
-            return obj; // Return window to mimic success and keep our getter/setter intact
-          }
-        }
-      } catch (e) {
-        console.warn('[Anti Pop-Under] Error in Object.defineProperty hook:', e);
-      }
-    }
-    return originalDefineProperty.apply(this, arguments);
-  };
-
-  const originalDefineProperties = Object.defineProperties;
-  Object.defineProperties = function(obj, props) {
-    if (obj === window && props) {
-      try {
-        let intercepted = false;
-        if (props.ytInitialPlayerResponse && 'value' in props.ytInitialPlayerResponse) {
-          initialPlayerResponse = cleanPlayerResponse(props.ytInitialPlayerResponse.value);
-          intercepted = true;
-        }
-        if (props.ytInitialData && 'value' in props.ytInitialData) {
-          initialData = cleanInitialData(props.ytInitialData.value);
-          intercepted = true;
-        }
-        if (props.ytplayer && 'value' in props.ytplayer) {
-          ytplayer = props.ytplayer.value;
-          if (ytplayer) interceptYtplayerConfig(ytplayer);
-          intercepted = true;
-        }
-        if (intercepted) {
-          const remainingProps = {};
-          for (const key in props) {
-            if (key !== 'ytInitialPlayerResponse' && key !== 'ytInitialData' && key !== 'ytplayer') {
-              remainingProps[key] = props[key];
-            }
-          }
-          if (Object.keys(remainingProps).length > 0) {
-            originalDefineProperties.call(this, obj, remainingProps);
-          }
-          return obj;
-        }
-      } catch (e) {
-        console.warn('[Anti Pop-Under] Error in Object.defineProperties hook:', e);
-      }
-    }
-    return originalDefineProperties.apply(this, arguments);
-  };
-
-  // 2. Intercept ytInitialPlayerResponse variable defined in page HTML script tags
-  try {
-    if (window.ytInitialPlayerResponse) {
-      initialPlayerResponse = cleanPlayerResponse(window.ytInitialPlayerResponse);
-    }
-    Object.defineProperty(window, 'ytInitialPlayerResponse', {
-      get: function() { return initialPlayerResponse; },
-      set: function(val) { initialPlayerResponse = cleanPlayerResponse(val); },
-      configurable: true
-    });
-  } catch (err) {
-    console.warn('[Anti Pop-Under] Failed to define window.ytInitialPlayerResponse:', err);
-  }
-
-  // 3. Intercept window.ytInitialData (home/search layout ads)
-  try {
-    if (window.ytInitialData) {
-      initialData = cleanInitialData(window.ytInitialData);
-    }
-    Object.defineProperty(window, 'ytInitialData', {
-      get: function() { return initialData; },
-      set: function(val) { initialData = cleanInitialData(val); },
-      configurable: true
-    });
-  } catch (e) {}
-
-  // 4. Intercept window.ytplayer config structures (used in initial page loads)
-  try {
-    if (window.ytplayer) {
-      ytplayer = window.ytplayer;
-      interceptYtplayerConfig(ytplayer);
-    }
-    Object.defineProperty(window, 'ytplayer', {
-      get: function() { return ytplayer; },
-      set: function(val) {
-        ytplayer = val;
-        if (ytplayer) {
-          interceptYtplayerConfig(ytplayer);
-        }
-      },
-      configurable: true
-    });
-  } catch (err) {
-    console.warn('[Anti Pop-Under] Failed to define window.ytplayer:', err);
-  }
-
-  function interceptYtplayerConfig(ytplayerObj) {
-    if (!ytplayerObj || typeof ytplayerObj !== 'object') return;
-    
-    let config = ytplayerObj.config;
-    let bootstrapPlayerResponse = ytplayerObj.bootstrapPlayerResponse;
-    
-    if (config) cleanConfig(config);
-    if (bootstrapPlayerResponse) {
-      bootstrapPlayerResponse = cleanPlayerResponse(bootstrapPlayerResponse);
-    }
-    
-    try {
-      Object.defineProperty(ytplayerObj, 'config', {
-        get: function() { return config; },
-        set: function(val) {
-          config = val;
-          if (config) cleanConfig(config);
-        },
-        configurable: true
-      });
-    } catch (e) {}
-
-    try {
-      Object.defineProperty(ytplayerObj, 'bootstrapPlayerResponse', {
-        get: function() { return bootstrapPlayerResponse; },
-        set: function(val) {
-          bootstrapPlayerResponse = cleanPlayerResponse(val);
-        },
-        configurable: true
-      });
-    } catch (e) {}
-  }
-
-  function cleanConfig(config) {
-    if (!config || typeof config !== 'object') return;
-    try {
-      if (config.args && config.args.player_response) {
-        let resp = config.args.player_response;
-        if (typeof resp === 'string') {
-          let data = JSON.parse(resp);
-          data = cleanPlayerResponse(data);
-          config.args.player_response = JSON.stringify(data);
-        } else if (typeof resp === 'object') {
-          config.args.player_response = cleanPlayerResponse(resp);
-        }
-      }
-      if (config.playerResponse) {
-        config.playerResponse = cleanPlayerResponse(config.playerResponse);
-      }
-    } catch (e) {
-      console.warn('[Anti Pop-Under] Error cleaning playerResponse in config:', e);
-    }
-  }
-
-  // 3. Intercept fetch calls for SPA page transitions (/youtubei/v1/player)
-  const originalFetch = window.fetch;
-  window.fetch = async function(...args) {
-    let url = args[0];
-    if (typeof Request !== 'undefined' && url instanceof Request) {
-      url = url.url;
-    } else if (typeof URL !== 'undefined' && url instanceof URL) {
-      url = url.href;
-    }
-    
-    const isPlayerRequest = typeof url === 'string' && url.includes('/youtubei/v1/player');
-    
-    if (isPlayerRequest && isEnabled()) {
-      let originalResponse = null;
-      try {
-        originalResponse = await originalFetch.apply(this, args);
-        let data = await originalResponse.json();
-        data = cleanPlayerResponse(data);
-        
-        return new Response(JSON.stringify(data), {
-          status: originalResponse.status,
-          statusText: originalResponse.statusText,
-          headers: originalResponse.headers
-        });
-      } catch (err) {
-        console.warn('[Anti Pop-Under] Fetch intercept error:', err);
-        if (originalResponse) {
-          return originalResponse;
-        }
-        throw err;
-      }
-    }
-    return originalFetch.apply(this, args);
-  };
-
-  // 4. Intercept XMLHttpRequest for fallback SPA page transitions
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSend = XMLHttpRequest.prototype.send;
-
-  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-    this._url = typeof url === 'string' ? url : (typeof URL !== 'undefined' && url instanceof URL ? url.href : '');
-    return originalXHROpen.apply(this, [method, url, ...rest]);
-  };
-
-  XMLHttpRequest.prototype.send = function(...args) {
-    if (this._url && this._url.includes('/youtubei/v1/player') && isEnabled()) {
-      const xhr = this;
-      const originalCallback = xhr.onreadystatechange;
-      xhr.onreadystatechange = function(...stateArgs) {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-          try {
-            let data = null;
-            if (xhr.responseType === 'json') {
-              data = xhr.response;
-            } else if (!xhr.responseType || xhr.responseType === 'text') {
-              data = JSON.parse(xhr.responseText);
-            }
-            
-            if (data) {
-              data = cleanPlayerResponse(data);
-              
-              try {
-                Object.defineProperty(xhr, 'response', { value: data, writable: true, configurable: true });
-              } catch (e) {
-                try { xhr.response = data; } catch (err) {}
-              }
-              
-              if (!xhr.responseType || xhr.responseType === 'text') {
-                const responseString = JSON.stringify(data);
-                try {
-                  Object.defineProperty(xhr, 'responseText', { value: responseString, writable: true, configurable: true });
-                } catch (e) {
-                  try { xhr.responseText = responseString; } catch (err) {}
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[Anti Pop-Under] XHR intercept error:', e);
-          }
-        }
-        if (originalCallback) {
-          return originalCallback.apply(this, stateArgs);
-        }
-      };
-    }
-    return originalXHRSend.apply(this, args);
-  };
 
   // Store original methods
   const originalOpen = window.open;
@@ -950,12 +787,410 @@
     };
   }
 
-  // YouTube Ad Skipper (Main World) - Optimized Lightweight Fallback
+  // YouTube Ad Skipper (Main World) - Advanced Network Interceptor and Backup Skipper
   function runYouTubeAdSkipper() {
     if (!window.location.hostname.includes('youtube.com')) return;
 
-    console.log('[Anti Pop-Under] Optimized YouTube Ad Skipper (Main World) initialized!');
+    console.log('[Anti Pop-Under] Advanced YouTube Ad Skipper (Main World) initialized!');
 
+    // Recursive helper to clean ad configurations at any depth
+    function recursiveCleanYouTubeResponse(obj) {
+      if (!obj || typeof obj !== 'object') return obj;
+
+      if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+          recursiveCleanYouTubeResponse(obj[i]);
+        }
+        return obj;
+      }
+
+      // 1. Remove standard ad placements and slots
+      let hasAds = false;
+      if (obj.adPlacements && obj.adPlacements.length > 0) {
+        obj.adPlacements = [];
+        hasAds = true;
+      } else if (obj.adPlacements) {
+        obj.adPlacements = [];
+      }
+
+      if (obj.adSlots && obj.adSlots.length > 0) {
+        obj.adSlots = [];
+        hasAds = true;
+      } else if (obj.adSlots) {
+        obj.adSlots = [];
+      }
+
+      if (obj.playerAds && obj.playerAds.length > 0) {
+        obj.playerAds = [];
+        hasAds = true;
+      } else if (obj.playerAds) {
+        obj.playerAds = [];
+      }
+
+      if (hasAds) {
+        const reportKey = `${window.location.hostname}|api-ad-block|${Date.now()}`;
+        if (shouldReportBlockedEvent(reportKey)) {
+          reportBlocked('YouTube Video Ad', 'Chặn quảng cáo trên luồng phát YouTube');
+        }
+      }
+
+      if (obj.adBreakParams) {
+        delete obj.adBreakParams;
+      }
+
+      // 2. Remove configuration ads parameters
+      if (obj.adsParams) {
+        delete obj.adsParams;
+      }
+      if (obj.adSafetyInfo) {
+        delete obj.adSafetyInfo;
+      }
+      if (obj.playerConfig) {
+        if (obj.playerConfig.adsParams) {
+          delete obj.playerConfig.adsParams;
+        }
+        if (obj.playerConfig.adSafetyInfo) {
+          delete obj.playerConfig.adSafetyInfo;
+        }
+      }
+
+      // 3. Remove midrolls and video ads config from playabilityStatus if any
+      if (obj.playabilityStatus) {
+        if (obj.playabilityStatus.adBreakParams) {
+          delete obj.playabilityStatus.adBreakParams;
+        }
+      }
+
+      // Recurse into all child properties
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key) && typeof obj[key] === 'object') {
+          recursiveCleanYouTubeResponse(obj[key]);
+        }
+      }
+
+      return obj;
+    }
+
+    // Synchronously fetch a clean playabilityStatus OK playerResponse from InnerTube
+    function fetchCleanPlayerResponseSync(videoId) {
+      try {
+        let apiKey = '';
+        if (window.yt && window.yt.config_ && window.yt.config_.INNERTUBE_API_KEY) {
+          apiKey = window.yt.config_.INNERTUBE_API_KEY;
+        } else {
+          const scripts = document.querySelectorAll('script');
+          for (let script of scripts) {
+            const match = script.textContent.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
+            if (match) {
+              apiKey = match[1];
+              break;
+            }
+          }
+        }
+
+        const url = `/youtubei/v1/player?key=${apiKey}&prettyPrint=false`;
+        const payload = {
+          context: {
+            client: {
+              clientName: 'WEB_EMBEDDED_PLAYER',
+              clientVersion: '1.20240601.01.00',
+              hl: 'vi',
+              gl: 'VN',
+              utcOffsetMinutes: 420
+            }
+          },
+          videoId: videoId,
+          playbackContext: {
+            contentPlaybackContext: {
+              html5Preference: 'HTML5_PREF_WANTS_HTML5'
+            }
+          }
+        };
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, false); // synchronous XHR
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        // Temporarily override the prototype send hook behavior if any to avoid loops
+        xhr.send(JSON.stringify(payload));
+        
+        if (xhr.status === 200) {
+          const resObj = JSON.parse(xhr.responseText);
+          if (resObj && resObj.playabilityStatus && resObj.playabilityStatus.status === 'OK') {
+            return resObj;
+          }
+        }
+      } catch (e) {
+        console.warn('[Anti Pop-Under] Failed sync fetch player response:', e);
+      }
+      return null;
+    }
+
+    // Intercept JSON.parse globally for YouTube (highly effective and bulletproof)
+    try {
+      const originalParse = JSON.parse;
+      const customParse = function(text, reviver) {
+        const obj = originalParse.call(this, text, reviver);
+        if (typeof text === 'string' && (
+          text.includes('adPlacements') || 
+          text.includes('adSlots') || 
+          text.includes('playerAds') || 
+          text.includes('adsParams')
+        )) {
+          if (obj && typeof obj === 'object') {
+            recursiveCleanYouTubeResponse(obj);
+          }
+        }
+        return obj;
+      };
+      try {
+        Object.defineProperty(customParse, 'name', { value: 'parse' });
+      } catch (e) {}
+      customParse.toString = function() { return 'function parse() { [native code] }'; };
+      JSON.parse = customParse;
+    } catch (e) {
+      console.warn('[Anti Pop-Under] Failed to hook JSON.parse:', e);
+    }
+
+    // Intercept ytInitialPlayerResponse (initial load)
+    let interceptedPlayerResponse = undefined;
+    try {
+      Object.defineProperty(window, 'ytInitialPlayerResponse', {
+        get() {
+          return interceptedPlayerResponse;
+        },
+        set(val) {
+          if (val) {
+            const isBlocked = val.playabilityStatus && 
+                              (val.playabilityStatus.status === 'ERROR' || 
+                               (val.playabilityStatus.reason && val.playabilityStatus.reason.includes('Terms of Service')) ||
+                               (val.playabilityStatus.reason && val.playabilityStatus.reason.includes('chặn quảng cáo')));
+            
+            if (isBlocked) {
+              const videoId = new URLSearchParams(window.location.search).get('v') || 
+                              (val.videoDetails && val.videoDetails.videoId);
+              if (videoId) {
+                console.log('[Anti Pop-Under] Blocked playerResponse detected for videoId:', videoId, '. Fetching clean response sync...');
+                const cleanResponse = fetchCleanPlayerResponseSync(videoId);
+                if (cleanResponse) {
+                  val = cleanResponse;
+                  console.log('[Anti Pop-Under] Clean playerResponse successfully substituted!');
+                }
+              }
+            }
+            recursiveCleanYouTubeResponse(val);
+          }
+          interceptedPlayerResponse = val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {
+      console.warn('[Anti Pop-Under] Failed to define getter/setter for ytInitialPlayerResponse:', e);
+    }
+
+    // Intercept ytplayer config raw_player_response
+    let interceptedYtPlayer = undefined;
+    try {
+      Object.defineProperty(window, 'ytplayer', {
+        get() {
+          return interceptedYtPlayer;
+        },
+        set(val) {
+          if (val && typeof val === 'object') {
+            if (val.config && val.config.args) {
+              const args = val.config.args;
+              if (args.raw_player_response) {
+                try {
+                  let isString = typeof args.raw_player_response === 'string';
+                  let obj = isString ? JSON.parse(args.raw_player_response) : args.raw_player_response;
+                  
+                  const isBlocked = obj.playabilityStatus && 
+                                    (obj.playabilityStatus.status === 'ERROR' || 
+                                     (obj.playabilityStatus.reason && obj.playabilityStatus.reason.includes('Terms of Service')) ||
+                                     (obj.playabilityStatus.reason && obj.playabilityStatus.reason.includes('chặn quảng cáo')));
+                  
+                  if (isBlocked) {
+                    const videoId = new URLSearchParams(window.location.search).get('v') || 
+                                    (obj.videoDetails && obj.videoDetails.videoId);
+                    if (videoId) {
+                      console.log('[Anti Pop-Under] Blocked ytplayer raw_player_response detected. Fetching clean response sync...');
+                      const cleanResponse = fetchCleanPlayerResponseSync(videoId);
+                      if (cleanResponse) {
+                        obj = cleanResponse;
+                        console.log('[Anti Pop-Under] Clean ytplayer raw_player_response successfully substituted!');
+                      }
+                    }
+                  }
+                  
+                  recursiveCleanYouTubeResponse(obj);
+                  if (isString) {
+                    args.raw_player_response = JSON.stringify(obj);
+                  } else {
+                    args.raw_player_response = obj;
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+          interceptedYtPlayer = val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+
+    // Intercept fetch API requests
+    try {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        let requestUrl = args[0];
+        let options = args[1] || {};
+        let urlString = '';
+        if (typeof requestUrl === 'string') {
+          urlString = requestUrl;
+        } else if (requestUrl instanceof URL) {
+          urlString = requestUrl.href;
+        } else if (requestUrl && typeof requestUrl === 'object' && requestUrl.url) {
+          urlString = requestUrl.url;
+        }
+
+        if (urlString.includes('/pagead/viewthroughconversion/')) {
+          return new Response('', {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({
+              'Access-Control-Allow-Origin': window.location.origin,
+              'Access-Control-Allow-Credentials': 'true'
+            })
+          });
+        }
+
+        if (urlString.includes('/youtubei/v1/player')) {
+          try {
+            // Spoof client to WEB_EMBEDDED_PLAYER in the request payload
+            if (options.body && typeof options.body === 'string') {
+              try {
+                let bodyObj = JSON.parse(options.body);
+                if (bodyObj && bodyObj.context && bodyObj.context.client) {
+                  bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                  bodyObj.context.client.clientVersion = '1.20240601.01.00';
+                  options.body = JSON.stringify(bodyObj);
+                }
+              } catch (e) {}
+            } else if (requestUrl && typeof requestUrl === 'object' && requestUrl.body && typeof requestUrl.body === 'string') {
+              // Handle Request object case
+              try {
+                let bodyObj = JSON.parse(requestUrl.body);
+                if (bodyObj && bodyObj.context && bodyObj.context.client) {
+                  bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                  bodyObj.context.client.clientVersion = '1.20240601.01.00';
+                  // Request bodies are read-only once instantiated, so we might need to recreate the Request
+                  const newRequest = new Request(requestUrl, {
+                    body: JSON.stringify(bodyObj)
+                  });
+                  args[0] = newRequest;
+                }
+              } catch (e) {}
+            }
+
+            const response = await originalFetch.apply(this, args);
+            const clone = response.clone();
+            const json = await clone.json();
+            recursiveCleanYouTubeResponse(json);
+
+            const newResponse = new Response(JSON.stringify(json), {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers
+            });
+            Object.defineProperties(newResponse, {
+              url: { value: response.url },
+              type: { value: response.type }
+            });
+            return newResponse;
+          } catch (e) {
+            console.warn('[Anti Pop-Under] Error in fetch interceptor:', e);
+          }
+        }
+        return originalFetch.apply(this, args);
+      };
+    } catch (e) {
+      console.warn('[Anti Pop-Under] Failed to intercept fetch:', e);
+    }
+
+    // Intercept XMLHttpRequest
+    try {
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        this._url = url;
+        return originalXHROpen.apply(this, [method, url, ...rest]);
+      };
+
+      XMLHttpRequest.prototype.send = function(body) {
+        if (this._url && this._url.includes('/youtubei/v1/player')) {
+          try {
+            // Spoof client to WEB_EMBEDDED_PLAYER in XHR request payload
+            if (body && typeof body === 'string') {
+              let bodyObj = JSON.parse(body);
+              if (bodyObj && bodyObj.context && bodyObj.context.client) {
+                bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                bodyObj.context.client.clientVersion = '1.20240601.01.00';
+                body = JSON.stringify(bodyObj);
+              }
+            }
+          } catch (e) {}
+
+          const xhr = this;
+          let responseTextVal = null;
+          let responseVal = null;
+
+          const cleanResponseData = () => {
+            if (responseTextVal !== null) return;
+            try {
+              const rawText = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText').get.call(xhr);
+              if (rawText) {
+                const json = JSON.parse(rawText);
+                recursiveCleanYouTubeResponse(json);
+                responseTextVal = JSON.stringify(json);
+
+                const rawResponse = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response').get.call(xhr);
+                if (typeof rawResponse === 'object') {
+                  responseVal = json;
+                } else {
+                  responseVal = responseTextVal;
+                }
+              }
+            } catch (e) {
+              // Fallback if parsing or cleaning fails
+            }
+          };
+
+          Object.defineProperty(xhr, 'responseText', {
+            get: function() {
+              cleanResponseData();
+              return responseTextVal !== null ? responseTextVal : '';
+            },
+            configurable: true
+          });
+
+          Object.defineProperty(xhr, 'response', {
+            get: function() {
+              cleanResponseData();
+              return responseVal !== null ? responseVal : null;
+            },
+            configurable: true
+          });
+        }
+        return originalXHRSend.apply(this, [body]);
+      };
+    } catch (e) {
+      console.warn('[Anti Pop-Under] Failed to intercept XMLHttpRequest:', e);
+    }
+
+    // --- Mute and fast-forward fallback logic ---
     const skipButtons = [
       '.ytp-ad-skip-button',
       '.ytp-ad-skip-button-modern',
@@ -969,8 +1204,6 @@
     let lastAdDuration = 0;
     let wasMutedByUs = false;
     let originalMutedState = false;
-    let wasPlaybackRateChangedByUs = false;
-    let originalPlaybackRate = 1;
 
     let cachedPlayer = null;
     let cachedVideo = null;
@@ -1010,7 +1243,6 @@
         const adShowing = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
 
         if (adShowing && video) {
-          const currentTime = video.currentTime;
           const duration = video.duration;
 
           // 1. Mute ad immediately
@@ -1029,7 +1261,7 @@
             }
           }
 
-          // 3. Click any visible skip buttons (best-effort)
+          // 3. Click any visible skip buttons
           skipButtons.forEach(selector => {
             const btn = document.querySelector(selector);
             if (btn) {
@@ -1037,12 +1269,12 @@
             }
           });
 
-          // 4. If ad is paused, try to play it so the player proceeds (best-effort)
+          // 4. Play video if paused
           if (video.paused) {
             video.play().catch(e => {});
           }
 
-          // 5. Force seek the ad to the end when possible to prevent long unskippable ads (only once per ad source URL)
+          // 5. Force seek the ad to the end
           if (video.duration && isFinite(video.duration) && lastSeekedSrc !== video.src) {
             try {
               lastSeekedSrc = video.src || 'ad-src';
@@ -1057,7 +1289,7 @@
             }
           }
 
-          // Report block count for YouTube ad (only once per ad video source change)
+          // Report block event
           if (!isNaN(duration) && duration > 0 && lastAdDuration !== duration) {
             lastAdDuration = duration;
             const reportKey = `${window.location.hostname}|skip|${video.src || lastSeekedSrc || duration}`;
@@ -1071,8 +1303,6 @@
             try { video.muted = originalMutedState; } catch (e) {}
             wasMutedByUs = false;
           }
-          // Playback rate restoration not needed (we avoid changing it now)
-          // Reset the seek tracker when ads are not showing anymore
           lastSeekedSrc = '';
           lastAdDuration = 0;
         }
@@ -1081,8 +1311,61 @@
       }
     }
 
-    // Run skip check every 150ms - extremely fast and light (using isConnected to avoid DOM queries)
-    setInterval(skipAd, 150);
+    function watchAndBypassAntiAdblock() {
+      if (!isEnabled()) return;
+      try {
+        const selectors = [
+          'ytd-enforcement-message-renderer',
+          'ytd-enforcement-message-view-model',
+          'yt-playability-error-supported-renderers',
+          '.yt-playability-error-supported-renderers',
+          'tp-yt-paper-dialog'
+        ];
+
+        let foundAndRemoved = false;
+
+        selectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            const isEnforcement = selector.includes('enforcement');
+            const isPlayabilityError = selector.includes('playability-error');
+            const hasText = el.innerText && (
+              el.innerText.includes('Ad blockers violate') || 
+              el.innerText.includes('Trình chặn quảng cáo') ||
+              el.innerText.includes('chặn quảng cáo') ||
+              el.innerText.includes('Terms of Service')
+            );
+
+            if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
+              el.remove();
+              foundAndRemoved = true;
+              console.log('[Anti Pop-Under] Removed YouTube anti-adblock element:', selector);
+            }
+          });
+        });
+
+        if (foundAndRemoved) {
+          const html = document.documentElement;
+          const body = document.body;
+          if (html.style.overflow === 'hidden') html.style.overflow = '';
+          if (body.style.overflow === 'hidden') body.style.overflow = '';
+
+          const { video } = getPlayerAndVideo();
+          if (video && video.paused) {
+            video.play().catch(e => {});
+            console.log('[Anti Pop-Under] Resumed video playback after removing anti-adblock popup');
+          }
+        }
+      } catch (e) {
+        console.warn('[Anti Pop-Under] Error in anti-adblock watchdog:', e);
+      }
+    }
+
+    // Run skip check and anti-adblock check every 150ms as a fallback
+    setInterval(() => {
+      skipAd();
+      watchAndBypassAntiAdblock();
+    }, 150);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes
@@ -1123,5 +1406,57 @@
     console.warn('[Anti Pop-Under] Location overrides failed:', e);
   }
 
+  function runGenericAntiAdblockBypass() {
+    if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+
+    function cleanOverlays() {
+      if (!isEnabled()) return;
+      try {
+        const divs = document.querySelectorAll('div, section, dialog');
+        divs.forEach(el => {
+          if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
+          
+          const text = (el.innerText || '').toLowerCase();
+          const matchesAdblockText = (
+            text.includes('phát hiện trình chặn quảng cáo') ||
+            text.includes('vui lòng tắt trình chặn quảng cáo') ||
+            text.includes('vui lòng tắt adblock') ||
+            text.includes('adblock detected') ||
+            text.includes('chặn quảng cáo') ||
+            text.includes('turn off adblock') ||
+            text.includes('disable adblock')
+          );
+
+          if (matchesAdblockText) {
+            const style = window.getComputedStyle(el);
+            const isOverlay = style.position === 'fixed' || style.position === 'absolute' || el.tagName.toLowerCase() === 'dialog';
+            
+            if (isOverlay) {
+              el.remove();
+              console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
+              
+              const html = document.documentElement;
+              const body = document.body;
+              
+              if (html) {
+                if (html.style.overflow === 'hidden') html.style.overflow = '';
+                if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
+              }
+              if (body) {
+                if (body.style.overflow === 'hidden') body.style.overflow = '';
+                if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
+              }
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('[Anti Pop-Under] Error in generic anti-adblock watchdog:', e);
+      }
+    }
+
+    setInterval(cleanOverlays, 200);
+  }
+
   runYouTubeAdSkipper();
+  runGenericAntiAdblockBypass();
 })();

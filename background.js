@@ -68,6 +68,18 @@ function updateDeclarativeRules(disabledDomains) {
   }
 }
 
+// Update declarative ruleset state (enable/disable static ruleset)
+function updateRulesetState(enabled) {
+  if (!chrome.declarativeNetRequest) return;
+  chrome.declarativeNetRequest.updateEnabledRulesets({
+    [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
+  }, () => {
+    if (chrome.runtime.lastError) {
+      console.warn('[Anti Pop-Under] updateEnabledRulesets error:', chrome.runtime.lastError);
+    }
+  });
+}
+
 // Watch storage changes to update badge & dynamic allow rules
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local") {
@@ -77,11 +89,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.disabledDomains) {
       updateDeclarativeRules(changes.disabledDomains.newValue);
     }
+    if (changes.enabled) {
+      updateRulesetState(changes.enabled.newValue);
+    }
   }
 });
 
 // Initialize badge and declarative rules on startup
-chrome.storage.local.get(["blockedCount", "disabledDomains"], (result) => {
+chrome.storage.local.get(["blockedCount", "disabledDomains", "enabled"], (result) => {
   if (result) {
     if (result.blockedCount) {
       updateBadge(result.blockedCount);
@@ -89,6 +104,8 @@ chrome.storage.local.get(["blockedCount", "disabledDomains"], (result) => {
     if (result.disabledDomains) {
       updateDeclarativeRules(result.disabledDomains);
     }
+    const enabled = result.enabled !== false;
+    updateRulesetState(enabled);
   }
 });
 
