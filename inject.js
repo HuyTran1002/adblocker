@@ -627,6 +627,12 @@
       const isBackgroundClick = (clickedEl === document.body || clickedEl === document.documentElement || clickedEl === document);
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
       
+      // A play button/player click should NEVER open a new tab/window (window.open) or trigger _blank link redirects
+      if (isPlayerClick && (context === 'window.open' || context.includes('_blank'))) {
+        reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
+        return false;
+      }
+
       if (isBackgroundClick || !isInteractiveElement(clickedEl) || isPlayerClick) {
         if (isExternal || isBlank) {
           if (!isWhitelisted(url)) {
@@ -665,7 +671,16 @@
     }
 
     if (!checkNavigationOrPopup(url, 'window.open')) {
-      return null;
+      // Return a dummy window proxy to prevent script crashes on calling methods/properties
+      const dummyWindow = new Proxy({}, {
+        get(targetProp, prop) {
+          if (prop === 'focus') return () => {};
+          if (prop === 'blur') return () => {};
+          if (prop === 'close') return () => {};
+          return dummyWindow;
+        }
+      });
+      return dummyWindow;
     }
 
     return originalOpen.apply(this, arguments);
@@ -732,7 +747,8 @@
           return originalClick.apply(this, arguments);
         }
         
-        if (!checkNavigationOrPopup(this.href, 'anchor.click')) {
+        const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
+        if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
           return; // block
         }
         
@@ -748,7 +764,8 @@
         return originalClick.apply(this, arguments);
       }
       
-      if (!checkNavigationOrPopup(this.href, 'anchor.click')) {
+      const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
+      if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
         return; // block
       }
       
