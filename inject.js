@@ -590,18 +590,22 @@
       return false;
     }
 
+    // 2. Block all blank popups or non-whitelisted external redirects immediately
+    if (isBlank || (isExternal && !isWhitelisted(url))) {
+      reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank redirect in ${context}`);
+      return false;
+    }
+
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
     const isRecentInteraction = timeSinceLastInteraction < 1000;
 
-    // 2. If no recent user interaction, block all external/blank navigations/popups
+    // 3. If no recent user interaction, block all programmatic actions
     if (!isRecentInteraction) {
-      if (isExternal || isBlank) {
-        reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
-        return false;
-      }
+      reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
+      return false;
     }
 
-    // 3. If there is a recent user interaction, check the clicked element
+    // 4. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
       
@@ -616,14 +620,13 @@
         curr = curr.parentElement;
       }
 
-      // If clicked on an overlay, block all external/blank popups/redirects
+      // If clicked on an overlay, block it
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
         try { overlay.remove(); } catch(e) {}
         return false;
       }
 
-      // Check if clicked element is background, non-interactive, or a player/play button
       const isBackgroundClick = (clickedEl === document.body || clickedEl === document.documentElement || clickedEl === document);
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
       
@@ -631,15 +634,6 @@
       if (isPlayerClick && (context === 'window.open' || context.includes('_blank'))) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
         return false;
-      }
-
-      if (isBackgroundClick || !isInteractiveElement(clickedEl) || isPlayerClick) {
-        if (isExternal || isBlank) {
-          if (!isWhitelisted(url)) {
-            reportBlocked(url || 'blank', `Blocked ${context} on background/player/non-interactive click`);
-            return false;
-          }
-        }
       }
     }
 
