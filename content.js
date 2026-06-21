@@ -114,16 +114,20 @@ function injectYouTubeAdBlockCSS() {
   if (document.getElementById('anti-popunder-youtube-css')) return;
   const style = document.createElement('style');
   style.id = 'anti-popunder-youtube-css';
+  // Use off-screen positioning instead of display:none so YouTube's Polymer click listeners still work!
   style.textContent = `
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
-    .yt-playability-error-supported-renderers,
+    tp-yt-paper-dialog.style-scope.ytd-popup-container {
+      position: absolute !important;
+      top: -9999px !important;
+      left: -9999px !important;
+      opacity: 0 !important;
+      z-index: -9999 !important;
+    }
     tp-yt-iron-overlay-backdrop {
       opacity: 0 !important;
-      visibility: hidden !important;
-      pointer-events: none !important;
       z-index: -9999 !important;
-      display: none !important;
     }
   `;
   (document.head || document.documentElement).appendChild(style);
