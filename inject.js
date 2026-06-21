@@ -1014,7 +1014,7 @@
           args[0] = 'data:application/json,{}';
         }
 
-        if (urlString.includes('/youtubei/v1/player')) {
+        if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
           let response;
           try {
             response = await originalFetch.apply(this, args);
@@ -1083,7 +1083,7 @@
       };
 
       XMLHttpRequest.prototype.send = function(body) {
-        if (this._url && this._url.includes('/youtubei/v1/player')) {
+        if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
           const xhr = this;
           let responseTextVal = null;
           let responseVal = null;
