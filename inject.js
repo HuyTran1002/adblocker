@@ -848,14 +848,9 @@
         if (obj.playerConfig.adsParams) delete obj.playerConfig.adsParams;
         if (obj.playerConfig.adSafetyInfo) delete obj.playerConfig.adSafetyInfo;
       }
-      if (obj.playabilityStatus) {
-        if (obj.playabilityStatus.status && obj.playabilityStatus.status !== 'OK') {
-          obj.playabilityStatus.status = 'OK';
-        }
-        if (obj.playabilityStatus.errorScreen) {
-          delete obj.playabilityStatus.errorScreen;
-        }
-      }
+      // We no longer forcefully mutate playabilityStatus here.
+      // Modifying playabilityStatus to 'OK' without providing streamingData causes fatal black screens
+      // and breaks YouTube's "Allow ads" button functionality.
 
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key) && typeof obj[key] === 'object') {
@@ -938,9 +933,10 @@
               }
               
               if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
-                console.log('[Anti Pop-Under] Sync XHR failed to get unblocked data, falling back to response deletion.');
-                interceptedPlayerResponse = undefined;
-                return;
+                console.log('[Anti Pop-Under] Sync XHR failed to get unblocked data. Passing through original blocked response to allow user recovery.');
+                // We DO NOT set interceptedPlayerResponse = undefined here.
+                // We pass the blocked response through so the YouTube UI can render the error screen normally,
+                // which allows the user to click "Allow ads" if they want to whitelist the site.
               }
             }
             recursiveCleanYouTubeResponse(val);
