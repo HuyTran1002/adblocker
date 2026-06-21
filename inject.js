@@ -862,67 +862,51 @@
     let originalMutedState = false;
     let lastAdDuration = 0;
 
-    let cachedPlayer = null;
-    let cachedVideo = null;
-
-    function getPlayerAndVideo() {
-      if (!cachedPlayer || !cachedPlayer.isConnected) {
-        cachedPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-      }
-      if (!cachedVideo || !cachedVideo.isConnected) {
-        cachedVideo = document.querySelector('.html5-main-video') || document.querySelector('video');
-      }
-      return { player: cachedPlayer, video: cachedVideo };
+    function getNativeSetter(prop) {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, prop);
+      return descriptor ? descriptor.set : null;
     }
 
-    function simulateClick(el) {
-      if (!el) return;
-      try {
-        el.click();
-      } catch (e) {}
-      try {
-        const events = ['mousedown', 'mouseup', 'click'];
-        events.forEach(eventName => {
-          const ev = new MouseEvent(eventName, {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          el.dispatchEvent(ev);
-        });
-      } catch (e) {}
-    }
+    const setPlaybackRate = getNativeSetter('playbackRate');
+    const setCurrentTime = getNativeSetter('currentTime');
+    const setMuted = getNativeSetter('muted');
 
     function skipAd() {
       if (!isEnabled()) return;
       try {
-        const { player, video } = getPlayerAndVideo();
+        const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
         const adShowing = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
+        const videos = document.querySelectorAll('video');
 
-        if (adShowing && video) {
-          const duration = video.duration;
+        if (adShowing && videos.length > 0) {
+          videos.forEach(video => {
+            const duration = video.duration;
+            if (isNaN(duration) || duration <= 0) return;
 
-          // 1. Mute ad immediately
-          if (!video.muted) {
-            originalMutedState = false;
-            video.muted = true;
-            wasMutedByUs = true;
-          }
-
-          // 2. Accelerate playback speed to 16x (max speed allowed by HTML5 Video)
-          if (video.playbackRate !== 16) {
-            userPlaybackRate = video.playbackRate || 1;
-            video.playbackRate = 16;
-          }
-
-          // 3. Try to skip via player API immediately
-          if (player && typeof player.skipAd === 'function') {
-            try {
-              player.skipAd();
-            } catch (e) {
-              console.warn('[Anti Pop-Under] player.skipAd() failed:', e);
+            // 1. Mute ad immediately using native setter
+            if (!video.muted && setMuted) {
+              originalMutedState = false;
+              setMuted.call(video, true);
+              wasMutedByUs = true;
             }
-          }
+
+            // 2. Accelerate playback speed to 16x using native setter
+            if (video.playbackRate !== 16 && setPlaybackRate) {
+              userPlaybackRate = video.playbackRate || 1;
+              setPlaybackRate.call(video, 16);
+            }
+
+            // 3. Force seek to end using native setter (bypasses YouTube's freeze tracker)
+            const targetTime = duration - 0.1;
+            if (video.currentTime < targetTime - 0.2 && setCurrentTime) {
+              setCurrentTime.call(video, targetTime);
+            }
+
+            // Play video if paused
+            if (video.paused) {
+              video.play().catch(e => {});
+            }
+          });
 
           // 4. Click any visible skip buttons using native clicks
           skipButtons.forEach(selector => {
@@ -934,33 +918,28 @@
             }
           });
 
-          // 5. Play video if paused
-          if (video.paused) {
-            video.play().catch(e => {});
-          }
-
-          // We ONLY use 16x speed (playbackRate) and skip button clicks.
-          // DO NOT manually seek (video.currentTime = targetTime) because YouTube's ad tracker 
-          // detects unnatural jumps and will freeze the ad at the last frame while making you wait the full time!
-
           // Report block event
+          const mainVideo = videos[0];
+          const duration = mainVideo ? mainVideo.duration : 0;
           if (!isNaN(duration) && duration > 0 && lastAdDuration !== duration) {
             lastAdDuration = duration;
-            const reportKey = `${window.location.hostname}|skip|${video.src || duration}`;
+            const reportKey = `${window.location.hostname}|skip|${mainVideo.src || duration}`;
             if (shouldReportBlockedEvent(reportKey)) {
               reportBlocked('YouTube Video Ad', 'Bỏ qua quảng cáo video YouTube');
             }
           }
-        } else if (video && !adShowing) {
-          // Restore volume if we muted it
-          if (wasMutedByUs) {
-            try { video.muted = originalMutedState; } catch (e) {}
-            wasMutedByUs = false;
-          }
-          // Restore user's original playback speed
-          if (video.playbackRate === 16) {
-            try { video.playbackRate = userPlaybackRate || 1; } catch (e) {}
-          }
+        } else if (videos.length > 0 && !adShowing) {
+          videos.forEach(video => {
+            // Restore volume if we muted it
+            if (wasMutedByUs && setMuted) {
+              try { setMuted.call(video, originalMutedState); } catch (e) {}
+            }
+            // Restore user's original playback speed
+            if (video.playbackRate === 16 && setPlaybackRate) {
+              try { setPlaybackRate.call(video, userPlaybackRate || 1); } catch (e) {}
+            }
+          });
+          if (wasMutedByUs) wasMutedByUs = false;
           lastAdDuration = 0;
         }
       } catch (e) {
