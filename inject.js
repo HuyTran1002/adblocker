@@ -891,10 +891,10 @@
             }
 
             // 3. Small incremental time jumps (fast-forward bypass)
-            // By jumping 2 seconds every 50ms, we fast-forward 40 seconds per second!
-            // This avoids the "instant jump to end" freeze penalty from YouTube's tracker.
+            // By jumping 5 seconds every 50ms, we fast-forward 100 seconds per second!
+            // This mimics a user holding down the Right Arrow key, avoiding the freeze penalty.
             if (video.currentTime < video.duration - 1) {
-              video.currentTime += 2;
+              video.currentTime += 5;
             }
 
             // Play video if paused
