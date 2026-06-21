@@ -879,6 +879,9 @@
         }
         if (obj.playabilityStatus.adBreakParams) delete obj.playabilityStatus.adBreakParams;
       }
+      if (obj.enforcementMessageViewModel) delete obj.enforcementMessageViewModel;
+      if (obj.enforcementMessageRenderer) delete obj.enforcementMessageRenderer;
+      if (obj.playerErrorMessageRenderer) delete obj.playerErrorMessageRenderer;
 
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key) && typeof obj[key] === 'object') {
@@ -917,6 +920,22 @@
             recursiveCleanYouTubeResponse(val);
           }
           interceptedPlayerResponse = val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+
+    // ytInitialData interceptor
+    let interceptedInitialData = undefined;
+    try {
+      Object.defineProperty(window, 'ytInitialData', {
+        get() { return interceptedInitialData; },
+        set(val) {
+          if (val) {
+            recursiveCleanYouTubeResponse(val);
+          }
+          interceptedInitialData = val;
         },
         configurable: true,
         enumerable: true
