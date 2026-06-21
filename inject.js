@@ -891,14 +891,59 @@
         get() { return interceptedPlayerResponse; },
         set(val) {
           if (val) {
-            recursiveCleanYouTubeResponse(val);
-            // If the response is UNPLAYABLE (meaning streamingData is missing), we reject it.
-            // This forces YouTube's frontend to fetch the response via API, which we spoof to WEB_CREATOR!
+            // If the response is UNPLAYABLE (meaning streamingData is missing), we fetch the unblocked version synchronously.
             if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
-              console.log('[Anti Pop-Under] Rejected blocked ytInitialPlayerResponse to force API fetch.');
-              interceptedPlayerResponse = undefined;
-              return;
+              console.log('[Anti Pop-Under] Blocked ytInitialPlayerResponse detected. Fetching unblocked data synchronously...');
+              try {
+                const videoId = val.videoDetails ? val.videoDetails.videoId : new URLSearchParams(window.location.search).get('v');
+                if (videoId) {
+                  const xhr = new XMLHttpRequest();
+                  const apiKey = window.ytcfg ? window.ytcfg.get('INNERTUBE_API_KEY') : (window.yt && window.yt.config_ ? window.yt.config_.INNERTUBE_API_KEY : '');
+                  if (apiKey) {
+                    xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false); // false for synchronous
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    
+                    const context = window.ytcfg ? window.ytcfg.get('INNERTUBE_CONTEXT') : null;
+                    const payload = {
+                      context: context || {
+                        client: {
+                          clientName: 'WEB_EMBEDDED_PLAYER',
+                          clientVersion: '1.20240101.01.00',
+                          hl: 'en',
+                          gl: 'US'
+                        }
+                      },
+                      videoId: videoId
+                    };
+                    
+                    if (payload.context && payload.context.client) {
+                      payload.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                    }
+                    
+                    xhr.send(JSON.stringify(payload));
+                    
+                    if (xhr.status === 200) {
+                      const newResponse = JSON.parse(xhr.responseText);
+                      if (newResponse.playabilityStatus && newResponse.playabilityStatus.status === 'OK') {
+                        val.playabilityStatus = newResponse.playabilityStatus;
+                        if (newResponse.streamingData) val.streamingData = newResponse.streamingData;
+                        if (newResponse.videoDetails) val.videoDetails = newResponse.videoDetails;
+                        console.log('[Anti Pop-Under] Successfully injected WEB_EMBEDDED_PLAYER streamingData into original response!');
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error('[Anti Pop-Under] Sync XHR failed', e);
+              }
+              
+              if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
+                console.log('[Anti Pop-Under] Sync XHR failed to get unblocked data, falling back to response deletion.');
+                interceptedPlayerResponse = undefined;
+                return;
+              }
             }
+            recursiveCleanYouTubeResponse(val);
           }
           interceptedPlayerResponse = val;
         },
@@ -920,6 +965,35 @@
               try {
                 let isString = typeof val.config.args.raw_player_response === 'string';
                 let obj = isString ? JSON.parse(val.config.args.raw_player_response) : val.config.args.raw_player_response;
+                
+                if (obj.playabilityStatus && obj.playabilityStatus.status !== 'OK') {
+                  const videoId = obj.videoDetails ? obj.videoDetails.videoId : new URLSearchParams(window.location.search).get('v');
+                  if (videoId) {
+                    const xhr = new XMLHttpRequest();
+                    const apiKey = window.ytcfg ? window.ytcfg.get('INNERTUBE_API_KEY') : (window.yt && window.yt.config_ ? window.yt.config_.INNERTUBE_API_KEY : '');
+                    if (apiKey) {
+                      xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false);
+                      xhr.setRequestHeader('Content-Type', 'application/json');
+                      const context = window.ytcfg ? window.ytcfg.get('INNERTUBE_CONTEXT') : null;
+                      const payload = {
+                        context: context || { client: { clientName: 'WEB_EMBEDDED_PLAYER', clientVersion: '1.20240101.01.00', hl: 'en', gl: 'US' } },
+                        videoId: videoId
+                      };
+                      if (payload.context && payload.context.client) payload.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                      xhr.send(JSON.stringify(payload));
+                      if (xhr.status === 200) {
+                        const newResponse = JSON.parse(xhr.responseText);
+                        if (newResponse.playabilityStatus && newResponse.playabilityStatus.status === 'OK') {
+                          obj.playabilityStatus = newResponse.playabilityStatus;
+                          if (newResponse.streamingData) obj.streamingData = newResponse.streamingData;
+                          if (newResponse.videoDetails) obj.videoDetails = newResponse.videoDetails;
+                          console.log('[Anti Pop-Under] Successfully injected WEB_EMBEDDED_PLAYER streamingData into ytplayer response!');
+                        }
+                      }
+                    }
+                  }
+                }
+                
                 recursiveCleanYouTubeResponse(obj);
                 if (isString) {
                   val.config.args.raw_player_response = JSON.stringify(obj);
@@ -948,18 +1022,6 @@
           urlString = requestUrl.href;
         } else if (requestUrl && typeof requestUrl === 'object' && requestUrl.url) {
           urlString = requestUrl.url;
-        }
-
-        if (urlString.includes('/youtubei/v1/player')) {
-          if (args[1] && typeof args[1].body === 'string') {
-            try {
-              let bodyObj = JSON.parse(args[1].body);
-              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
-                bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
-                args[1].body = JSON.stringify(bodyObj);
-              }
-            } catch(e) {}
-          }
         }
 
         if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
@@ -1014,18 +1076,6 @@
       };
 
       XMLHttpRequest.prototype.send = function(body) {
-        if (this._url && this._url.includes('/youtubei/v1/player')) {
-          if (typeof body === 'string') {
-            try {
-              let bodyObj = JSON.parse(body);
-              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
-                bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
-                body = JSON.stringify(bodyObj);
-              }
-            } catch(e) {}
-          }
-        }
-
         if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
           const xhr = this;
           let responseTextVal = null;
@@ -1231,7 +1281,7 @@
 
             if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
               // Try to click the close/dismiss button first to properly reset YouTube's player state machine
-              const closeBtn = el.querySelector('#dismiss-button, button[aria-label="Đóng"], button[aria-label="Close"], .yt-spec-button-shape-next--text, yt-button-shape button');
+              const closeBtn = el.querySelector('#dismiss-button');
               if (closeBtn) {
                 simulateClick(closeBtn);
               }
