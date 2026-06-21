@@ -840,85 +840,14 @@
     console.log('[Anti Pop-Under] Advanced YouTube Ad Skipper (Main World) initialized!');
 
     // ytInitialPlayerResponse, JSON, fetch, and XHR interceptors have been completely removed.
-    // Wait, no! We are bringing them back, but much safer!
-    // By perfectly stripping adPlacements and playerAds, YouTube's frontend won't even try to load ads.
-    function removeAdsFromJSON(obj) {
-      if (!obj || typeof obj !== 'object') return false;
-      let modified = false;
-      try {
-        if (obj.playerAds) { delete obj.playerAds; modified = true; }
-        if (obj.adPlacements) { delete obj.adPlacements; modified = true; }
-        if (obj.adSlots) { delete obj.adSlots; modified = true; }
-        if (obj.playerResponse) {
-          if (obj.playerResponse.playerAds) { delete obj.playerResponse.playerAds; modified = true; }
-          if (obj.playerResponse.adPlacements) { delete obj.playerResponse.adPlacements; modified = true; }
-          if (obj.playerResponse.adSlots) { delete obj.playerResponse.adSlots; modified = true; }
-        }
-      } catch (e) {}
-      return modified;
-    }
+    // Modifying YouTube API payloads corrupts the internal state machine, causing permanent black screens.
+    // Instead, we rely purely on the stealth 16x video fast-forward skipper, which cannot cause black screens.
 
-    try {
-      // 1. JSON.parse interceptor (catches ytInitialPlayerResponse)
-      const originalParse = JSON.parse;
-      JSON.parse = function() {
-        const parsed = originalParse.apply(this, arguments);
-        if (isEnabled()) removeAdsFromJSON(parsed);
-        return parsed;
-      };
+    // sendBeacon interceptor removed to prevent anti-tamper detection.
 
-      // 2. Fetch API interceptor
-      const originalFetch = window.fetch;
-      window.fetch = async function(...args) {
-        const response = await originalFetch.apply(this, args);
-        if (!isEnabled()) return response;
-        try {
-          const url = args[0] instanceof Request ? args[0].url : args[0];
-          if (typeof url === 'string' && (url.includes('/youtubei/v1/player') || url.includes('/youtubei/v1/next'))) {
-            const clonedResponse = response.clone();
-            const text = await clonedResponse.text();
-            let parsed;
-            try { parsed = originalParse(text); } catch (e) {}
-            
-            if (parsed && removeAdsFromJSON(parsed)) {
-              console.log('[Anti Pop-Under] Intercepted and removed ads from fetch response:', url);
-              const modifiedText = JSON.stringify(parsed);
-              return new Response(modifiedText, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers
-              });
-            }
-          }
-        } catch (e) {}
-        return response;
-      };
 
-      // 3. XMLHttpRequest interceptor
-      const originalXhrOpen = XMLHttpRequest.prototype.open;
-      XMLHttpRequest.prototype.open = function(method, url) {
-        if (isEnabled() && typeof url === 'string' && (url.includes('/youtubei/v1/player') || url.includes('/youtubei/v1/next'))) {
-          this.addEventListener('readystatechange', function() {
-            if (this.readyState === 4 && this.responseText) {
-              try {
-                const parsed = originalParse(this.responseText);
-                if (removeAdsFromJSON(parsed)) {
-                  console.log('[Anti Pop-Under] Intercepted and removed ads from XHR response:', url);
-                  Object.defineProperty(this, 'responseText', {
-                    value: JSON.stringify(parsed),
-                    writable: true
-                  });
-                }
-              } catch (e) {}
-            }
-          });
-        }
-        originalXhrOpen.apply(this, arguments);
-      };
-    } catch (e) {
-      console.warn('[Anti Pop-Under] API Interceptor setup failed:', e);
-    }
 
+    // --- Mute and fast-forward fallback logic ---
     const skipButtons = [
       '.ytp-ad-skip-button',
       '.ytp-ad-skip-button-modern',
