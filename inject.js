@@ -871,6 +871,12 @@
         if (obj.playerConfig.adSafetyInfo) delete obj.playerConfig.adSafetyInfo;
       }
       if (obj.playabilityStatus) {
+        if (obj.playabilityStatus.status && obj.playabilityStatus.status !== 'OK') {
+          obj.playabilityStatus.status = 'OK';
+        }
+        if (obj.playabilityStatus.errorScreen) {
+          delete obj.playabilityStatus.errorScreen;
+        }
         if (obj.playabilityStatus.adBreakParams) delete obj.playabilityStatus.adBreakParams;
       }
 
