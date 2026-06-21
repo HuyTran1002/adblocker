@@ -1,25 +1,29 @@
 [
   {
     "id": 100,
-    "priority": 2,
+    "priority": 100,
     "action": {
       "type": "allow"
     },
     "condition": {
       "initiatorDomains": [
         "youtube.com",
+        "googlevideo.com",
         "doubleclick.net",
         "googleadservices.com",
         "googlesyndication.com",
         "animevietsub.by"
       ],
       "resourceTypes": [
-        "script",
+        "main_frame",
         "sub_frame",
+        "script",
         "xmlhttprequest",
         "image",
         "media",
-        "other"
+        "other",
+        "ping",
+        "websocket"
       ]
     }
   },
