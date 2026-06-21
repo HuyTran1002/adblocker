@@ -950,8 +950,17 @@
           urlString = requestUrl.url;
         }
 
-        // We do not block tracking or ad URLs here to avoid anti-adblock detection.
-        // We also do not spoof WEB_CREATOR anymore, as it causes 404s for some API formats.
+        if (urlString.includes('/youtubei/v1/player')) {
+          if (args[1] && typeof args[1].body === 'string') {
+            try {
+              let bodyObj = JSON.parse(args[1].body);
+              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
+                bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                args[1].body = JSON.stringify(bodyObj);
+              }
+            } catch(e) {}
+          }
+        }
 
         if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
           let response;
@@ -1005,6 +1014,18 @@
       };
 
       XMLHttpRequest.prototype.send = function(body) {
+        if (this._url && this._url.includes('/youtubei/v1/player')) {
+          if (typeof body === 'string') {
+            try {
+              let bodyObj = JSON.parse(body);
+              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
+                bodyObj.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
+                body = JSON.stringify(bodyObj);
+              }
+            } catch(e) {}
+          }
+        }
+
         if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
           const xhr = this;
           let responseTextVal = null;
@@ -1215,21 +1236,8 @@
                 simulateClick(closeBtn);
               }
 
-              // FORCE A PLAYER RELOAD TO FETCH WEB_CREATOR STREAMING_DATA
-              const playerObj = document.getElementById('movie_player');
-              const videoId = new URLSearchParams(window.location.search).get('v');
-              if (playerObj && typeof playerObj.loadVideoById === 'function' && videoId && !playerObj.dataset.adblockReloaded) {
-                  console.log('[Anti Pop-Under] Forcing player to reload video via API to bypass missing streamingData for video:', videoId);
-                  playerObj.dataset.adblockReloaded = 'true';
-                  try {
-                    playerObj.loadVideoById(videoId);
-                  } catch(e) {
-                    console.error('[Anti Pop-Under] Error calling loadVideoById:', e);
-                  }
-                  setTimeout(() => { playerObj.dataset.adblockReloaded = ''; }, 5000);
-              } else {
-                  console.log('[Anti Pop-Under] Could not force player reload.', { hasPlayer: !!playerObj, hasLoadVideoById: playerObj && typeof playerObj.loadVideoById === 'function', videoId, reloaded: playerObj && playerObj.dataset.adblockReloaded });
-              }
+              // We no longer force loadVideoById here as it breaks playlists and causes infinite skipping.
+              // We rely on the initial response rejection and API spoofing to handle streamingData.
 
               // Also remove parent dialog if exists to prevent empty dialogs
               const dialog = el.closest('tp-yt-paper-dialog');
