@@ -907,32 +907,7 @@
       });
     } catch (e) {}
 
-    // document.createElement interceptor for scripts and images
-    try {
-      const originalCreateElement = document.createElement;
-      document.createElement = function(tagName) {
-        const el = originalCreateElement.apply(this, arguments);
-        if (tagName && (tagName.toLowerCase() === 'script' || tagName.toLowerCase() === 'img')) {
-          const originalSetAttribute = el.setAttribute;
-          el.setAttribute = function(name, value) {
-            if (name === 'src' && typeof value === 'string') {
-              const isAdUrl = value.includes('doubleclick.net') || 
-                              value.includes('googleadservices.com') ||
-                              value.includes('/pagead/');
-              if (isAdUrl) {
-                value = tagName.toLowerCase() === 'script' ? 'data:application/javascript,' : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-              }
-            }
-            return originalSetAttribute.apply(this, [name, value]);
-          };
-          
-          try {
-            // We no longer block script src assignments to allow tracking and ad scripts to load naturally.
-            // Our skipAd() function will fast-forward the ads.
-        }
-        return el;
-      };
-    } catch (e) {}
+    // We no longer intercept document.createElement to block ad scripts.
 
     // ytplayer raw_player_response interceptor
     let interceptedYtPlayer = undefined;
