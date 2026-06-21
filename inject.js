@@ -1317,6 +1317,20 @@
                 simulateClick(closeBtn);
               }
 
+              // FORCE A PLAYER RELOAD TO FETCH WEB_CREATOR STREAMING_DATA
+              const { player } = getPlayerAndVideo();
+              if (player && typeof player.getVideoData === 'function' && !player.dataset.adblockReloaded) {
+                const vData = player.getVideoData();
+                if (vData && vData.video_id) {
+                  console.log('[Anti Pop-Under] Forcing player to reload video via API to bypass missing streamingData');
+                  player.dataset.adblockReloaded = 'true';
+                  try {
+                    player.loadVideoById(vData.video_id);
+                  } catch(e){}
+                  setTimeout(() => { player.dataset.adblockReloaded = ''; }, 5000);
+                }
+              }
+
               // Also remove parent dialog if exists to prevent empty dialogs
               const dialog = el.closest('tp-yt-paper-dialog');
               if (dialog) dialog.remove();
