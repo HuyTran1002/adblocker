@@ -834,34 +834,12 @@
         return obj;
       }
 
-      let hasAds = false;
-      if (obj.adPlacements && obj.adPlacements.length > 0) {
-        obj.adPlacements = [];
-        hasAds = true;
-      } else if (obj.adPlacements) {
-        obj.adPlacements = [];
-      }
+      // We no longer remove adPlacements or playerAds here.
+      // Doing so triggers YouTube's anti-adblock 'UNPLAYABLE' state and black screens.
+      // Instead, we let the ad load normally, and our skipAd() function instantly fast-forwards it.
+      // This makes the extension undetectable.
 
-      if (obj.adSlots && obj.adSlots.length > 0) {
-        obj.adSlots = [];
-        hasAds = true;
-      } else if (obj.adSlots) {
-        obj.adSlots = [];
-      }
-
-      if (obj.playerAds && obj.playerAds.length > 0) {
-        obj.playerAds = [];
-        hasAds = true;
-      } else if (obj.playerAds) {
-        obj.playerAds = [];
-      }
-
-      if (hasAds) {
-        const reportKey = `${window.location.hostname}|api-ad-block|${Date.now()}`;
-        if (shouldReportBlockedEvent(reportKey)) {
-          reportBlocked('YouTube Video Ad', 'Chặn quảng cáo trên luồng phát YouTube');
-        }
-      }
+      // We no longer report api-ad-block since we don't block them here.
 
       if (obj.adBreakParams) delete obj.adBreakParams;
       if (obj.adsParams) delete obj.adsParams;
@@ -877,7 +855,6 @@
         if (obj.playabilityStatus.errorScreen) {
           delete obj.playabilityStatus.errorScreen;
         }
-        if (obj.playabilityStatus.adBreakParams) delete obj.playabilityStatus.adBreakParams;
       }
 
       for (const key in obj) {
@@ -950,22 +927,8 @@
           };
           
           try {
-            Object.defineProperty(el, 'src', {
-              get: function() { return el.getAttribute('src') || ''; },
-              set: function(value) {
-                if (typeof value === 'string') {
-                  const isAdUrl = value.includes('doubleclick.net') || 
-                                  value.includes('googleadservices.com') ||
-                                  value.includes('/pagead/');
-                  if (isAdUrl) {
-                    value = tagName.toLowerCase() === 'script' ? 'data:application/javascript,' : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-                  }
-                }
-                originalSetAttribute.call(el, 'src', value);
-              },
-              configurable: true
-            });
-          } catch(e) {}
+            // We no longer block script src assignments to allow tracking and ad scripts to load naturally.
+            // Our skipAd() function will fast-forward the ads.
         }
         return el;
       };
@@ -1012,26 +975,8 @@
           urlString = requestUrl.url;
         }
 
-        const isAdUrl = urlString.includes('doubleclick.net') || 
-                        urlString.includes('googleadservices.com') ||
-                        urlString.includes('youtube.com/pagead/') ||
-                        urlString.includes('youtube.com/api/stats/ads') ||
-                        urlString.includes('youtube.com/ptracking');
-        if (isAdUrl) {
-          args[0] = 'data:application/json,{}';
-        }
-
-        if (urlString.includes('/youtubei/v1/player')) {
-          if (args[1] && typeof args[1].body === 'string') {
-            try {
-              let bodyObj = JSON.parse(args[1].body);
-              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
-                bodyObj.context.client.clientName = 'WEB_CREATOR';
-                args[1].body = JSON.stringify(bodyObj);
-              }
-            } catch(e) {}
-          }
-        }
+        // We do not block tracking or ad URLs here to avoid anti-adblock detection.
+        // We also do not spoof WEB_CREATOR anymore, as it causes 404s for some API formats.
 
         if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
           let response;
@@ -1068,16 +1013,7 @@
     try {
       const originalSendBeacon = navigator.sendBeacon;
       navigator.sendBeacon = function(url, data) {
-        if (typeof url === 'string') {
-          const isAdUrl = url.includes('doubleclick.net') || 
-                          url.includes('googleadservices.com') ||
-                          url.includes('/pagead/') ||
-                          url.includes('/api/stats/ads') ||
-                          url.includes('/ptracking');
-          if (isAdUrl) {
-            return true; // Fake successful queue
-          }
-        }
+        // We no longer block tracking beacons. Letting them through avoids anti-adblock detection.
         return originalSendBeacon.apply(this, arguments);
       };
     } catch(e) {}
@@ -1089,31 +1025,11 @@
 
       XMLHttpRequest.prototype.open = function(method, url, ...rest) {
         let urlString = typeof url === 'string' ? url : (url && url.href ? url.href : '');
-        const isAdUrl = urlString.includes('doubleclick.net') || 
-                        urlString.includes('googleadservices.com') ||
-                        urlString.includes('youtube.com/pagead/') ||
-                        urlString.includes('youtube.com/api/stats/ads') ||
-                        urlString.includes('youtube.com/ptracking');
-        if (isAdUrl) {
-          url = 'data:application/json,{}';
-        }
         this._url = urlString;
         return originalXHROpen.apply(this, [method, url, ...rest]);
       };
 
       XMLHttpRequest.prototype.send = function(body) {
-        if (this._url && this._url.includes('/youtubei/v1/player')) {
-          if (typeof body === 'string') {
-            try {
-              let bodyObj = JSON.parse(body);
-              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
-                bodyObj.context.client.clientName = 'WEB_CREATOR';
-                body = JSON.stringify(bodyObj);
-              }
-            } catch(e) {}
-          }
-        }
-
         if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
           const xhr = this;
           let responseTextVal = null;
