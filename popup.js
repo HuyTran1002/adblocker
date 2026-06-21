@@ -1,4 +1,12 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Sync version from manifest
+  try {
+    const versionEl = document.querySelector(".version");
+    if (versionEl && chrome && chrome.runtime && chrome.runtime.getManifest) {
+      versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+    }
+  } catch (e) {}
+
   const powerToggle = document.getElementById("power-toggle");
   const statusCard = document.getElementById("status-card");
   const statusBadge = document.getElementById("status-badge");

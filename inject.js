@@ -1320,12 +1320,10 @@
             ytdApp.style.setProperty('pointer-events', 'auto', 'important');
           }
 
-          if (foundAndRemoved) {
-            const { video } = getPlayerAndVideo();
-            if (video && video.paused) {
-              video.play().catch(e => {});
-              console.log('[Anti Pop-Under] Resumed video playback after removing anti-adblock popup');
-            }
+          const { video } = getPlayerAndVideo();
+          if (video && video.paused) {
+            video.play().catch(e => {});
+            console.log('[Anti Pop-Under] Resumed video playback (enforcing playback after popup removal)');
           }
         }
       } catch (e) {
