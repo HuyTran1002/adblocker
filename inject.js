@@ -862,44 +862,39 @@
     let originalMutedState = false;
     let lastAdDuration = 0;
 
-    function getNativeSetter(prop) {
-      const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, prop);
-      return descriptor ? descriptor.set : null;
-    }
-
-    const setPlaybackRate = getNativeSetter('playbackRate');
-    const setCurrentTime = getNativeSetter('currentTime');
-    const setMuted = getNativeSetter('muted');
-
     function skipAd() {
       if (!isEnabled()) return;
       try {
-        const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-        const adShowing = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
+        // Robust ad detection: check multiple known YouTube ad indicators
+        const isAdPlaying = document.querySelector('.ad-showing') || 
+                            document.querySelector('.ad-interrupting') || 
+                            document.querySelector('.ytp-ad-player-overlay') ||
+                            (document.querySelector('.video-ads.ytp-ad-module') && document.querySelector('.video-ads.ytp-ad-module').children.length > 0);
+
         const videos = document.querySelectorAll('video');
 
-        if (adShowing && videos.length > 0) {
+        if (isAdPlaying && videos.length > 0) {
           videos.forEach(video => {
-            const duration = video.duration;
-            if (isNaN(duration) || duration <= 0) return;
+            if (isNaN(video.duration) || video.duration <= 0) return;
 
-            // 1. Mute ad immediately using native setter
-            if (!video.muted && setMuted) {
+            // 1. Mute ad immediately
+            if (!video.muted) {
               originalMutedState = false;
-              setMuted.call(video, true);
+              video.muted = true;
               wasMutedByUs = true;
             }
 
-            // 2. Accelerate playback speed to 16x using native setter
-            if (video.playbackRate !== 16 && setPlaybackRate) {
+            // 2. Accelerate playback speed to 16x
+            if (video.playbackRate !== 16) {
               userPlaybackRate = video.playbackRate || 1;
-              setPlaybackRate.call(video, 16);
+              video.playbackRate = 16;
             }
 
-            // 3. Force seek to end using native setter (bypasses YouTube's freeze tracker)
-            const targetTime = duration - 0.1;
-            if (video.currentTime < targetTime - 0.2 && setCurrentTime) {
-              setCurrentTime.call(video, targetTime);
+            // 3. Small incremental time jumps (fast-forward bypass)
+            // By jumping 2 seconds every 50ms, we fast-forward 40 seconds per second!
+            // This avoids the "instant jump to end" freeze penalty from YouTube's tracker.
+            if (video.currentTime < video.duration - 1) {
+              video.currentTime += 2;
             }
 
             // Play video if paused
@@ -912,9 +907,7 @@
           skipButtons.forEach(selector => {
             const btn = document.querySelector(selector);
             if (btn) {
-              try {
-                btn.click();
-              } catch (e) {}
+              try { btn.click(); } catch (e) {}
             }
           });
 
@@ -928,15 +921,15 @@
               reportBlocked('YouTube Video Ad', 'Bỏ qua quảng cáo video YouTube');
             }
           }
-        } else if (videos.length > 0 && !adShowing) {
+        } else if (videos.length > 0 && !isAdPlaying) {
           videos.forEach(video => {
             // Restore volume if we muted it
-            if (wasMutedByUs && setMuted) {
-              try { setMuted.call(video, originalMutedState); } catch (e) {}
+            if (wasMutedByUs) {
+              try { video.muted = originalMutedState; } catch (e) {}
             }
             // Restore user's original playback speed
-            if (video.playbackRate === 16 && setPlaybackRate) {
-              try { setPlaybackRate.call(video, userPlaybackRate || 1); } catch (e) {}
+            if (video.playbackRate === 16) {
+              try { video.playbackRate = userPlaybackRate || 1; } catch (e) {}
             }
           });
           if (wasMutedByUs) wasMutedByUs = false;
