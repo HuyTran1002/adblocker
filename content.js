@@ -110,43 +110,19 @@ function injectAdBlockCSS() {
 }
 
 function injectYouTubeAdBlockCSS() {
-  if (!window.location.hostname.includes('youtube.com')) return;
+  // Inject CSS to visually hide anti-adblock popups so they don't flash before auto-dismissal
   if (document.getElementById('anti-popunder-youtube-css')) return;
-
   const style = document.createElement('style');
   style.id = 'anti-popunder-youtube-css';
   style.textContent = `
-    /* Hide ad video when an ad is playing */
-    .ad-showing video.html5-main-video,
-    .ad-interrupting video.html5-main-video {
-      opacity: 0 !important;
-      visibility: hidden !important;
-    }
-
-    /* Make interactive ad overlays completely invisible but maintain DOM structure for scripts */
-    .ytp-ad-player-overlay,
-    .ytp-ad-player-overlay-layout,
-    .ytp-ad-image-overlay,
-    .ytp-ad-overlay-container,
-    .ytp-ad-message-container,
-    .ytp-ad-progress-list,
-    .ytp-ad-survey-player-overlay,
-    .ytp-ad-action-button,
-    .ytp-ad-skip-button-slot,
-    .ytp-ad-skip-button,
-    .ytp-ad-skip-button-container,
-    .ytp-ad-preview-slot,
-    .ytp-ad-preview-text,
-    .ytp-ad-button {
+    ytd-enforcement-message-renderer,
+    ytd-enforcement-message-view-model,
+    .yt-playability-error-supported-renderers,
+    tp-yt-iron-overlay-backdrop {
       opacity: 0 !important;
       visibility: hidden !important;
       pointer-events: none !important;
-    }
-
-    /* Hide non-interactive ad panels completely */
-    #player-ads,
-    ytd-ad-slot-renderer,
-    #masthead-ad {
+      z-index: -9999 !important;
       display: none !important;
     }
   `;
