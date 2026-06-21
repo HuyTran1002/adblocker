@@ -1287,6 +1287,12 @@
             );
 
             if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
+              // Try to click the close/dismiss button first to properly reset YouTube's player state machine
+              const closeBtn = el.querySelector('#dismiss-button, button[aria-label="Đóng"], button[aria-label="Close"], .yt-spec-button-shape-next--text, yt-button-shape button');
+              if (closeBtn) {
+                simulateClick(closeBtn);
+              }
+
               // Also remove parent dialog if exists to prevent empty dialogs
               const dialog = el.closest('tp-yt-paper-dialog');
               if (dialog) dialog.remove();
@@ -1326,10 +1332,24 @@
             ytdApp.style.setProperty('pointer-events', 'auto', 'important');
           }
 
+          // Hide YouTube's error screen which causes the black screen and blocks controls
+          document.querySelectorAll('#error-screen').forEach(el => {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+          });
+
           const { video } = getPlayerAndVideo();
-          if (video && video.paused) {
-            video.play().catch(e => {});
-            console.log('[Anti Pop-Under] Resumed video playback (enforcing playback after popup removal)');
+          if (video) {
+            // Force video element to be visible just in case YouTube hid it
+            video.style.setProperty('display', 'block', 'important');
+            video.style.setProperty('visibility', 'visible', 'important');
+            video.style.setProperty('opacity', '1', 'important');
+            
+            if (video.paused) {
+              video.play().catch(e => {});
+              console.log('[Anti Pop-Under] Resumed video playback (enforcing playback after popup removal)');
+            }
           }
         }
       } catch (e) {
