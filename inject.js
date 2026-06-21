@@ -1014,6 +1014,18 @@
           args[0] = 'data:application/json,{}';
         }
 
+        if (urlString.includes('/youtubei/v1/player')) {
+          if (args[1] && typeof args[1].body === 'string') {
+            try {
+              let bodyObj = JSON.parse(args[1].body);
+              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
+                bodyObj.context.client.clientName = 'WEB_CREATOR';
+                args[1].body = JSON.stringify(bodyObj);
+              }
+            } catch(e) {}
+          }
+        }
+
         if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
           let response;
           try {
@@ -1083,6 +1095,18 @@
       };
 
       XMLHttpRequest.prototype.send = function(body) {
+        if (this._url && this._url.includes('/youtubei/v1/player')) {
+          if (typeof body === 'string') {
+            try {
+              let bodyObj = JSON.parse(body);
+              if (bodyObj.context && bodyObj.context.client && bodyObj.context.client.clientName === 'WEB') {
+                bodyObj.context.client.clientName = 'WEB_CREATOR';
+                body = JSON.stringify(bodyObj);
+              }
+            } catch(e) {}
+          }
+        }
+
         if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
           const xhr = this;
           let responseTextVal = null;
