@@ -939,15 +939,9 @@
             video.play().catch(e => {});
           }
 
-          // 6. Force seek the ad to the end (if it gets reset or falls behind)
-          if (video.duration && isFinite(video.duration) && video.duration > 0) {
-            const targetTime = video.duration - 0.1;
-            if (video.currentTime < targetTime - 0.2) {
-              // ALWAYS mutate the HTML5 video element directly to bypass YouTube's JS restrictions!
-              // Do NOT use player.seekTo() during ads because YouTube explicitly blocks it.
-              video.currentTime = targetTime;
-            }
-          }
+          // We ONLY use 16x speed (playbackRate) and skip button clicks.
+          // DO NOT manually seek (video.currentTime = targetTime) because YouTube's ad tracker 
+          // detects unnatural jumps and will freeze the ad at the last frame while making you wait the full time!
 
           // Report block event
           if (!isNaN(duration) && duration > 0 && lastAdDuration !== duration) {
@@ -1060,11 +1054,11 @@
       }
     }
 
-    // Run skip check and anti-adblock check every 150ms as a fallback
+    // Run skip check and anti-adblock check every 50ms to aggressively fight YouTube's playbackRate resets
     setInterval(() => {
       skipAd();
       watchAndBypassAntiAdblock();
-    }, 150);
+    }, 50);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes
