@@ -4,7 +4,9 @@
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function() {
-    if (window.location.hostname.includes('youtube.com')) return;
+    if (window.location.hostname.includes('youtube.com') || 
+        window.location.hostname.includes('google') || 
+        window.location.hostname.includes('doubleclick')) return;
 
     const falsyProps = [
       'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker', 
@@ -282,7 +284,9 @@
   
   // Track last interaction and intercept background clicks
   const interactionEvents = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchend'];
-  const isYouTube = window.location.hostname.includes('youtube.com');
+  const isYouTube = window.location.hostname.includes('youtube.com') || 
+                    window.location.hostname.includes('google') || 
+                    window.location.hostname.includes('doubleclick');
   
   function isInteractiveElement(el) {
     if (!el) return false;
