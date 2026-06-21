@@ -4,6 +4,8 @@
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function() {
+    if (window.location.hostname.includes('youtube.com')) return;
+
     const falsyProps = [
       'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker', 
       'isAdblock', 'isAdBlock', 'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled'
@@ -280,6 +282,7 @@
   
   // Track last interaction and intercept background clicks
   const interactionEvents = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchend'];
+  const isYouTube = window.location.hostname.includes('youtube.com');
   
   function isInteractiveElement(el) {
     if (!el) return false;
@@ -331,86 +334,90 @@
     }
   }
   
-  interactionEvents.forEach(eventName => {
-    window.addEventListener(eventName, (e) => {
-      lastInteractionTime = Date.now();
-      lastInteractionEvent = e;
-      
-      if (eventName === 'click') {
-        if (!isEnabled()) return;
-        const target = e.target;
-        if (!target || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+  if (!isYouTube) {
+    interactionEvents.forEach(eventName => {
+      window.addEventListener(eventName, (e) => {
+        lastInteractionTime = Date.now();
+        lastInteractionEvent = e;
+        
+        if (eventName === 'click') {
+          if (!isEnabled()) return;
+          const target = e.target;
+          if (!target || isCurrentPageWhitelisted()) return;
 
-        // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
-        let curr = target;
-        let anchor = null;
-        let overlay = null;
+          // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+          let curr = target;
+          let anchor = null;
+          let overlay = null;
 
-        while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-          if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
-            anchor = curr;
+          while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+            if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
+              anchor = curr;
+            }
+            if (isClickjackOverlay(curr)) {
+              overlay = curr;
+            }
+            curr = curr.parentElement;
           }
-          if (isClickjackOverlay(curr)) {
-            overlay = curr;
-          }
-          curr = curr.parentElement;
-        }
 
-        // 1. If click is on a clickjack overlay
-        if (overlay) {
-          // If the overlay has a link, only block if it's external and not whitelisted
-          if (anchor) {
-            try {
-              const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-              const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
-              if (isExternal && !isWhitelisted(anchor.href)) {
-                // External redirect, block it!
-              } else {
-                // Internal or whitelisted link, allow it to pass normally!
+          // 1. If click is on a clickjack overlay
+          if (overlay) {
+            // If the overlay has a link, only block if it's external and not whitelisted
+            if (anchor) {
+              try {
+                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
+                const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
+                if (isExternal && !isWhitelisted(anchor.href)) {
+                  // External redirect, block it!
+                } else {
+                  // Internal or whitelisted link, allow it to pass normally!
+                  return;
+                }
+              } catch (err) {
                 return;
               }
-            } catch (err) {
-              return;
             }
+
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            const adUrl = (anchor && anchor.href) || 'overlay';
+            reportBlocked(adUrl, 'Blocked click on clickjack overlay');
+            console.log('[Anti Pop-Under] Blocked click on clickjack overlay:', overlay);
+            
+            try {
+              overlay.remove();
+            } catch (err) {}
+            return;
           }
 
+          // 2. Fallback check for background click or non-interactive redirect
+          blockScriptedRedirects(e);
+        }
+      }, true); // Use capturing phase to get it before other scripts
+    });
+  }
+
+  // Intercept natural form submissions (often used by popunder scripts on player clicks)
+  if (!isYouTube) {
+    window.addEventListener('submit', (e) => {
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      
+      const form = e.target;
+      if (form && form.tagName && form.tagName.toLowerCase() === 'form') {
+        const action = form.getAttribute('action') || '';
+        const isTargetBlank = (form.getAttribute('target') || '').toLowerCase() === '_blank';
+        
+        if (!checkNavigationOrPopup(action, isTargetBlank ? 'form.submit._blank' : 'form.submit')) {
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
-          
-          const adUrl = (anchor && anchor.href) || 'overlay';
-          reportBlocked(adUrl, 'Blocked click on clickjack overlay');
-          console.log('[Anti Pop-Under] Blocked click on clickjack overlay:', overlay);
-          
-          try {
-            overlay.remove();
-          } catch (err) {}
-          return;
+          console.log('[Anti Pop-Under] Prevented ad form submission to:', action);
         }
-
-        // 2. Fallback check for background click or non-interactive redirect
-        blockScriptedRedirects(e);
       }
-    }, true); // Use capturing phase to get it before other scripts
-  });
-
-  // Intercept natural form submissions (often used by popunder scripts on player clicks)
-  window.addEventListener('submit', (e) => {
-    if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
-    
-    const form = e.target;
-    if (form && form.tagName && form.tagName.toLowerCase() === 'form') {
-      const action = form.getAttribute('action') || '';
-      const isTargetBlank = (form.getAttribute('target') || '').toLowerCase() === '_blank';
-      
-      if (!checkNavigationOrPopup(action, isTargetBlank ? 'form.submit._blank' : 'form.submit')) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        console.log('[Anti Pop-Under] Prevented ad form submission to:', action);
-      }
-    }
-  }, true);
+    }, true);
+  }
 
   // Communication Handshake with content.js (Isolated World)
 
@@ -715,47 +722,67 @@
     }
   }
 
-  // Override top-level window.open
-  overrideWindowOpen(window);
+  if (!isYouTube) {
+    // Override top-level window.open
+    overrideWindowOpen(window);
 
-  // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
-  try {
-    const cwDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
-    if (cwDescriptor && cwDescriptor.get) {
-      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-        get: function() {
-          const win = cwDescriptor.get.apply(this);
-          if (win) {
-            overrideWindowOpen(win);
-          }
-          return win;
-        },
-        configurable: true
-      });
-    }
+    // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
+    try {
+      const cwDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (cwDescriptor && cwDescriptor.get) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          get: function() {
+            const win = cwDescriptor.get.apply(this);
+            if (win) {
+              overrideWindowOpen(win);
+            }
+            return win;
+          },
+          configurable: true
+        });
+      }
 
-    const cdDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
-    if (cdDescriptor && cdDescriptor.get) {
-      Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
-        get: function() {
-          const doc = cdDescriptor.get.apply(this);
-          if (doc && doc.defaultView) {
-            overrideWindowOpen(doc.defaultView);
-          }
-          return doc;
-        },
-        configurable: true
-      });
+      const cdDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
+      if (cdDescriptor && cdDescriptor.get) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
+          get: function() {
+            const doc = cdDescriptor.get.apply(this);
+            if (doc && doc.defaultView) {
+              overrideWindowOpen(doc.defaultView);
+            }
+            return doc;
+          },
+          configurable: true
+        });
+      }
+    } catch (err) {
+      console.warn('[Anti Pop-Under] Iframe prototyping hooks failed:', err);
     }
-  } catch (err) {
-    console.warn('[Anti Pop-Under] Iframe prototyping hooks failed:', err);
   }
 
   // Bulletproof override of HTMLAnchorElement.prototype.click
-  try {
-    Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
-      value: function() {
-        if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
+  if (!isYouTube) {
+    try {
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+        value: function() {
+          if (!isEnabled() || isCurrentPageWhitelisted()) {
+            return originalClick.apply(this, arguments);
+          }
+          
+          const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
+          if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
+            return; // block
+          }
+          
+          return originalClick.apply(this, arguments);
+        },
+        writable: false,
+        configurable: false
+      });
+    } catch (err) {
+      console.warn('[Anti Pop-Under] Non-writable anchor click failed:', err);
+      HTMLAnchorElement.prototype.click = function() {
+        if (!isEnabled() || isCurrentPageWhitelisted()) {
           return originalClick.apply(this, arguments);
         }
         
@@ -765,55 +792,41 @@
         }
         
         return originalClick.apply(this, arguments);
-      },
-      writable: false,
-      configurable: false
-    });
-  } catch (err) {
-    console.warn('[Anti Pop-Under] Non-writable anchor click failed:', err);
-    HTMLAnchorElement.prototype.click = function() {
-      if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
-        return originalClick.apply(this, arguments);
-      }
-      
-      const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
-      if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
-        return; // block
-      }
-      
-      return originalClick.apply(this, arguments);
-    };
+      };
+    }
   }
 
   // Bulletproof override of HTMLFormElement.prototype.submit
   const originalSubmit = HTMLFormElement.prototype.submit;
-  try {
-    Object.defineProperty(HTMLFormElement.prototype, 'submit', {
-      value: function() {
-        if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
+  if (!isYouTube) {
+    try {
+      Object.defineProperty(HTMLFormElement.prototype, 'submit', {
+        value: function() {
+          if (!isEnabled() || isCurrentPageWhitelisted()) {
+            return originalSubmit.apply(this, arguments);
+          }
+          
+          const action = this.getAttribute('action') || '';
+          if (!checkNavigationOrPopup(action, 'form.submit')) {
+            return; // block
+          }
+          return originalSubmit.apply(this, arguments);
+        },
+        writable: false,
+        configurable: false
+      });
+    } catch (err) {
+      HTMLFormElement.prototype.submit = function() {
+        if (!isEnabled() || isCurrentPageWhitelisted()) {
           return originalSubmit.apply(this, arguments);
         }
-        
         const action = this.getAttribute('action') || '';
         if (!checkNavigationOrPopup(action, 'form.submit')) {
           return; // block
         }
         return originalSubmit.apply(this, arguments);
-      },
-      writable: false,
-      configurable: false
-    });
-  } catch (err) {
-    HTMLFormElement.prototype.submit = function() {
-      if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
-        return originalSubmit.apply(this, arguments);
-      }
-      const action = this.getAttribute('action') || '';
-      if (!checkNavigationOrPopup(action, 'form.submit')) {
-        return; // block
-      }
-      return originalSubmit.apply(this, arguments);
-    };
+      };
+    }
   }
 
   // YouTube Ad Skipper (Main World) - Advanced Network Interceptor and Backup Skipper
@@ -822,300 +835,13 @@
 
     console.log('[Anti Pop-Under] Advanced YouTube Ad Skipper (Main World) initialized!');
 
-    // Clean ad configurations from client-side responses without modifying request headers/payloads.
-    // This allows requests to remain 100% genuine browser calls, avoiding 403/throttling detection.
-    function recursiveCleanYouTubeResponse(obj) {
-      if (!obj || typeof obj !== 'object') return obj;
+    // ytInitialPlayerResponse, JSON, fetch, and XHR interceptors have been completely removed.
+    // Modifying YouTube API payloads corrupts the internal state machine, causing permanent black screens.
+    // Instead, we rely purely on the stealth 16x video fast-forward skipper, which cannot cause black screens.
 
-      if (Array.isArray(obj)) {
-        for (let i = 0; i < obj.length; i++) {
-          recursiveCleanYouTubeResponse(obj[i]);
-        }
-        return obj;
-      }
+    // sendBeacon interceptor removed to prevent anti-tamper detection.
 
-      // We no longer remove adPlacements or playerAds here.
-      // Doing so triggers YouTube's anti-adblock 'UNPLAYABLE' state and black screens.
-      // Instead, we let the ad load normally, and our skipAd() function instantly fast-forwards it.
-      // This makes the extension undetectable.
 
-      // We no longer report api-ad-block since we don't block them here.
-
-      if (obj.adBreakParams) delete obj.adBreakParams;
-      if (obj.adsParams) delete obj.adsParams;
-      if (obj.adSafetyInfo) delete obj.adSafetyInfo;
-      if (obj.playerConfig) {
-        if (obj.playerConfig.adsParams) delete obj.playerConfig.adsParams;
-        if (obj.playerConfig.adSafetyInfo) delete obj.playerConfig.adSafetyInfo;
-      }
-      // We no longer forcefully mutate playabilityStatus here.
-      // Modifying playabilityStatus to 'OK' without providing streamingData causes fatal black screens
-      // and breaks YouTube's "Allow ads" button functionality.
-
-      for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key) && typeof obj[key] === 'object') {
-          recursiveCleanYouTubeResponse(obj[key]);
-        }
-      }
-      return obj;
-    }
-
-    // JSON.parse interceptor
-    try {
-      const originalParse = JSON.parse;
-      JSON.parse = function(text, reviver) {
-        const obj = originalParse.call(this, text, reviver);
-        if (typeof text === 'string' && (
-          text.includes('adPlacements') || 
-          text.includes('adSlots') || 
-          text.includes('playerAds') || 
-          text.includes('adsParams')
-        )) {
-          if (obj && typeof obj === 'object') {
-            recursiveCleanYouTubeResponse(obj);
-          }
-        }
-        return obj;
-      };
-    } catch (e) {}
-
-    // ytInitialPlayerResponse interceptor
-    let interceptedPlayerResponse = undefined;
-    try {
-      Object.defineProperty(window, 'ytInitialPlayerResponse', {
-        get() { return interceptedPlayerResponse; },
-        set(val) {
-          if (val) {
-            // If the response is UNPLAYABLE (meaning streamingData is missing), we fetch the unblocked version synchronously.
-            if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
-              console.log('[Anti Pop-Under] Blocked ytInitialPlayerResponse detected. Fetching unblocked data synchronously...');
-              try {
-                const videoId = val.videoDetails ? val.videoDetails.videoId : new URLSearchParams(window.location.search).get('v');
-                if (videoId) {
-                  const xhr = new XMLHttpRequest();
-                  const apiKey = window.ytcfg ? window.ytcfg.get('INNERTUBE_API_KEY') : (window.yt && window.yt.config_ ? window.yt.config_.INNERTUBE_API_KEY : '');
-                  if (apiKey) {
-                    xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false); // false for synchronous
-                    xhr.setRequestHeader('Content-Type', 'application/json');
-                    
-                    const context = window.ytcfg ? window.ytcfg.get('INNERTUBE_CONTEXT') : null;
-                    const payload = {
-                      context: context || {
-                        client: {
-                          clientName: 'WEB_EMBEDDED_PLAYER',
-                          clientVersion: '1.20240101.01.00',
-                          hl: 'en',
-                          gl: 'US'
-                        }
-                      },
-                      videoId: videoId
-                    };
-                    
-                    if (payload.context && payload.context.client) {
-                      payload.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
-                    }
-                    
-                    xhr.send(JSON.stringify(payload));
-                    
-                    if (xhr.status === 200) {
-                      const newResponse = JSON.parse(xhr.responseText);
-                      if (newResponse.playabilityStatus && newResponse.playabilityStatus.status === 'OK') {
-                        val.playabilityStatus = newResponse.playabilityStatus;
-                        if (newResponse.streamingData) val.streamingData = newResponse.streamingData;
-                        if (newResponse.videoDetails) val.videoDetails = newResponse.videoDetails;
-                        console.log('[Anti Pop-Under] Successfully injected WEB_EMBEDDED_PLAYER streamingData into original response!');
-                      }
-                    }
-                  }
-                }
-              } catch (e) {
-                console.error('[Anti Pop-Under] Sync XHR failed', e);
-              }
-              
-              if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
-                console.log('[Anti Pop-Under] Sync XHR failed to get unblocked data. Passing through original blocked response to allow user recovery.');
-                // We DO NOT set interceptedPlayerResponse = undefined here.
-                // We pass the blocked response through so the YouTube UI can render the error screen normally,
-                // which allows the user to click "Allow ads" if they want to whitelist the site.
-              }
-            }
-            recursiveCleanYouTubeResponse(val);
-          }
-          interceptedPlayerResponse = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
-
-    // We no longer intercept document.createElement to block ad scripts.
-
-    // ytplayer raw_player_response interceptor
-    let interceptedYtPlayer = undefined;
-    try {
-      Object.defineProperty(window, 'ytplayer', {
-        get() { return interceptedYtPlayer; },
-        set(val) {
-          if (val && typeof val === 'object') {
-            if (val.config && val.config.args && val.config.args.raw_player_response) {
-              try {
-                let isString = typeof val.config.args.raw_player_response === 'string';
-                let obj = isString ? JSON.parse(val.config.args.raw_player_response) : val.config.args.raw_player_response;
-                
-                if (obj.playabilityStatus && obj.playabilityStatus.status !== 'OK') {
-                  const videoId = obj.videoDetails ? obj.videoDetails.videoId : new URLSearchParams(window.location.search).get('v');
-                  if (videoId) {
-                    const xhr = new XMLHttpRequest();
-                    const apiKey = window.ytcfg ? window.ytcfg.get('INNERTUBE_API_KEY') : (window.yt && window.yt.config_ ? window.yt.config_.INNERTUBE_API_KEY : '');
-                    if (apiKey) {
-                      xhr.open('POST', 'https://www.youtube.com/youtubei/v1/player?key=' + apiKey, false);
-                      xhr.setRequestHeader('Content-Type', 'application/json');
-                      const context = window.ytcfg ? window.ytcfg.get('INNERTUBE_CONTEXT') : null;
-                      const payload = {
-                        context: context || { client: { clientName: 'WEB_EMBEDDED_PLAYER', clientVersion: '1.20240101.01.00', hl: 'en', gl: 'US' } },
-                        videoId: videoId
-                      };
-                      if (payload.context && payload.context.client) payload.context.client.clientName = 'WEB_EMBEDDED_PLAYER';
-                      xhr.send(JSON.stringify(payload));
-                      if (xhr.status === 200) {
-                        const newResponse = JSON.parse(xhr.responseText);
-                        if (newResponse.playabilityStatus && newResponse.playabilityStatus.status === 'OK') {
-                          obj.playabilityStatus = newResponse.playabilityStatus;
-                          if (newResponse.streamingData) obj.streamingData = newResponse.streamingData;
-                          if (newResponse.videoDetails) obj.videoDetails = newResponse.videoDetails;
-                          console.log('[Anti Pop-Under] Successfully injected WEB_EMBEDDED_PLAYER streamingData into ytplayer response!');
-                        }
-                      }
-                    }
-                  }
-                }
-                
-                recursiveCleanYouTubeResponse(obj);
-                if (isString) {
-                  val.config.args.raw_player_response = JSON.stringify(obj);
-                } else {
-                  val.config.args.raw_player_response = obj;
-                }
-              } catch (e) {}
-            }
-          }
-          interceptedYtPlayer = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
-
-    // Fetch response interceptor
-    try {
-      const originalFetch = window.fetch;
-      window.fetch = async function(...args) {
-        let requestUrl = args[0];
-        let urlString = '';
-        if (typeof requestUrl === 'string') {
-          urlString = requestUrl;
-        } else if (requestUrl instanceof URL) {
-          urlString = requestUrl.href;
-        } else if (requestUrl && typeof requestUrl === 'object' && requestUrl.url) {
-          urlString = requestUrl.url;
-        }
-
-        if (urlString.includes('/youtubei/v1/player') || urlString.includes('/youtubei/v1/next')) {
-          let response;
-          try {
-            response = await originalFetch.apply(this, args);
-          } catch (fetchErr) {
-            throw fetchErr;
-          }
-
-          try {
-            const clone = response.clone();
-            const json = await clone.json();
-            recursiveCleanYouTubeResponse(json);
-
-            const newResponse = new Response(JSON.stringify(json), {
-              status: response.status,
-              statusText: response.statusText,
-              headers: response.headers
-            });
-            Object.defineProperties(newResponse, {
-              url: { value: response.url },
-              type: { value: response.type }
-            });
-            return newResponse;
-          } catch (e) {
-            return response;
-          }
-        }
-        return originalFetch.apply(this, args);
-      };
-    } catch (e) {}
-
-    // sendBeacon interceptor
-    try {
-      const originalSendBeacon = navigator.sendBeacon;
-      navigator.sendBeacon = function(url, data) {
-        // We no longer block tracking beacons. Letting them through avoids anti-adblock detection.
-        return originalSendBeacon.apply(this, arguments);
-      };
-    } catch(e) {}
-
-    // XHR response interceptor
-    try {
-      const originalXHROpen = XMLHttpRequest.prototype.open;
-      const originalXHRSend = XMLHttpRequest.prototype.send;
-
-      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-        let urlString = typeof url === 'string' ? url : (url && url.href ? url.href : '');
-        this._url = urlString;
-        return originalXHROpen.apply(this, [method, url, ...rest]);
-      };
-
-      XMLHttpRequest.prototype.send = function(body) {
-        if (this._url && (this._url.includes('/youtubei/v1/player') || this._url.includes('/youtubei/v1/next'))) {
-          const xhr = this;
-          let responseTextVal = null;
-          let responseVal = null;
-
-          const cleanResponseData = () => {
-            if (xhr.readyState !== 4) return;
-            if (responseTextVal !== null) return;
-            try {
-              const rawText = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText').get.call(xhr);
-              if (rawText) {
-                const json = JSON.parse(rawText);
-                recursiveCleanYouTubeResponse(json);
-                responseTextVal = JSON.stringify(json);
-
-                const rawResponse = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response').get.call(xhr);
-                if (typeof rawResponse === 'object') {
-                  responseVal = json;
-                } else {
-                  responseVal = responseTextVal;
-                }
-              }
-            } catch (e) {}
-          };
-
-          Object.defineProperty(xhr, 'responseText', {
-            get: function() {
-              cleanResponseData();
-              return responseTextVal !== null ? responseTextVal : Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText').get.call(xhr);
-            },
-            configurable: true
-          });
-
-          Object.defineProperty(xhr, 'response', {
-            get: function() {
-              cleanResponseData();
-              return responseVal !== null ? responseVal : Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response').get.call(xhr);
-            },
-            configurable: true
-          });
-        }
-        return originalXHRSend.apply(this, [body]);
-      };
-    } catch (e) {}
 
     // --- Mute and fast-forward fallback logic ---
     const skipButtons = [
@@ -1276,22 +1002,15 @@
             );
 
             if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
-              // Try to click the close/dismiss button first to properly reset YouTube's player state machine
               const closeBtn = el.querySelector('#dismiss-button');
               if (closeBtn) {
                 simulateClick(closeBtn);
+                foundAndRemoved = true;
+                console.log('[Anti Pop-Under] Auto-dismissed YouTube warning popup.');
               }
-
-              // We no longer force loadVideoById here as it breaks playlists and causes infinite skipping.
-              // We rely on the initial response rejection and API spoofing to handle streamingData.
-
-              // Also remove parent dialog if exists to prevent empty dialogs
-              const dialog = el.closest('tp-yt-paper-dialog');
-              if (dialog) dialog.remove();
-              
-              el.remove();
-              foundAndRemoved = true;
-              console.log('[Anti Pop-Under] Removed YouTube anti-adblock element:', selector);
+              // If there is no dismiss button, it means the user is fatally blocked by YouTube backend.
+              // We MUST NOT manually delete the popup or hide the error screen, otherwise the user 
+              // will just get a broken black screen and cannot click the "Allow ads" button.
             }
           });
         });
@@ -1324,21 +1043,13 @@
             ytdApp.style.setProperty('pointer-events', 'auto', 'important');
           }
 
-          // Hide YouTube's error screen which causes the black screen and blocks controls
-          document.querySelectorAll('#error-screen').forEach(el => {
-            el.style.setProperty('display', 'none', 'important');
-            el.style.setProperty('visibility', 'hidden', 'important');
-            el.style.setProperty('opacity', '0', 'important');
-          });
+          // We no longer manually hide #error-screen because if the backend blocked the video,
+          // hiding the error screen just results in a permanent black screen.
 
           const { video } = getPlayerAndVideo();
           if (video) {
-            // Force video element to be visible just in case YouTube hid it
-            video.style.setProperty('display', 'block', 'important');
-            video.style.setProperty('visibility', 'visible', 'important');
-            video.style.setProperty('opacity', '1', 'important');
-            
-            if (video.paused) {
+            // If the video is paused because of the popup we just dismissed, try to play it.
+            if (video.paused && foundAndRemoved) {
               video.play().catch(e => {});
               console.log('[Anti Pop-Under] Resumed video playback (enforcing playback after popup removal)');
             }
@@ -1357,41 +1068,43 @@
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes
-  try {
-    const locationProto = Location.prototype;
-    const originalAssign = locationProto.assign;
-    const originalReplace = locationProto.replace;
-    const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, 'href');
-    
-    function checkLocationRedirect(url) {
-      return checkNavigationOrPopup(url, 'location change');
-    }
-    
-    if (hrefDescriptor && hrefDescriptor.set) {
-      Object.defineProperty(locationProto, 'href', {
-        get: hrefDescriptor.get,
-        set: function(val) {
-          if (checkLocationRedirect(val)) {
-            hrefDescriptor.set.call(this, val);
-          }
-        },
-        configurable: true
-      });
-    }
-    
-    locationProto.assign = function(val) {
-      if (checkLocationRedirect(val)) {
-        originalAssign.call(this, val);
+  if (!isYouTube) {
+    try {
+      const locationProto = Location.prototype;
+      const originalAssign = locationProto.assign;
+      const originalReplace = locationProto.replace;
+      const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, 'href');
+      
+      function checkLocationRedirect(url) {
+        return checkNavigationOrPopup(url, 'location change');
       }
-    };
-    
-    locationProto.replace = function(val) {
-      if (checkLocationRedirect(val)) {
-        originalReplace.call(this, val);
+      
+      if (hrefDescriptor && hrefDescriptor.set) {
+        Object.defineProperty(locationProto, 'href', {
+          get: hrefDescriptor.get,
+          set: function(val) {
+            if (checkLocationRedirect(val)) {
+              hrefDescriptor.set.call(this, val);
+            }
+          },
+          configurable: true
+        });
       }
-    };
-  } catch (e) {
-    console.warn('[Anti Pop-Under] Location overrides failed:', e);
+      
+      locationProto.assign = function(val) {
+        if (checkLocationRedirect(val)) {
+          originalAssign.call(this, val);
+        }
+      };
+      
+      locationProto.replace = function(val) {
+        if (checkLocationRedirect(val)) {
+          originalReplace.call(this, val);
+        }
+      };
+    } catch (e) {
+      console.warn('[Anti Pop-Under] Location overrides failed:', e);
+    }
   }
 
   function runGenericAntiAdblockBypass() {
