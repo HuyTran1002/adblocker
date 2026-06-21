@@ -920,11 +920,13 @@
             }
           }
 
-          // 4. Click any visible skip buttons
+          // 4. Click any visible skip buttons using native clicks
           skipButtons.forEach(selector => {
             const btn = document.querySelector(selector);
             if (btn) {
-              simulateClick(btn);
+              try {
+                btn.click();
+              } catch (e) {}
             }
           });
 
@@ -934,18 +936,12 @@
           }
 
           // 6. Force seek the ad to the end (if it gets reset or falls behind)
-          if (video.duration && isFinite(video.duration)) {
-            const targetTime = Math.max(0, video.duration - 0.1);
+          if (video.duration && isFinite(video.duration) && video.duration > 0) {
+            const targetTime = video.duration - 0.1;
             if (video.currentTime < targetTime - 0.2) {
-              try {
-                if (player && typeof player.seekTo === 'function') {
-                  player.seekTo(targetTime, true);
-                } else {
-                  video.currentTime = targetTime;
-                }
-              } catch (e) {
-                console.warn('[Anti Pop-Under] Forced ad skip seek failed:', e);
-              }
+              // ALWAYS mutate the HTML5 video element directly to bypass YouTube's JS restrictions!
+              // Do NOT use player.seekTo() during ads because YouTube explicitly blocks it.
+              video.currentTime = targetTime;
             }
           }
 
