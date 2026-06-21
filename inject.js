@@ -915,6 +915,13 @@
         set(val) {
           if (val) {
             recursiveCleanYouTubeResponse(val);
+            // If the response is UNPLAYABLE (meaning streamingData is missing), we reject it.
+            // This forces YouTube's frontend to fetch the response via API, which we spoof to WEB_CREATOR!
+            if (val.playabilityStatus && val.playabilityStatus.status !== 'OK') {
+              console.log('[Anti Pop-Under] Rejected blocked ytInitialPlayerResponse to force API fetch.');
+              interceptedPlayerResponse = undefined;
+              return;
+            }
           }
           interceptedPlayerResponse = val;
         },
@@ -1318,17 +1325,19 @@
               }
 
               // FORCE A PLAYER RELOAD TO FETCH WEB_CREATOR STREAMING_DATA
-              const { player } = getPlayerAndVideo();
-              if (player && typeof player.getVideoData === 'function' && !player.dataset.adblockReloaded) {
-                const vData = player.getVideoData();
-                if (vData && vData.video_id) {
-                  console.log('[Anti Pop-Under] Forcing player to reload video via API to bypass missing streamingData');
-                  player.dataset.adblockReloaded = 'true';
+              const playerObj = document.getElementById('movie_player');
+              const videoId = new URLSearchParams(window.location.search).get('v');
+              if (playerObj && typeof playerObj.loadVideoById === 'function' && videoId && !playerObj.dataset.adblockReloaded) {
+                  console.log('[Anti Pop-Under] Forcing player to reload video via API to bypass missing streamingData for video:', videoId);
+                  playerObj.dataset.adblockReloaded = 'true';
                   try {
-                    player.loadVideoById(vData.video_id);
-                  } catch(e){}
-                  setTimeout(() => { player.dataset.adblockReloaded = ''; }, 5000);
-                }
+                    playerObj.loadVideoById(videoId);
+                  } catch(e) {
+                    console.error('[Anti Pop-Under] Error calling loadVideoById:', e);
+                  }
+                  setTimeout(() => { playerObj.dataset.adblockReloaded = ''; }, 5000);
+              } else {
+                  console.log('[Anti Pop-Under] Could not force player reload.', { hasPlayer: !!playerObj, hasLoadVideoById: playerObj && typeof playerObj.loadVideoById === 'function', videoId, reloaded: playerObj && playerObj.dataset.adblockReloaded });
               }
 
               // Also remove parent dialog if exists to prevent empty dialogs
