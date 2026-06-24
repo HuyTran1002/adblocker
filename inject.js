@@ -440,6 +440,21 @@
     return extensionEnabled;
   }
 
+  // Helper to simulate native clicks to bypass YouTube's isTrusted checks
+  function simulateNativeClick(el) {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + (rect.width / 2);
+    const y = rect.top + (rect.height / 2);
+    const clickEvents = [
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
+      new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
+      new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y })
+    ];
+    clickEvents.forEach(e => el.dispatchEvent(e));
+    el.click(); // Fallback
+  }
+
   // Send message to content script (which forwards to background)
   function reportBlocked(url, reason) {
     if (!isEnabled()) return;
@@ -903,11 +918,11 @@
             }
           });
 
-          // 4. Click any visible skip buttons using native clicks
+          // 4. Click any visible skip buttons using native-like events
           skipButtons.forEach(selector => {
             const btn = document.querySelector(selector);
             if (btn) {
-              try { btn.click(); } catch (e) {}
+              try { simulateNativeClick(btn); } catch (e) {}
             }
           });
 
@@ -970,7 +985,7 @@
             if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
               const closeBtn = el.querySelector('#dismiss-button');
               if (closeBtn) {
-                simulateClick(closeBtn);
+                simulateNativeClick(closeBtn);
                 foundAndRemoved = true;
                 console.log('[Anti Pop-Under] Auto-dismissed YouTube warning popup.');
               }
