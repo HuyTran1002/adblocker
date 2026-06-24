@@ -444,10 +444,13 @@
   function simulateNativeClick(el) {
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return; // Do not click if strictly invisible
     const x = rect.left + (rect.width / 2);
     const y = rect.top + (rect.height / 2);
     const clickEvents = [
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
       new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
+      new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
       new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
       new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y })
     ];
@@ -872,6 +875,16 @@
       '.ytp-ad-skip-button-container'
     ];
 
+    const adContainers = [
+      '.ytp-ad-image-overlay',
+      '.ytp-ad-text-overlay',
+      '.ytp-ad-overlay-container',
+      '.ytp-ad-message-container',
+      '.ytd-companion-slot-renderer',
+      '.ytd-action-companion-ad-renderer',
+      '.ytp-ad-player-overlay' // The full player image ad overlay
+    ];
+
     let userPlaybackRate = 1;
     let wasMutedByUs = false;
     let originalMutedState = false;
@@ -885,6 +898,16 @@
                             document.querySelector('.ad-interrupting') || 
                             document.querySelector('.ytp-ad-player-overlay') ||
                             (document.querySelector('.video-ads.ytp-ad-module') && document.querySelector('.video-ads.ytp-ad-module').children.length > 0);
+
+        // Hide static image ads and overlays instantly so the user doesn't see them
+        adContainers.forEach(selector => {
+          const els = document.querySelectorAll(selector);
+          els.forEach(el => {
+            if (el && el.style.opacity !== '0') {
+              try { el.style.setProperty('opacity', '0', 'important'); } catch (e) {}
+            }
+          });
+        });
 
         const videos = document.querySelectorAll('video');
 
