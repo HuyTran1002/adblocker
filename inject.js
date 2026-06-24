@@ -928,11 +928,11 @@
               video.playbackRate = 16;
             }
 
-            // 3. Small incremental time jumps (fast-forward bypass)
-            // By jumping 5 seconds every 50ms, we fast-forward 100 seconds per second!
-            // This mimics a user holding down the Right Arrow key, avoiding the freeze penalty.
-            if (video.currentTime < video.duration - 1) {
-              video.currentTime += 5;
+            // 3. Jump directly to end of ad video
+            // Instead of incrementing by 5s, jump straight to the end.
+            // This ends a 30-second or 3-minute ad in a single tick (~50ms).
+            if (video.currentTime < video.duration - 0.1) {
+              video.currentTime = video.duration - 0.1;
             }
 
             // Play video if paused
