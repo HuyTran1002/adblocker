@@ -912,6 +912,14 @@
         const videos = document.querySelectorAll('video');
 
         if (isAdPlaying && videos.length > 0) {
+          // 1. Click skip buttons FIRST
+          skipButtons.forEach(selector => {
+            const btn = document.querySelector(selector);
+            if (btn) {
+              try { simulateNativeClick(btn); } catch (e) {}
+            }
+          });
+
           videos.forEach(video => {
             if (isNaN(video.duration) || video.duration <= 0) return;
 
@@ -929,23 +937,16 @@
             }
 
             // 3. Jump directly to end of ad video
-            // Instead of incrementing by 5s, jump straight to the end.
-            // This ends a 30-second or 3-minute ad in a single tick (~50ms).
-            if (video.currentTime < video.duration - 0.1) {
+            // Use a 1-second margin for the check to prevent an infinite seek loop 
+            // if the browser clamps currentTime to a slightly lower value due to keyframes.
+            // This fixes the bug where the 3rd ad would spin and buffer endlessly.
+            if (video.currentTime < video.duration - 1) {
               video.currentTime = video.duration - 0.1;
             }
 
             // Play video if paused
             if (video.paused) {
               video.play().catch(e => {});
-            }
-          });
-
-          // 4. Click any visible skip buttons using native-like events
-          skipButtons.forEach(selector => {
-            const btn = document.querySelector(selector);
-            if (btn) {
-              try { simulateNativeClick(btn); } catch (e) {}
             }
           });
 
@@ -972,6 +973,12 @@
           });
           if (wasMutedByUs) wasMutedByUs = false;
           lastAdDuration = 0;
+
+          // Sync livestreams to live edge if they got delayed by the ad
+          const liveBadge = document.querySelector('.ytp-live-badge');
+          if (liveBadge && liveBadge.getAttribute('disabled') === null && !liveBadge.classList.contains('ytp-live-badge-disabled')) {
+            try { simulateNativeClick(liveBadge); } catch (e) {}
+          }
         }
       } catch (e) {
         console.warn('[Anti Pop-Under] Error in skipAd:', e);
