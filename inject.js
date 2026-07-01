@@ -888,86 +888,202 @@
     let userPlaybackRate = 1;
     let wasMutedByUs = false;
     let originalMutedState = false;
+    let lastSkipActionTime = 0;
     let lastAdDuration = 0;
+
+    let overlayElement = null;
+    function toggleAntiAdOverlay(show) {
+      if (show) {
+        if (!overlayElement) {
+          overlayElement = document.createElement('div');
+          overlayElement.id = 'anti-ad-premium-overlay';
+          const spinner = document.createElement('div');
+          spinner.className = 'anti-ad-spinner';
+          
+          const textEl = document.createElement('div');
+          textEl.className = 'anti-ad-text';
+          textEl.textContent = 'Đang chặn quảng cáo...';
+          
+          const subTextEl = document.createElement('div');
+          subTextEl.className = 'anti-ad-subtext';
+          subTextEl.textContent = 'Hệ thống đang bỏ qua luồng SSAI (1.0x)';
+          
+          overlayElement.appendChild(spinner);
+          overlayElement.appendChild(textEl);
+          overlayElement.appendChild(subTextEl);
+          const style = document.createElement('style');
+          style.textContent = `
+            #anti-ad-premium-overlay {
+              position: absolute;
+              top: 0; left: 0; width: 100%; height: 100%;
+              background: rgba(10, 10, 10, 0.95);
+              backdrop-filter: blur(15px);
+              z-index: 999999;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              color: #fff;
+              font-family: 'Inter', 'Roboto', 'Segoe UI', sans-serif;
+              opacity: 0;
+              transition: opacity 0.3s ease;
+              pointer-events: none;
+            }
+            .anti-ad-spinner {
+              width: 50px;
+              height: 50px;
+              border: 4px solid rgba(255,255,255,0.05);
+              border-top: 4px solid #ff0033;
+              border-radius: 50%;
+              animation: anti-ad-spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+              margin-bottom: 24px;
+              box-shadow: 0 0 15px rgba(255,0,51,0.2);
+            }
+            .anti-ad-text {
+              font-size: 22px;
+              font-weight: 600;
+              letter-spacing: 0.5px;
+              text-shadow: 0 2px 10px rgba(255,0,51,0.4);
+              margin-bottom: 8px;
+            }
+            .anti-ad-subtext {
+              font-size: 14px;
+              color: #888;
+              font-weight: 400;
+            }
+            @keyframes anti-ad-spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `;
+          document.head.appendChild(style);
+          const player = document.querySelector('#movie_player') || document.querySelector('ytd-player');
+          if (player) {
+            player.appendChild(overlayElement);
+          } else {
+            document.body.appendChild(overlayElement);
+          }
+        }
+        if (overlayElement.style.opacity !== '1') {
+          overlayElement.style.opacity = '1';
+          overlayElement.style.pointerEvents = 'all';
+        }
+      } else {
+        if (overlayElement && overlayElement.style.opacity !== '0') {
+          overlayElement.style.opacity = '0';
+          overlayElement.style.pointerEvents = 'none';
+        }
+      }
+    }
 
     function skipAd() {
       if (!isEnabled()) return;
       try {
-        // Robust ad detection: check multiple known YouTube ad indicators
-        const isAdPlaying = document.querySelector('.ad-showing') || 
-                            document.querySelector('.ad-interrupting') || 
-                            document.querySelector('.ytp-ad-player-overlay') ||
-                            (document.querySelector('.video-ads.ytp-ad-module') && document.querySelector('.video-ads.ytp-ad-module').children.length > 0);
+        const isAdPlaying = !!(document.querySelector('.ad-showing') || 
+                              document.querySelector('.ad-interrupting'));
 
-        // Hide static image ads and overlays instantly so the user doesn't see them
-        adContainers.forEach(selector => {
-          const els = document.querySelectorAll(selector);
-          els.forEach(el => {
-            if (el && el.style.opacity !== '0') {
-              try { el.style.setProperty('opacity', '0', 'important'); } catch (e) {}
-            }
-          });
-        });
+        // We rely entirely on the toggleAntiAdOverlay to visually hide the ad stream.
+        // DO NOT artificially hide native YouTube ad containers (e.g. setting opacity to 0).
+        // If we hide the ad containers, YouTube's bot-detection will detect that the skip button is invisible 
+        // and REJECT our simulated clicks, trapping the user in a 10-minute ad!
 
         const videos = document.querySelectorAll('video');
 
         if (isAdPlaying && videos.length > 0) {
-          // 1. Click skip buttons FIRST
-          skipButtons.forEach(selector => {
-            const btn = document.querySelector(selector);
-            if (btn) {
-              try { simulateNativeClick(btn); } catch (e) {}
+          toggleAntiAdOverlay(true);
+
+          // 1. Click skip buttons FIRST (only if they are visible)
+          const now = Date.now();
+          if (now - lastSkipActionTime > 500) {
+            let hasVisibleSkipButton = false;
+            let targetBtn = null;
+
+            skipButtons.forEach(selector => {
+              const btn = document.querySelector(selector);
+              if (btn && btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                hasVisibleSkipButton = true;
+                targetBtn = btn;
+              }
+            });
+
+            if (hasVisibleSkipButton) {
+              // A. Call YouTube player's native skip API
+              const player = document.querySelector('#movie_player');
+              if (player && typeof player.skipAd === 'function') {
+                try {
+                  player.skipAd();
+                  lastSkipActionTime = now;
+                } catch (e) {}
+              }
+
+              // B. Click skip buttons (fallback/backup)
+              if (targetBtn) {
+                try { 
+                  targetBtn.click();
+                  simulateNativeClick(targetBtn); 
+                  lastSkipActionTime = now;
+                } catch (e) {}
+              }
             }
-          });
+          }
 
-          videos.forEach(video => {
-            if (isNaN(video.duration) || video.duration <= 0) return;
+          // Find the specific ad video instead of applying to ALL videos
+          // YouTube sometimes uses a separate <video> element for ads while keeping the main video in the DOM.
+          const adVideo = document.querySelector('.video-ads video') || document.querySelector('.html5-main-video') || videos[0];
 
+          if (adVideo && !isNaN(adVideo.duration) && adVideo.duration > 0) {
             // 1. Mute ad immediately
-            if (!video.muted) {
+            if (!adVideo.muted) {
               originalMutedState = false;
-              video.muted = true;
+              adVideo.muted = true;
               wasMutedByUs = true;
             }
 
-            // 2. Accelerate playback speed to 16x
-            if (video.playbackRate !== 16) {
-              userPlaybackRate = video.playbackRate || 1;
-              video.playbackRate = 16;
-            }
+            // 2. Playback speed adjustment based on ad duration
+            // Seeking (currentTime = duration - 0.1) triggers YouTube's 403 Forbidden bot protection.
+            // Instead of seeking, we play short ads (< 90s) at 16x speed, which YouTube natively allows.
+            // Long ads (>= 90s) or stitched SSAI streams play at 1.0x speed to prevent 403 blocks,
+            // and we rely on the debounced skip button clicker above to instantly bypass them once they are skippable.
+            const duration = adVideo.duration;
+            const isShortAd = !isNaN(duration) && duration > 0 && duration < 90;
 
-            // 3. Jump directly to end of ad video
-            // Use a 1-second margin for the check to prevent an infinite seek loop 
-            // if the browser clamps currentTime to a slightly lower value due to keyframes.
-            // This fixes the bug where the 3rd ad would spin and buffer endlessly.
-            if (video.currentTime < video.duration - 1) {
-              video.currentTime = video.duration - 0.1;
+            if (isShortAd) {
+              if (adVideo.playbackRate !== 16.0) {
+                userPlaybackRate = adVideo.playbackRate || 1;
+                adVideo.playbackRate = 16.0;
+              }
+            } else {
+              if (adVideo.playbackRate !== 1.0) {
+                userPlaybackRate = adVideo.playbackRate || 1;
+                adVideo.playbackRate = 1.0;
+              }
             }
 
             // Play video if paused
-            if (video.paused) {
-              video.play().catch(e => {});
+            if (adVideo.paused) {
+              adVideo.play().catch(e => {});
             }
-          });
+          }
 
           // Report block event
-          const mainVideo = videos[0];
-          const duration = mainVideo ? mainVideo.duration : 0;
+          const duration = adVideo ? adVideo.duration : 0;
           if (!isNaN(duration) && duration > 0 && lastAdDuration !== duration) {
             lastAdDuration = duration;
-            const reportKey = `${window.location.hostname}|skip|${mainVideo.src || duration}`;
+            const reportKey = `${window.location.hostname}|skip|${adVideo.src || duration}`;
             if (shouldReportBlockedEvent(reportKey)) {
               reportBlocked('YouTube Video Ad', 'Bỏ qua quảng cáo video YouTube');
             }
           }
         } else if (videos.length > 0 && !isAdPlaying) {
+          toggleAntiAdOverlay(false);
+
           videos.forEach(video => {
             // Restore volume if we muted it
             if (wasMutedByUs) {
               try { video.muted = originalMutedState; } catch (e) {}
             }
             // Restore user's original playback speed
-            if (video.playbackRate === 16) {
+            if (video.playbackRate > 1.0 || video.playbackRate < 1.0) {
               try { video.playbackRate = userPlaybackRate || 1; } catch (e) {}
             }
           });
@@ -1057,7 +1173,7 @@
           // We no longer manually hide #error-screen because if the backend blocked the video,
           // hiding the error screen just results in a permanent black screen.
 
-          const { video } = getPlayerAndVideo();
+          const video = document.querySelector('video');
           if (video) {
             // If the video is paused because of the popup we just dismissed, try to play it.
             if (video.paused && foundAndRemoved) {

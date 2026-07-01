@@ -561,20 +561,5 @@
         "other"
       ]
     }
-  },
-  {
-    "id": 34,
-    "priority": 101,
-    "action": {
-      "type": "block"
-    },
-    "condition": {
-      "urlFilter": "*googlevideo.com/videoplayback*adformat=*",
-      "resourceTypes": [
-        "xmlhttprequest",
-        "media",
-        "other"
-      ]
-    }
   }
 ]

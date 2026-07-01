@@ -130,30 +130,8 @@ function injectYouTubeAdBlockCSS() {
       z-index: -9999 !important;
     }
 
-    /* Hide the entire ad overlay module so user never sees blurred bg or ad images */
-    .ad-showing .ytp-ad-player-overlay,
-    .ad-showing .ytp-ad-player-overlay-layout,
-    .ad-showing .ytp-ad-image-overlay,
-    .ad-showing .ytp-ad-text-overlay,
-    .ad-showing .ytp-ad-overlay-container,
-    .ad-showing .ytp-ad-message-container,
-    .ad-showing .ytp-ad-overlay-slot,
-    .ad-showing .ytp-ad-skip-button-slot,
-    .ad-showing .video-ads.ytp-ad-module,
-    .ad-interrupting .ytp-ad-player-overlay,
-    .ad-interrupting .ytp-ad-player-overlay-layout,
-    .ad-interrupting .video-ads.ytp-ad-module {
-      opacity: 0 !important;
-      pointer-events: none !important;
-    }
-
-    /* Keep skip buttons clickable but invisible - JS will auto-click them */
-    .ad-showing .ytp-ad-skip-button,
-    .ad-showing .ytp-ad-skip-button-modern,
-    .ad-showing .ytp-skip-ad-button {
-      opacity: 0 !important;
-      pointer-events: auto !important;
-    }
+    /* The black premium overlay covers the player visually, so we keep the native ad elements opaque
+       and clickable beneath it to prevent YouTube's bot detection from rejecting our clicks. */
   `;
   (document.head || document.documentElement).appendChild(style);
 }
