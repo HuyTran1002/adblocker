@@ -130,6 +130,19 @@ function injectYouTubeAdBlockCSS() {
       z-index: -9999 !important;
     }
 
+    /* Tắt hình ảnh quảng cáo ngay lập tức bằng CSS */
+    #movie_player.ad-showing .html5-video-container {
+      opacity: 0 !important;
+    }
+    #movie_player.ad-showing::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #000 !important;
+      z-index: 3 !important;
+      pointer-events: none !important;
+    }
+
     /* The black premium overlay covers the player visually, so we keep the native ad elements opaque
        and clickable beneath it to prevent YouTube's bot detection from rejecting our clicks. */
   `;

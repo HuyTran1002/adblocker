@@ -978,6 +978,10 @@
     }
 
     function isAdPlayingSafely() {
+      const player = document.querySelector('#movie_player');
+      if (player && player.classList.contains('ad-showing')) {
+        return true;
+      }
       const adModule = document.querySelector('.video-ads.ytp-ad-module');
       if (adModule && adModule.children.length > 0 && adModule.style.display !== 'none') {
         return true;
@@ -1193,6 +1197,8 @@
       }
     }
 
+    let adObserverAttached = false;
+
     // Run skip check and anti-adblock check dynamically
     function runYouTubeLoop() {
       if (!isEnabled() || !window.location.hostname.includes('youtube.com')) {
@@ -1203,6 +1209,29 @@
         skipAd();
         watchAndBypassAntiAdblock();
         
+        if (!adObserverAttached) {
+          const player = document.querySelector('#movie_player');
+          const video = document.querySelector('video');
+          if (player && video) {
+            adObserverAttached = true;
+            new MutationObserver((mutations) => {
+              for (const m of mutations) {
+                if (m.attributeName === 'class' && player.classList.contains('ad-showing')) {
+                  skipAd();
+                  break;
+                }
+              }
+            }).observe(player, { attributes: true, attributeFilter: ['class'] });
+
+            video.addEventListener('timeupdate', () => {
+              if (isAdPlayingSafely()) skipAd();
+            });
+            video.addEventListener('play', () => {
+              if (isAdPlayingSafely()) skipAd();
+            });
+          }
+        }
+
         const isAdPlaying = isAdPlayingSafely();
         const nextDelay = isAdPlaying ? 50 : 500;
         setTimeout(runYouTubeLoop, nextDelay);
