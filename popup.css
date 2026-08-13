@@ -409,3 +409,58 @@ input:not(:checked) ~ .pulse-indicator,
   text-overflow: ellipsis;
   max-width: 220px;
 }
+
+/* Whitelist Section */
+.whitelist-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 44px;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.empty-whitelist {
+  font-size: 11px;
+  color: var(--text-mute);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.whitelist-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.whitelist-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 20px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+
+.whitelist-remove-btn {
+  background: none;
+  border: none;
+  color: #f43f5e;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.whitelist-remove-btn:hover {
+  opacity: 0.8;
+}

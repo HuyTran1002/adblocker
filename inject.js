@@ -364,6 +364,20 @@
             curr = curr.parentElement;
           }
 
+          // Check if clicked element is or is inside an anchor link pointing to a popunder/ad URL
+          if (anchor && anchor.href) {
+            const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+            const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
+            if (!checkNavigationOrPopup(anchor.href, contextName)) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
+              console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
+              return;
+            }
+          }
+
           // 1. If click is on a clickjack overlay
           if (overlay) {
             // If the overlay has a link, only block if it's external and not whitelisted
@@ -494,7 +508,22 @@
     }
     
     const tagName = el.tagName.toLowerCase();
-    if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img'].includes(tagName)) {
+    if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary'].includes(tagName)) {
+      return false;
+    }
+
+    // Never consider elements with interactive roles, submit/reset buttons, or form controls as overlays
+    if (el.getAttribute) {
+      const role = (el.getAttribute('role') || '').toLowerCase();
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio'].includes(role) ||
+          ['submit', 'reset', 'button'].includes(type)) {
+        return false;
+      }
+    }
+
+    // Never consider elements inside forms, navbars, headers, dialogs, modals, or user containers as clickjack overlays
+    if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"]')) {
       return false;
     }
 
@@ -516,7 +545,7 @@
 
     // Check if the element itself contains graphic icons or has control class names
     try {
-      if (el.querySelector('svg, img, i, canvas') || 
+      if (el.querySelector('svg, img, i, canvas, button, input, select, textarea') || 
           el.closest('[class*="icon"], [class*="btn"], [class*="control"], [class*="play"], [class*="player"], [class*="fullscreen"]') ||
           (el.className && typeof el.className === 'string' && (el.className.includes('btn') || el.className.includes('control') || el.className.includes('play')))) {
         return false;
@@ -545,10 +574,14 @@
       if (!isTransparent) return false;
       
       const textLen = (el.innerText || '').trim().length;
-      const isNoText = textLen < 50;
+      const isNoText = textLen === 0; // Overlay MUST have NO text content
       if (!isNoText) return false;
 
-      // Relax size requirement to detect small/medium overlays placed on play buttons
+      // An overlay MUST be an <a> element or have a target link pointing to an external site
+      if (tagName !== 'a' && !el.querySelector('a')) {
+        return false;
+      }
+
       const isOverlaySize = (width > 80 && height > 30);
       return isOverlaySize;
     } catch (e) {
@@ -557,16 +590,18 @@
   }
 
   const gamblingKeywords = [
-    'bet', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
+    '\\bbet\\b', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
     '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
-    'loto', 'quayhu', 'slot', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
+    'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
     'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88'
   ];
 
   const adUrlKeywords = [
-    'adserver', 'click', 'zone', 'banner', 'popup', 'popunder', 'redirect',
-    'greatcpmgate', 'highcpmgate', 'onclick', 'clktag', 'exoclick', 'eclick', 'novanet'
+    'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
+    'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
+    'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'hilltopads', 'galaksion',
+    'monetag', 'admaven', 'clickadu', 'richads', 'propush', 'popmyads'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -617,46 +652,63 @@
   function checkNavigationOrPopup(url, context) {
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return true;
 
-    // Check if the URL is external and not whitelisted
+    const isFormSubmit = context === 'form.submit';
+    const isAnchorClick = context === 'anchor.click' || context === 'anchor.click._blank';
+    const isLocationChange = context === 'location change';
+    const isWindowOpen = context === 'window.open';
+
+    let isBlank = !url || url.startsWith('javascript:') || url.trim() === '' || url === 'about:blank' || url.startsWith('#');
     let isExternal = false;
-    let isBlank = !url || url.startsWith('javascript:') || url.trim() === '' || url === 'about:blank';
     let targetHost = '';
     
     if (!isBlank) {
       try {
         targetHost = new URL(url, window.location.href).hostname.toLowerCase();
-        isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
+        const currentHost = window.location.hostname.toLowerCase();
+        isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
       } catch(e) {
         isBlank = true;
       }
     }
 
-    // 1. If it matches ad or gambling keywords, block it 100%
+    // 1. If it explicitly matches ad or gambling keywords, block it 100%
     if (url && (gamblingRegex.test(url) || adUrlRegex.test(url))) {
       reportBlocked(url, `Blocked ad/gambling URL in ${context}`);
       return false;
     }
 
-    // 2. Block all blank popups or non-whitelisted external redirects immediately
-    if (isBlank || (isExternal && !isWhitelisted(url))) {
-      reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank redirect in ${context}`);
+    // 2. Same-page form submissions, relative location changes, and internal link clicks must ALWAYS be allowed!
+    if (isFormSubmit && (!isExternal || isWhitelisted(url))) {
+      return true;
+    }
+
+    if (isLocationChange && (!isExternal || isWhitelisted(url))) {
+      return true;
+    }
+
+    if (isAnchorClick && !context.includes('_blank') && (!isExternal || isWhitelisted(url))) {
+      return true;
+    }
+
+    // 3. Block external non-whitelisted popups or blank popup windows
+    if ((isWindowOpen || context.includes('_blank')) && (isBlank || (isExternal && !isWhitelisted(url)))) {
+      reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank popup in ${context}`);
       return false;
     }
 
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
     const isRecentInteraction = timeSinceLastInteraction < 1000;
 
-    // 3. If no recent user interaction, block all programmatic actions
-    if (!isRecentInteraction) {
+    // 4. If no recent user interaction, block all programmatic window.open or external popup actions
+    if (!isRecentInteraction && isWindowOpen) {
       reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
       return false;
     }
 
-    // 4. Detailed checks for overlays or player clicks
+    // 5. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
       
-      // Traverse up to find if there's an overlay
       let curr = clickedEl;
       let overlay = null;
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
@@ -674,11 +726,10 @@
         return false;
       }
 
-      const isBackgroundClick = (clickedEl === document.body || clickedEl === document.documentElement || clickedEl === document);
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
       
       // A play button/player click should NEVER open a new tab/window (window.open) or trigger _blank link redirects
-      if (isPlayerClick && (context === 'window.open' || context.includes('_blank'))) {
+      if (isPlayerClick && (isWindowOpen || context.includes('_blank'))) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
         return false;
       }
@@ -729,6 +780,7 @@
 
   // Helper to override open on any window object (e.g. top-level or iframe window)
   function overrideWindowOpen(win) {
+    if (!win) return;
     try {
       if (win.open !== customOpen) {
         Object.defineProperty(win, 'open', {
@@ -742,11 +794,47 @@
         win.open = customOpen;
       } catch (err) {}
     }
+
+    try {
+      if (win.Window && win.Window.prototype && win.Window.prototype.open !== customOpen) {
+        Object.defineProperty(win.Window.prototype, 'open', {
+          value: customOpen,
+          writable: false,
+          configurable: false
+        });
+      }
+    } catch (e) {}
   }
 
   if (!isYouTube) {
-    // Override top-level window.open
+    // Override top-level window, self, top, parent, globalThis, and Window.prototype
     overrideWindowOpen(window);
+    overrideWindowOpen(window.self);
+    overrideWindowOpen(window.top);
+    overrideWindowOpen(window.parent);
+    if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
+    if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
+
+    // Hook Document.prototype.createElement to catch newly created iframes immediately
+    try {
+      const origCreateElement = Document.prototype.createElement;
+      Document.prototype.createElement = function(tagName, options) {
+        const el = origCreateElement.call(this, tagName, options);
+        if (el && typeof tagName === 'string' && tagName.toLowerCase() === 'iframe') {
+          try {
+            const hookIframe = () => {
+              try {
+                if (el.contentWindow) overrideWindowOpen(el.contentWindow);
+                if (el.contentDocument && el.contentDocument.defaultView) overrideWindowOpen(el.contentDocument.defaultView);
+              } catch(e) {}
+            };
+            el.addEventListener('load', hookIframe);
+            setTimeout(hookIframe, 0);
+          } catch(e) {}
+        }
+        return el;
+      };
+    } catch(e) {}
 
     // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
     try {
@@ -1120,8 +1208,7 @@
           'ytd-enforcement-message-renderer',
           'ytd-enforcement-message-view-model',
           'yt-playability-error-supported-renderers',
-          '.yt-playability-error-supported-renderers',
-          'tp-yt-paper-dialog'
+          '.yt-playability-error-supported-renderers'
         ];
 
         let foundAndRemoved = false;
@@ -1134,8 +1221,7 @@
             const hasText = el.innerText && (
               el.innerText.includes('Ad blockers violate') || 
               el.innerText.includes('Trình chặn quảng cáo') ||
-              el.innerText.includes('chặn quảng cáo') ||
-              el.innerText.includes('Terms of Service')
+              el.innerText.includes('chặn quảng cáo')
             );
 
             if (isEnforcement || (isPlayabilityError && hasText) || hasText) {
@@ -1164,9 +1250,6 @@
           
           if (html && html.style.overflow === 'hidden') html.style.setProperty('overflow', 'auto', 'important');
           if (body && body.style.overflow === 'hidden') body.style.setProperty('overflow', 'auto', 'important');
-
-          // Remove any backdrops
-          document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach(el => el.remove());
 
           // Fix pointer events on body and html if disabled
           if (body && window.getComputedStyle(body).pointerEvents === 'none') {
@@ -1344,8 +1427,38 @@
       } catch (e) {}
     }
 
-    setInterval(cleanOverlays, 200);
-    setInterval(scanAndRemoveClickjacks, 300);
+    let throttleTimer = null;
+    function scheduleBypassScan() {
+      if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null;
+        if (!isEnabled()) return;
+        cleanOverlays();
+        scanAndRemoveClickjacks();
+      }, 150);
+    }
+
+    try {
+      const observer = new MutationObserver(() => {
+        scheduleBypassScan();
+      });
+      observer.observe(document.documentElement || document.body, {
+        childList: true,
+        subtree: true
+      });
+    } catch (e) {}
+
+    // Fallback scan every 3 seconds for silent background changes
+    setInterval(() => {
+      if (isEnabled() && !window.location.hostname.includes('youtube.com') && !isCurrentPageWhitelisted()) {
+        cleanOverlays();
+        scanAndRemoveClickjacks();
+      }
+    }, 3000);
+
+    // Initial scan
+    scheduleBypassScan();
   }
 
   runYouTubeAdSkipper();

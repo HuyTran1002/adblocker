@@ -124,12 +124,52 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Update Whitelist Manager UI
+  function updateWhitelistUI(disabledDomains) {
+    const whitelistTags = document.getElementById("whitelist-tags");
+    const emptyWhitelist = document.getElementById("empty-whitelist");
+    if (!whitelistTags || !emptyWhitelist) return;
+
+    whitelistTags.innerHTML = "";
+    const list = disabledDomains || [];
+    if (list.length === 0) {
+      emptyWhitelist.style.display = "block";
+    } else {
+      emptyWhitelist.style.display = "none";
+      list.forEach(domain => {
+        const tag = document.createElement("div");
+        tag.className = "whitelist-tag";
+        tag.innerHTML = `
+          <span>${domain}</span>
+          <button class="whitelist-remove-btn" title="Bật lại adblock trên ${domain}" data-domain="${domain}">&times;</button>
+        `;
+        tag.querySelector(".whitelist-remove-btn").addEventListener("click", (e) => {
+          const domToRemove = e.currentTarget.getAttribute("data-domain");
+          chrome.storage.local.get(["disabledDomains"], (res) => {
+            const updated = (res.disabledDomains || []).filter(d => d !== domToRemove);
+            chrome.storage.local.set({ disabledDomains: updated }, () => {
+              if (domToRemove === currentDomain) {
+                siteToggle.checked = true;
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                  if (tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id);
+                });
+              }
+            });
+          });
+        });
+        whitelistTags.appendChild(tag);
+      });
+    }
+  }
+
   // Load initial state from storage
-  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory"], (result) => {
+  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains"], (result) => {
     const enabled = result.enabled !== false; // default true
     const count = result.blockedCount || 0;
     const history = result.blockedHistory || [];
+    const disabledDomains = result.disabledDomains || [];
     updateUI(enabled, count, history);
+    updateWhitelistUI(disabledDomains);
   });
 
   // Listen to power toggle change
@@ -183,10 +223,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const enabled = result.enabled !== false;
         const count = result.blockedCount || 0;
         const history = result.blockedHistory || [];
+        const disabledDomains = result.disabledDomains || [];
         updateUI(enabled, count, history);
+        updateWhitelistUI(disabledDomains);
 
         if (currentDomain) {
-          const disabledDomains = result.disabledDomains || [];
           const isSiteBlocked = !disabledDomains.includes(currentDomain);
           siteToggle.checked = isSiteBlocked;
         }

@@ -38,7 +38,8 @@ const whitelistedDomains = [
 function isCurrentPageWhitelisted() {
   try {
     const host = window.location.hostname.toLowerCase();
-    return whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain));
+    const isHardcoded = whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain));
+    return isHardcoded || !currentEnabledState;
   } catch (e) {
     return false;
   }
@@ -46,7 +47,7 @@ function isCurrentPageWhitelisted() {
 
 const adSelectors = [
   // General ad classes and IDs
-  '.ad', '.ads', '.adsbox', '.ad-container', '.ad-banner', '.ad-wrapper',
+  '.adsbox', '.ad-container', '.ad-banner', '.ad-wrapper',
   '.ads-wrapper', '.ad_box', '.ad_container', '.sponsored-post',
   '.ad-slot', '.ads-slot', '.ad-holder', '.ads-holder', '.adBox', '.ad-box',
   
@@ -55,16 +56,14 @@ const adSelectors = [
   'iframe[src*="exoclick"]', 'iframe[src*="popads"]', 'iframe[src*="popcash"]',
   'iframe[src*="onclick"]', 'iframe[src*="greatcpmgate"]', 'iframe[src*="highcpmgate"]',
   
-  // Attribute matchers for ads & banners
+  // Specific ad container matchers
   'div[class*="ad-container"]', 'div[class*="ad_box"]', 'div[class*="banner-ad"]',
-  'div[id*="ad-"]', 'div[class*="ads-"]', 'div[class*="sponsored"]',
-  'div[id*="ad_"]', 'div[id*="ads_"]', 'div[class*="ad_"]', 'div[class*="ads_"]',
+  'div[class*="sponsored-post"]', 'div[class*="sponsored-ad"]',
   'div[class*="ad-box"]', 'div[class*="ads-box"]', 'div[class*="ad-placement"]',
   'div[class*="ad-wrapper"]', 'div[class*="ads-wrapper"]',
   
-  // Vietnamese specific ad classes (qc, quangcao)
-  '.qc', '.quangcao', '.quang-cao',
-  'div[class*="qc-"]', 'div[id*="qc-"]', 'div[class*="qc_"]', 'div[id*="qc_"]',
+  // Vietnamese specific ad classes (quangcao)
+  '.quangcao', '.quang-cao',
   'div[class*="quangcao"]', 'div[class*="quang-cao"]', 'div[id*="quangcao"]',
   'div[id*="quang-cao"]',
   
@@ -76,13 +75,9 @@ const adSelectors = [
   '#floating_left', '#floating_right', '.floating-left', '.floating-right',
   '#floating-left', '#floating-right', '#box-ad', '#ad_center',
   
-  // Betting and gambling ads (extremely common on Vietnamese movie sites!)
-  'a[href*="bet"]', 'a[href*="casino"]', 'a[href*="gamebai"]', 'a[href*="nhacai"]',
-  'a[href*="w88"]', 'a[href*="fun88"]', 'a[href*="fb88"]', 'a[href*="m88"]',
-  'a[href*="188bet"]', 'a[href*="kubet"]', 'a[href*="shbet"]', 'a[href*="789bet"]',
-  'a[href*="jun88"]', 'a[href*="f8bet"]', 'a[href*="new88"]', 'a[href*="hi88"]',
-  'a[href*="okvip"]', 'a[href*="1xbit"]', 'a[href*="1xbet"]', 'a[href*="vi88"]',
-  'a[href*="fi88"]', 'a[href*="ee88"]', 'a[href*="lixi88"]', 'a[href*="mu88"]',
+  // Specific betting and gambling ad classes/IDs
+  '[class*="w88"]', '[class*="fun88"]', '[class*="fb88"]', '[class*="m88"]',
+  '[class*="kubet"]', '[class*="shbet"]', '[class*="789bet"]', '[class*="jun88"]',
   
   // Widgets
   '.mgid-widget', '.taboola-ad', '.outbrain-ad', '.criteo-ad'
@@ -115,17 +110,12 @@ function injectYouTubeAdBlockCSS() {
   const style = document.createElement('style');
   style.id = 'anti-popunder-youtube-css';
   style.textContent = `
-    /* Hide anti-adblock enforcement popups */
+    /* Hide anti-adblock enforcement popups ONLY (preserve YouTube Subscribe/Share dialogs) */
     ytd-enforcement-message-renderer,
-    ytd-enforcement-message-view-model,
-    tp-yt-paper-dialog.style-scope.ytd-popup-container {
+    ytd-enforcement-message-view-model {
       position: absolute !important;
       top: -9999px !important;
       left: -9999px !important;
-      opacity: 0 !important;
-      z-index: -9999 !important;
-    }
-    tp-yt-iron-overlay-backdrop {
       opacity: 0 !important;
       z-index: -9999 !important;
     }
@@ -248,16 +238,18 @@ if (window.location.hostname.includes('youtube.com')) {
 
     // Dynamic ad scanner logic (to handle banners, catfish and betting ads)
     const gamblingKeywords = [
-      'bet', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
+      '\\bbet\\b', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
       '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
       'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
-      'loto', 'quayhu', 'slot', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
+      'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
       'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88'
     ];
 
     const adUrlKeywords = [
-      'adserver', 'click', 'zone', 'banner', 'popup', 'popunder', 'redirect',
-      'greatcpmgate', 'highcpmgate', 'onclick', 'clktag', 'exoclick', 'eclick', 'novanet'
+      'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
+      'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
+      'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'hilltopads', 'galaksion',
+      'monetag', 'admaven', 'clickadu', 'richads', 'propush', 'popmyads'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -275,6 +267,10 @@ if (window.location.hostname.includes('youtube.com')) {
 
       const currentDomain = window.location.hostname;
       const tagName = el.tagName.toLowerCase();
+
+      // Protect interactive functional elements from being hidden
+      if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return;
+      if (el.getAttribute && el.getAttribute('role') === 'button') return;
 
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
@@ -309,10 +305,9 @@ if (window.location.hostname.includes('youtube.com')) {
             const imgHeight = img.naturalHeight || img.height || 0;
             const imgSrc = (img.src || '').toLowerCase();
             
-            // 1. Explicit ad keywords/types
-            const imgMatchesAd = ['banner', 'quangcao', 'qc', 'adserver', 'gif'].some(kw => imgSrc.includes(kw)) ||
-                                 imgSrc.includes('/ads/') || imgSrc.includes('/ad/') ||
-                                 imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
+            // 1. Explicit ad keywords/types (excluding generic extensions like .gif)
+            const imgMatchesAd = ['quangcao', 'adserver'].some(kw => imgSrc.includes(kw)) ||
+                                 imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
         
             // 2. Layout heuristics:
             // - Floating banner ads (fixed or absolute position)
@@ -450,7 +445,7 @@ if (window.location.hostname.includes('youtube.com')) {
     window.addEventListener('DOMContentLoaded', () => {
       if (window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
-      setInterval(scanAndRemoveAds, 1500);
+      setInterval(scanAndRemoveAds, 3500);
     });
 
     if (document.readyState === 'interactive' || document.readyState === 'complete') {
