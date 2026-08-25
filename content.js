@@ -248,8 +248,10 @@ if (window.location.hostname.includes('youtube.com')) {
     const adUrlKeywords = [
       'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
       'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
-      'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'hilltopads', 'galaksion',
-      'monetag', 'admaven', 'clickadu', 'richads', 'propush', 'popmyads'
+      'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
+      'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
+      'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
+      'googleadservices', 'ad-delivery', 'adservice'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -268,9 +270,14 @@ if (window.location.hostname.includes('youtube.com')) {
       const currentDomain = window.location.hostname;
       const tagName = el.tagName.toLowerCase();
 
-      // Protect interactive functional elements from being hidden
+      // Protect interactive functional elements and episode/server buttons from being hidden
       if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return;
       if (el.getAttribute && el.getAttribute('role') === 'button') return;
+
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
+          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) return;
 
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {

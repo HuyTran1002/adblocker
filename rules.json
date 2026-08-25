@@ -576,7 +576,9 @@
         "xmlhttprequest",
         "image",
         "main_frame",
-        "other"
+        "other",
+        "ping",
+        "websocket"
       ]
     }
   },

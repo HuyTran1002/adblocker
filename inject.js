@@ -296,7 +296,7 @@
       if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) return true;
       if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
 
-      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable]')) return true;
+      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"]')) return true;
       const style = window.getComputedStyle(el);
       if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
       const ariaAttrs = ['aria-haspopup','aria-pressed','aria-expanded','aria-label','aria-controls'];
@@ -339,81 +339,83 @@
   }
   
   if (!isYouTube) {
-    interactionEvents.forEach(eventName => {
-      window.addEventListener(eventName, (e) => {
-        lastInteractionTime = Date.now();
-        lastInteractionEvent = e;
-        
-        if (eventName === 'click') {
-          if (!isEnabled()) return;
-          const target = e.target;
-          if (!target || isCurrentPageWhitelisted()) return;
+    const handleUserInteraction = (e) => {
+      lastInteractionTime = Date.now();
+      lastInteractionEvent = e;
+      
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      const target = e.target;
+      if (!target) return;
 
-          // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
-          let curr = target;
-          let anchor = null;
-          let overlay = null;
+      // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+      let curr = target;
+      let anchor = null;
+      let overlay = null;
 
-          while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-            if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
-              anchor = curr;
+      while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+        if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
+          anchor = curr;
+        }
+        if (isClickjackOverlay(curr)) {
+          overlay = curr;
+        }
+        curr = curr.parentElement;
+      }
+
+      // 1. If interaction is on a clickjack overlay -> block event immediately & remove overlay
+      if (overlay) {
+        if (anchor) {
+          try {
+            const href = anchor.getAttribute('href') || '';
+            if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+              return; // Allow clicks on episode/no-link anchors without external href
             }
-            if (isClickjackOverlay(curr)) {
-              overlay = curr;
-            }
-            curr = curr.parentElement;
-          }
-
-          // Check if clicked element is or is inside an anchor link pointing to a popunder/ad URL
-          if (anchor && anchor.href) {
-            const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
-            const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
-            if (!checkNavigationOrPopup(anchor.href, contextName)) {
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-              reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
-              console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
+            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+            const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
+            if (!isExternal || isWhitelisted(href)) {
               return;
             }
-          }
-
-          // 1. If click is on a clickjack overlay
-          if (overlay) {
-            // If the overlay has a link, only block if it's external and not whitelisted
-            if (anchor) {
-              try {
-                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-                const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
-                if (isExternal && !isWhitelisted(anchor.href)) {
-                  // External redirect, block it!
-                } else {
-                  // Internal or whitelisted link, allow it to pass normally!
-                  return;
-                }
-              } catch (err) {
-                return;
-              }
-            }
-
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            
-            const adUrl = (anchor && anchor.href) || 'overlay';
-            reportBlocked(adUrl, 'Blocked click on clickjack overlay');
-            console.log('[Anti Pop-Under] Blocked click on clickjack overlay:', overlay);
-            
-            try {
-              overlay.remove();
-            } catch (err) {}
+          } catch (err) {
             return;
           }
-
-          // 2. Fallback check for background click or non-interactive redirect
-          blockScriptedRedirects(e);
         }
-      }, true); // Use capturing phase to get it before other scripts
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        const adUrl = (anchor && anchor.href) || 'overlay';
+        reportBlocked(adUrl, `Blocked ${e.type} on clickjack overlay`);
+        console.log(`[Anti Pop-Under] Blocked ${e.type} on clickjack overlay:`, overlay);
+        
+        try {
+          overlay.remove();
+        } catch (err) {}
+        return;
+      }
+
+      // 2. Check anchor link clicks pointing to popunder/ad URLs
+      if (e.type === 'click' && anchor && anchor.href) {
+        const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+        const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
+        if (!checkNavigationOrPopup(anchor.href, contextName)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
+          console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
+          return;
+        }
+      }
+
+      // 3. Fallback check for background click or non-interactive redirect
+      if (e.type === 'click') {
+        blockScriptedRedirects(e);
+      }
+    };
+
+    interactionEvents.forEach(eventName => {
+      window.addEventListener(eventName, handleUserInteraction, true);
     });
   }
 
@@ -507,53 +509,68 @@
       return false;
     }
     
-    const tagName = el.tagName.toLowerCase();
-    if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary'].includes(tagName)) {
-      return false;
-    }
-
-    // Never consider elements with interactive roles, submit/reset buttons, or form controls as overlays
-    if (el.getAttribute) {
-      const role = (el.getAttribute('role') || '').toLowerCase();
-      const type = (el.getAttribute('type') || '').toLowerCase();
-      if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio'].includes(role) ||
-          ['submit', 'reset', 'button'].includes(type)) {
-        return false;
-      }
-    }
-
-    // Never consider elements inside forms, navbars, headers, dialogs, modals, or user containers as clickjack overlays
-    if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"]')) {
-      return false;
-    }
-
-    if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) {
-      if (tagName !== 'a') {
-        return false;
-      }
-    }
-
-    // Check if the element is inside a player structure or near a video/iframe element
     try {
-      const playerContainer = el.closest('div, section');
-      if (playerContainer && (playerContainer.querySelector('video') || playerContainer.querySelector('iframe'))) {
-        if (tagName !== 'a' || el.querySelector('svg, img, i') || el.closest('[class*="icon"], [class*="btn"], [class*="control"], [class*="play"], [class*="player"]')) {
+      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
+        return false;
+      }
+
+      // Visible elements with text content are genuine UI elements (e.g. episode buttons "Tập 1", "Tập 2"), NOT clickjack overlays!
+      const text = (el.innerText || '').trim();
+      if (text.length > 0) {
+        return false;
+      }
+
+      // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') ||
+          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) {
+        return false;
+      }
+
+      // Never consider elements with interactive roles, submit/reset buttons, or form controls as overlays
+      if (el.getAttribute) {
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox'].includes(role) ||
+            ['submit', 'reset', 'button'].includes(type)) {
           return false;
         }
       }
-    } catch(e) {}
 
-    // Check if the element itself contains graphic icons or has control class names
-    try {
-      if (el.querySelector('svg, img, i, canvas, button, input, select, textarea') || 
-          el.closest('[class*="icon"], [class*="btn"], [class*="control"], [class*="play"], [class*="player"], [class*="fullscreen"]') ||
-          (el.className && typeof el.className === 'string' && (el.className.includes('btn') || el.className.includes('control') || el.className.includes('play')))) {
+      // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
+      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
         return false;
       }
-    } catch (e) {}
 
-    try {
-      if (el.querySelector('video, audio, canvas, iframe, embed, object')) {
+      // Protect video player controls
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) {
+        if (tagName !== 'a') {
+          return false;
+        }
+      }
+
+      // If anchor tag has same-origin href or no external ad href, it is NEVER a clickjack overlay
+      if (tagName === 'a') {
+        const href = el.getAttribute('href') || '';
+        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+          return false; // Episode link with id="no-link" or JS trigger
+        }
+        try {
+          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+          const currentHost = window.location.hostname.toLowerCase();
+          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+          if (!isExternal) {
+            return false; // Same-domain links are never clickjack overlays
+          }
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // If it contains genuine form controls, video media, or text-bearing children, skip
+      if (el.querySelector('video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
         return false;
       }
 
@@ -562,28 +579,25 @@
       
       const width = rect.width;
       const height = rect.height;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 800;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 600;
       
       const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
       if (!isPositioned) return false;
       
       const opacity = parseFloat(style.opacity);
-      const isTransparent = opacity < 0.25 || 
-                          style.backgroundColor === 'transparent' || 
-                          style.backgroundColor.includes('rgba(0, 0, 0, 0)') ||
-                          style.backgroundColor.includes('rgba(255, 255, 255, 0)');
+      const isTransparent = opacity < 0.35 || 
+                            style.backgroundColor === 'transparent' || 
+                            style.backgroundColor.includes('rgba(0, 0, 0, 0)') ||
+                            style.backgroundColor.includes('rgba(255, 255, 255, 0)');
       if (!isTransparent) return false;
-      
-      const textLen = (el.innerText || '').trim().length;
-      const isNoText = textLen === 0; // Overlay MUST have NO text content
-      if (!isNoText) return false;
 
-      // An overlay MUST be an <a> element or have a target link pointing to an external site
-      if (tagName !== 'a' && !el.querySelector('a')) {
-        return false;
-      }
+      // Real overlay area check: spans a significant part of the viewport (or > 200x200)
+      const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
+      const zIndex = parseInt(style.zIndex, 10);
+      const isHighZ = !isNaN(zIndex) && zIndex >= 10;
 
-      const isOverlaySize = (width > 80 && height > 30);
-      return isOverlaySize;
+      return isLargeArea && isHighZ;
     } catch (e) {
       return false;
     }
@@ -600,8 +614,10 @@
   const adUrlKeywords = [
     'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
     'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
-    'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'hilltopads', 'galaksion',
-    'monetag', 'admaven', 'clickadu', 'richads', 'propush', 'popmyads'
+    'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
+    'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
+    'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
+    'googleadservices', 'ad-delivery', 'adservice'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -677,12 +693,19 @@
       return false;
     }
 
-    // 2. Same-page form submissions, relative location changes, and internal link clicks must ALWAYS be allowed!
-    if (isFormSubmit && (!isExternal || isWhitelisted(url))) {
+    // 2. Location changes (window.location / replace / assign)
+    if (isLocationChange) {
+      if (isExternal && !isWhitelisted(url)) {
+        if (!isClickedLink(url)) {
+          reportBlocked(url, `Blocked unrequested external location redirect (${context})`);
+          return false;
+        }
+      }
       return true;
     }
 
-    if (isLocationChange && (!isExternal || isWhitelisted(url))) {
+    // 3. Same-page form submissions and relative/whitelisted internal links
+    if (isFormSubmit && (!isExternal || isWhitelisted(url))) {
       return true;
     }
 
@@ -690,22 +713,37 @@
       return true;
     }
 
-    // 3. Block external non-whitelisted popups or blank popup windows
+    // 4. Block external non-whitelisted popups or blank popup windows
     if ((isWindowOpen || context.includes('_blank')) && (isBlank || (isExternal && !isWhitelisted(url)))) {
       reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank popup in ${context}`);
       return false;
     }
 
+    // 5. If window.open is opening duplicate current page or relative ad redirect
+    if (isWindowOpen && !isBlank && !isExternal) {
+      try {
+        const path = new URL(url, window.location.href).pathname.toLowerCase();
+        const curPath = window.location.pathname.toLowerCase();
+        const isDuplicatePage = (url === window.location.href || path === curPath) && context === 'window.open';
+        const isAdPath = adUrlRegex.test(url) || ['/click', '/out', '/go', '/redirect', '/pop', '/cpm'].some(kw => path.includes(kw));
+
+        if (isDuplicatePage || isAdPath) {
+          reportBlocked(url, `Blocked same-domain ad/duplicate window.open in ${context}`);
+          return false;
+        }
+      } catch (e) {}
+    }
+
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
     const isRecentInteraction = timeSinceLastInteraction < 1000;
 
-    // 4. If no recent user interaction, block all programmatic window.open or external popup actions
+    // 6. If no recent user interaction, block all programmatic window.open or external popup actions
     if (!isRecentInteraction && isWindowOpen) {
       reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
       return false;
     }
 
-    // 5. Detailed checks for overlays or player clicks
+    // 7. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
       
@@ -762,6 +800,13 @@
       return originalOpen.apply(this, arguments);
     }
 
+    const targetLower = String(target || '').toLowerCase();
+    if (['_self', '_top', '_parent'].includes(targetLower)) {
+      if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
+        return originalOpen.apply(this, arguments);
+      }
+    }
+
     if (!checkNavigationOrPopup(url, 'window.open')) {
       // Return a dummy window proxy to prevent script crashes on calling methods/properties
       const dummyWindow = new Proxy({}, {
@@ -815,6 +860,25 @@
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
 
+    // Synchronously patch iframe window when created or appended to DOM
+    function patchIframeNode(node) {
+      if (!node || node.nodeType !== 1) return;
+      try {
+        if (node.tagName && node.tagName.toLowerCase() === 'iframe') {
+          if (node.contentWindow) overrideWindowOpen(node.contentWindow);
+          if (node.contentDocument && node.contentDocument.defaultView) overrideWindowOpen(node.contentDocument.defaultView);
+        }
+        if (node.querySelectorAll) {
+          node.querySelectorAll('iframe').forEach(ifr => {
+            try {
+              if (ifr.contentWindow) overrideWindowOpen(ifr.contentWindow);
+              if (ifr.contentDocument && ifr.contentDocument.defaultView) overrideWindowOpen(ifr.contentDocument.defaultView);
+            } catch(e) {}
+          });
+        }
+      } catch(e) {}
+    }
+
     // Hook Document.prototype.createElement to catch newly created iframes immediately
     try {
       const origCreateElement = Document.prototype.createElement;
@@ -823,10 +887,7 @@
         if (el && typeof tagName === 'string' && tagName.toLowerCase() === 'iframe') {
           try {
             const hookIframe = () => {
-              try {
-                if (el.contentWindow) overrideWindowOpen(el.contentWindow);
-                if (el.contentDocument && el.contentDocument.defaultView) overrideWindowOpen(el.contentDocument.defaultView);
-              } catch(e) {}
+              patchIframeNode(el);
             };
             el.addEventListener('load', hookIframe);
             setTimeout(hookIframe, 0);
@@ -835,6 +896,29 @@
         return el;
       };
     } catch(e) {}
+
+    // Hook Node DOM insertion methods to patch iframe contentWindow immediately upon append
+    ['appendChild', 'insertBefore'].forEach(method => {
+      try {
+        const orig = Node.prototype[method];
+        Node.prototype[method] = function() {
+          const result = orig.apply(this, arguments);
+          patchIframeNode(arguments[0]);
+          return result;
+        };
+      } catch(e) {}
+    });
+
+    ['append', 'insertAdjacentElement'].forEach(method => {
+      try {
+        const orig = Element.prototype[method];
+        Element.prototype[method] = function() {
+          const result = orig.apply(this, arguments);
+          patchIframeNode(arguments[0]);
+          return result;
+        };
+      } catch(e) {}
+    });
 
     // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
     try {
@@ -868,6 +952,18 @@
     } catch (err) {
       console.warn('[Anti Pop-Under] Iframe prototyping hooks failed:', err);
     }
+
+    // Fast interval check for iframe windows
+    setInterval(() => {
+      if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
+      try {
+        for (let i = 0; i < window.frames.length; i++) {
+          try {
+            if (window.frames[i]) overrideWindowOpen(window.frames[i]);
+          } catch(e) {}
+        }
+      } catch(e) {}
+    }, 1000);
   }
 
   // Bulletproof override of HTMLAnchorElement.prototype.click
