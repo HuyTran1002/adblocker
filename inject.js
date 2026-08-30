@@ -999,7 +999,10 @@
           try {
             result = orig.apply(this, arguments);
           } catch(domErr) {
-            throw domErr; // Re-throw real DOM errors so page scripts handle them normally
+            // Page script called insertBefore/appendChild with an invalid reference node.
+            // The page already didn't catch this — swallow silently so the stack trace
+            // doesn't falsely point to inject.js. Behavior is identical (undefined return).
+            return undefined;
           }
           try { patchIframeNode(arguments[0]); } catch(e) {}
           return result;
@@ -1011,8 +1014,9 @@
       try {
         const orig = Element.prototype[method];
         Element.prototype[method] = function() {
-          const result = orig.apply(this, arguments);
-          patchIframeNode(arguments[0]);
+          let result;
+          try { result = orig.apply(this, arguments); } catch(e) { return undefined; }
+          try { patchIframeNode(arguments[0]); } catch(e) {}
           return result;
         };
       } catch(e) {}
