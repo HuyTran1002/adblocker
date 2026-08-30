@@ -319,13 +319,23 @@ if (window.location.hostname.includes('youtube.com')) {
             const imgMatchesAd = ['quangcao', 'adserver'].some(kw => imgSrc.includes(kw)) ||
                                  imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
 
-            // 2. Layout heuristics (optimized without heavy getComputedStyle reflows)
+            // 2. Layout heuristics
             let isAdPattern = false;
             if (imgWidth > 120 || imgHeight > 50) {
               let isFloating = false;
               if (anchor.parentElement) {
-                const parentPos = anchor.parentElement.style ? anchor.parentElement.style.position : '';
-                isFloating = parentPos === 'fixed' || parentPos === 'absolute';
+                const p = anchor.parentElement;
+                const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
+                const pId = (p.id || '').toLowerCase();
+                const pPos = p.style ? p.style.position : '';
+                if (pPos === 'fixed' || pPos === 'absolute' ||
+                    pClass.includes('float') || pClass.includes('catfish') || pClass.includes('ad') || pClass.includes('popup') || pClass.includes('overlay') ||
+                    pId.includes('float') || pId.includes('catfish') || pId.includes('ad') || pId.includes('popup') || pId.includes('overlay')) {
+                  isFloating = true;
+                } else {
+                  const style = window.getComputedStyle(p);
+                  isFloating = style.position === 'fixed' || style.position === 'absolute';
+                }
               }
               const isHorizontalOrSquare = imgWidth >= imgHeight;
               if (isFloating || isHorizontalOrSquare) {
@@ -340,24 +350,34 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (isAd) {
             let elementToHide = anchor;
-            const parent = anchor.parentElement;
-            if (parent && parent.tagName.toLowerCase() === 'div') {
-              const parentPos = parent.style ? parent.style.position : '';
-              const isFloating = parentPos === 'fixed' || parentPos === 'absolute';
-              if (isFloating && parent.innerText.trim().length < 50) {
-                elementToHide = parent;
+            let curr = anchor.parentElement;
+
+            // Traverse up to find the outermost floating overlay / backdrop container
+            while (curr && curr !== document.body && curr !== document.documentElement) {
+              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
+              const currId = (curr.id || '').toLowerCase();
+              const style = window.getComputedStyle(curr);
+              const isFloating = style.position === 'fixed' || style.position === 'absolute';
+              const isAdWrapper = currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish');
+
+              if ((isFloating || isAdWrapper) && (curr.innerText || '').trim().length < 150) {
+                elementToHide = curr;
+                curr = curr.parentElement;
+              } else {
+                break;
               }
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad:', href);
+              console.log('[Anti Pop-Under] Hide Ad & Outer Overlay Container:', href, elementToHide);
 
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: href,
-                reason: 'Ẩn banner quảng cáo'
+                reason: 'Ẩn banner & khung mờ quảng cáo'
               });
             }
           }
@@ -386,15 +406,35 @@ if (window.location.hostname.includes('youtube.com')) {
                              gamblingRegex.test(srcLower);
 
           if (isAdIframe) {
-            if (!iframe.hasAttribute('data-ad-blocked')) {
-              iframe.setAttribute('data-ad-blocked', 'true');
-              iframe.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Iframe:', src);
+            let elementToHide = iframe;
+            let curr = iframe.parentElement;
+
+            // Traverse up to find outer floating overlay/backdrop wrapper
+            while (curr && curr !== document.body && curr !== document.documentElement) {
+              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
+              const currId = (curr.id || '').toLowerCase();
+              const style = window.getComputedStyle(curr);
+              const isFloating = style.position === 'fixed' || style.position === 'absolute';
+              const isAdWrapper = currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish');
+
+              if ((isFloating || isAdWrapper) && (curr.innerText || '').trim().length < 150) {
+                elementToHide = curr;
+                curr = curr.parentElement;
+              } else {
+                break;
+              }
+            }
+
+            if (!elementToHide.hasAttribute('data-ad-blocked')) {
+              elementToHide.setAttribute('data-ad-blocked', 'true');
+              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              console.log('[Anti Pop-Under] Hide Iframe & Outer Overlay Container:', src, elementToHide);
 
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: src,
-                reason: 'Ẩn khung quảng cáo'
+                reason: 'Ẩn khung quảng cáo & lớp mờ'
               });
             }
           }
@@ -415,9 +455,43 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     }
 
+    // Cleans up orphaned backdrop overlays (darkened backgrounds left behind by blocked ads)
+    function cleanOrphanedBackdrops() {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      try {
+        const overlays = document.querySelectorAll('div, section, dialog');
+        overlays.forEach(el => {
+          if (el.hasAttribute('data-ad-blocked')) return;
+          const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+          const elId = (el.id || '').toLowerCase();
+
+          const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
+                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop');
+
+          if (isOverlayClass || ((elClass.includes('catfish') || elClass.includes('floating')) && (elClass.includes('ad') || elClass.includes('banner')))) {
+            // Check if all child images, links, or iframes inside it are already blocked or empty
+            const visibleImages = el.querySelectorAll('img:not([data-ad-blocked])');
+            const visibleIframes = el.querySelectorAll('iframe:not([data-ad-blocked])');
+            const visibleAnchors = el.querySelectorAll('a:not([data-ad-blocked])');
+
+            if (visibleImages.length === 0 && visibleIframes.length === 0 && visibleAnchors.length === 0) {
+              el.setAttribute('data-ad-blocked', 'true');
+              el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              console.log('[Anti Pop-Under] Hide orphaned backdrop overlay:', el);
+
+              // Restore scroll locks if body/html was locked
+              if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+              if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
+            }
+          }
+        });
+      } catch(e) {}
+    }
+
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
       checkAndHideElement(document.body || document.documentElement);
+      cleanOrphanedBackdrops();
     }
 
     // Set up batched MutationObserver using requestIdleCallback to keep video playback smooth (no frame drops)
