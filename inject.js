@@ -362,7 +362,8 @@
 
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'menu', 'button', 'control', 'vjs-control', 'jw-control', 'plyr__control'];
+      // Explicit seekbar, progress bar, volume, fullscreen, setting buttons only (do not include generic 'control')
+      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'vjs-control-bar', 'jw-controlbar', 'plyr__controls', 'vjs-play-control', 'jw-icon-play'];
       if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
     } catch(e) {}
     return false;
@@ -375,25 +376,27 @@
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag === 'video') {
         video = target;
-      } else if (target.querySelector) {
-        video = target.querySelector('video');
-      }
-      if (!video && target.closest) {
-        const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]');
-        if (container) video = container.querySelector('video');
-      }
-      if (!video && target.parentElement) {
-        let p = target.parentElement;
-        let depth = 0;
-        while (p && p !== document.body && depth < 4) {
-          if (p.querySelector) {
-            const found = p.querySelector('video');
-            if (found) { video = found; break; }
-          }
-          p = p.parentElement;
-          depth++;
+      } else {
+        if (target.querySelector) video = target.querySelector('video');
+        if (!video && target.closest) {
+          const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]');
+          if (container) video = container.querySelector('video');
         }
+        if (!video && target.parentElement) {
+          let p = target.parentElement;
+          let depth = 0;
+          while (p && p !== document.body && depth < 4) {
+            if (p.querySelector) {
+              const found = p.querySelector('video');
+              if (found) { video = found; break; }
+            }
+            p = p.parentElement;
+            depth++;
+          }
+        }
+        if (!video) video = document.querySelector('video');
       }
+
       if (video) {
         if (video.paused) {
           const p = video.play();
@@ -404,6 +407,16 @@
       }
     } catch(e) {}
   }
+
+  // Global capture-phase listener for video play/pause toggling
+  document.addEventListener('click', (e) => {
+    if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
+    const target = e.target;
+    if (!target) return;
+    if (isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
+      toggleVideoPlayPause(target);
+    }
+  }, true);
 
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
@@ -469,9 +482,6 @@
       // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
       // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
       if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
-        if (e.type === 'click' && !isSeekBarOrControlButton(target)) {
-          toggleVideoPlayPause(target);
-        }
         return;
       }
 
