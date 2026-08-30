@@ -995,8 +995,13 @@
       try {
         const orig = Node.prototype[method];
         Node.prototype[method] = function() {
-          const result = orig.apply(this, arguments);
-          patchIframeNode(arguments[0]);
+          let result;
+          try {
+            result = orig.apply(this, arguments);
+          } catch(domErr) {
+            throw domErr; // Re-throw real DOM errors so page scripts handle them normally
+          }
+          try { patchIframeNode(arguments[0]); } catch(e) {}
           return result;
         };
       } catch(e) {}
