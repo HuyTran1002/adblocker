@@ -311,7 +311,7 @@
       if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
       if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
 
-      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"]')) return true;
+      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"]')) return true;
       const style = window.getComputedStyle(el);
       if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
       const ariaAttrs = ['aria-haspopup','aria-pressed','aria-expanded','aria-label','aria-controls'];
@@ -377,24 +377,29 @@
       if (tag === 'video') {
         video = target;
       } else {
+        // Search within clicked element
         if (target.querySelector) video = target.querySelector('video');
+        // Search in nearest player container ancestor
         if (!video && target.closest) {
-          const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]');
+          const container = target.closest(
+            '.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer,' +
+            '[class*="player"], [id*="player"], [class*="video"], [id*="video"],' +
+            '[class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]'
+          );
           if (container) video = container.querySelector('video');
         }
+        // Walk up max 3 levels to find a sibling or nearby video
         if (!video && target.parentElement) {
           let p = target.parentElement;
           let depth = 0;
-          while (p && p !== document.body && depth < 4) {
-            if (p.querySelector) {
-              const found = p.querySelector('video');
-              if (found) { video = found; break; }
-            }
+          while (p && p !== document.body && depth < 3) {
+            const found = p.querySelector('video');
+            if (found) { video = found; break; }
             p = p.parentElement;
             depth++;
           }
         }
-        if (!video) video = document.querySelector('video');
+        // Do NOT fall back to document.querySelector('video') — too dangerous on multi-player pages
       }
 
       if (video) {
@@ -725,29 +730,28 @@
     if (!el) return false;
     try {
       const tagName = el.tagName.toLowerCase();
-      // Check direct player elements
+      // Direct media / embed elements
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
-      // Check common player container classes
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) return true;
-      // Check if it is inside a video container or near a video element
-      if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
-      
-      // Traverse up to find any element matching play button keywords
-      let curr = el;
-      while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-        const id = (curr.id || '').toLowerCase();
-        const className = (curr.className || '').toLowerCase();
-        const text = (curr.innerText || '').toLowerCase();
-        
-        // Match id/class/text names containing play/player/video/film/xem
-        if (id.includes('play') || className.includes('play') || text.includes('play') ||
-            id.includes('player') || className.includes('player') ||
-            id.includes('video') || className.includes('video') ||
-            id.includes('film') || className.includes('film') ||
-            id.includes('xem') || className.includes('xem')) {
-          return true;
-        }
-        curr = curr.parentElement;
+
+      // Named player container classes (all major players)
+      if (el.closest(
+        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer,' +
+        '[class*="player"], [id*="player"],' +
+        '[class*="video"], [id*="video"],' +
+        '[class*="embed"], [id*="embed"],' +
+        '[class*="stream"], [id*="stream"],' +
+        '[class*="halim"], [id*="halim"],' +
+        '[class*="film"], [id*="film"],' +
+        '[class*="xem"], [id*="xem"]'
+      )) return true;
+
+      // Inside any container that holds a <video> element (max 3 levels up)
+      let p = el.parentElement;
+      let depth = 0;
+      while (p && p !== document.body && depth < 3) {
+        if (p.querySelector && p.querySelector('video')) return true;
+        p = p.parentElement;
+        depth++;
       }
     } catch (e) {}
     return false;
