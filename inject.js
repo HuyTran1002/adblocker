@@ -353,6 +353,31 @@
     }
   }
   
+  function toggleVideoPlayPause(target) {
+    if (!target) return;
+    try {
+      let video = null;
+      const tag = target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag === 'video') {
+        video = target;
+      } else if (target.querySelector) {
+        video = target.querySelector('video');
+      }
+      if (!video && target.closest) {
+        const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]');
+        if (container) video = container.querySelector('video');
+      }
+      if (video) {
+        if (video.paused) {
+          const p = video.play();
+          if (p && p.catch) p.catch(() => {});
+        } else {
+          video.pause();
+        }
+      }
+    } catch(e) {}
+  }
+
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
@@ -406,10 +431,21 @@
         try {
           overlay.remove();
         } catch (err) {}
+
+        // Automatically toggle play/pause when user clicks in the middle of video screen after clearing ad overlay
+        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
+          toggleVideoPlayPause(target);
+        }
         return;
       }
 
-      // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
+      // 3. Direct click on video screen -> auto toggle play/pause smoothly
+      if (e.type === 'click' && target.tagName && target.tagName.toLowerCase() === 'video') {
+        toggleVideoPlayPause(target);
+        return;
+      }
+
+      // 4. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
       // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
       // Return instantly in 0.001ms so play/pause & seek actions execute smoothly!
       if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {

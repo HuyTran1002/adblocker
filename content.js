@@ -120,12 +120,16 @@ function injectAdBlockCSS() {
   [class*="progress"], [id*="progress"],
   [class*="slider"], [id*="slider"],
   [class*="timeline"], [id*="timeline"],
+  [class*="elapsed"], [id*="elapsed"],
   .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
-  .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress,
+  .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress, .jw-controlbar,
   .plyr__time, .plyr__progress, .art-time, .dplayer-time {
+    display: flex !important;
     visibility: visible !important;
     pointer-events: auto !important;
     opacity: 1 !important;
+    max-height: none !important;
+    height: auto !important;
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */
