@@ -103,7 +103,8 @@ function injectAdBlockCSS() {
     opacity: 0 !important;
   }
   
-  /* Bảo vệ tuyệt đối trình phát phim, canvas, thanh hiển thị thời gian và thanh điều khiển */
+  /* Bảo vệ hiển thị (visibility/opacity) trình phát phim — KHÔNG ép pointer-events
+     vì nhiều player dùng pointer-events: none trên overlay nội bộ để click xuyên qua video */
   video, canvas,
   .jwplayer, .plyr, .video-js, .vjs-controls, .vjs-control-bar, .flowplayer, .artplayer, .dplayer,
   .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
@@ -121,8 +122,12 @@ function injectAdBlockCSS() {
   [class*="slider"], [id*="slider"],
   [class*="timeline"], [id*="timeline"] {
     visibility: visible !important;
-    pointer-events: auto !important;
     opacity: 1 !important;
+  }
+
+  /* Chỉ ép pointer-events: auto lên thẻ video và iframe trực tiếp */
+  video {
+    pointer-events: auto !important;
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */
