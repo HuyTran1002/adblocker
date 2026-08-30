@@ -422,6 +422,14 @@
       const target = e.target;
       if (!target) return;
 
+      // ── FAST-PATH (MUST BE FIRST) ──────────────────────────────────────────
+      // If the user clicked directly on a player element or any interactive control,
+      // allow the event IMMEDIATELY before any overlay or anchor scanning.
+      // This guarantees that NOTHING can block play/pause, seek, fullscreen, volume etc.
+      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
+        return;
+      }
+
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
       let anchor = null;
@@ -467,21 +475,14 @@
           overlay.remove();
         } catch (err) {}
 
-        // Automatically toggle play/pause when user clicks in the middle of video screen after clearing ad overlay
-        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
+        // After clearing the ad overlay, try to resume play/pause naturally
+        if (e.type === 'click') {
           toggleVideoPlayPause(target);
         }
         return;
       }
 
-      // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
-      // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
-      // Return instantly in 0.001ms so native player play/pause & seek actions execute smoothly without interference!
-      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
-        return;
-      }
-
-      // 4. Check anchor link clicks pointing to popunder/ad URLs
+      // 3. Check anchor link clicks pointing to popunder/ad URLs
       if (e.type === 'click' && anchor && anchor.href) {
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
