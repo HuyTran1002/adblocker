@@ -455,34 +455,93 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     }
 
-    // Cleans up orphaned backdrop overlays (darkened backgrounds left behind by blocked ads)
+    // Helper to detect ad close buttons (e.g. <button aria-label="Đóng">✕</button>)
+    function isAdCloseButton(el) {
+      if (!el) return false;
+      try {
+        const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+        if (aria === 'đóng' || aria === 'close' || aria === 'tắt' || aria.includes('đóng quảng cáo') || aria.includes('close ad')) return true;
+        const text = (el.innerText || el.textContent || '').trim();
+        if (text === '✕' || text === '×' || text === 'X' || text.toLowerCase() === 'close' || text.toLowerCase() === 'đóng') {
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // Cleans up orphaned backdrop overlays (darkened backgrounds left behind by blocked ads and floating close buttons)
     function cleanOrphanedBackdrops() {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       try {
         const overlays = document.querySelectorAll('div, section, dialog');
         overlays.forEach(el => {
           if (el.hasAttribute('data-ad-blocked')) return;
+
+          const style = window.getComputedStyle(el);
+          const isFloating = style.position === 'fixed' || style.position === 'absolute';
+          if (!isFloating) return;
+
           const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
           const elId = (el.id || '').toLowerCase();
 
           const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
-                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop');
+                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish') || elClass.includes('floating');
 
-          if (isOverlayClass || ((elClass.includes('catfish') || elClass.includes('floating')) && (elClass.includes('ad') || elClass.includes('banner')))) {
-            // Check if all child images, links, or iframes inside it are already blocked or empty
-            const visibleImages = el.querySelectorAll('img:not([data-ad-blocked])');
-            const visibleIframes = el.querySelectorAll('iframe:not([data-ad-blocked])');
-            const visibleAnchors = el.querySelectorAll('a:not([data-ad-blocked])');
+          // Never touch genuine site popups (like login, auth, video player, search dialogs)
+          if (el.closest('form, nav, header, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [id*="login"], [id*="auth"]')) return;
 
-            if (visibleImages.length === 0 && visibleIframes.length === 0 && visibleAnchors.length === 0) {
-              el.setAttribute('data-ad-blocked', 'true');
-              el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide orphaned backdrop overlay:', el);
+          const allChildren = el.querySelectorAll('*');
+          let hasGenuineContent = false;
 
-              // Restore scroll locks if body/html was locked
-              if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
-              if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
+          for (let i = 0; i < allChildren.length; i++) {
+            const child = allChildren[i];
+            if (child.hasAttribute('data-ad-blocked')) continue;
+
+            if (isAdCloseButton(child)) continue;
+
+            const childTag = child.tagName.toLowerCase();
+            if (['input', 'select', 'textarea', 'form'].includes(childTag)) {
+              hasGenuineContent = true;
+              break;
             }
+
+            const text = (child.innerText || child.textContent || '').trim();
+            if (text.length > 40) {
+              hasGenuineContent = true;
+              break;
+            }
+
+            if (childTag === 'img' || childTag === 'iframe' || childTag === 'video') {
+              if (!child.hasAttribute('data-ad-blocked')) {
+                hasGenuineContent = true;
+                break;
+              }
+            }
+
+            if (childTag === 'a') {
+              if (!child.hasAttribute('data-ad-blocked')) {
+                const href = child.href || '';
+                if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+                  try {
+                    const host = new URL(href, window.location.href).hostname;
+                    if (host === window.location.hostname && text.length > 0) {
+                      hasGenuineContent = true;
+                      break;
+                    }
+                  } catch(e) {}
+                }
+              }
+            }
+          }
+
+          if (!hasGenuineContent) {
+            el.setAttribute('data-ad-blocked', 'true');
+            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+            console.log('[Anti Pop-Under] Hide orphaned overlay backdrop & close button:', el);
+
+            // Restore scroll locks if body/html was locked
+            if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+            if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
           }
         });
       } catch(e) {}
