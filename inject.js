@@ -353,6 +353,21 @@
     }
   }
   
+  function isSeekBarOrControlButton(el) {
+    if (!el) return false;
+    try {
+      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      if (['button', 'input', 'select', 'a'].includes(tag)) return true;
+      if (el.getAttribute && (el.getAttribute('role') === 'button' || el.getAttribute('role') === 'slider')) return true;
+
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'menu', 'button', 'control', 'vjs-control', 'jw-control', 'plyr__control'];
+      if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
+    } catch(e) {}
+    return false;
+  }
+
   function toggleVideoPlayPause(target) {
     if (!target) return;
     try {
@@ -364,8 +379,20 @@
         video = target.querySelector('video');
       }
       if (!video && target.closest) {
-        const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]');
+        const container = target.closest('.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]');
         if (container) video = container.querySelector('video');
+      }
+      if (!video && target.parentElement) {
+        let p = target.parentElement;
+        let depth = 0;
+        while (p && p !== document.body && depth < 4) {
+          if (p.querySelector) {
+            const found = p.querySelector('video');
+            if (found) { video = found; break; }
+          }
+          p = p.parentElement;
+          depth++;
+        }
       }
       if (video) {
         if (video.paused) {
@@ -433,7 +460,7 @@
         } catch (err) {}
 
         // Automatically toggle play/pause when user clicks in the middle of video screen after clearing ad overlay
-        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
+        if (e.type === 'click' && isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
           toggleVideoPlayPause(target);
         }
         return;
@@ -441,8 +468,10 @@
 
       // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
       // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
-      // Return instantly in 0.001ms so native player play/pause & seek actions execute smoothly!
       if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
+        if (e.type === 'click' && !isSeekBarOrControlButton(target)) {
+          toggleVideoPlayPause(target);
+        }
         return;
       }
 
