@@ -103,13 +103,26 @@ function injectAdBlockCSS() {
     opacity: 0 !important;
   }
   
-  /* Bảo vệ tuyệt đối trình phát phim, canvas và thanh điều khiển (control bar, seekbar, volume, play/pause) */
+  /* Bảo vệ tuyệt đối trình phát phim, canvas, thanh hiển thị thời gian và thanh điều khiển */
   video, canvas,
   .jwplayer, .plyr, .video-js, .vjs-controls, .flowplayer, .artplayer, .dplayer,
   [class*="player-"], [id*="player-"], [class*="player_"], [id*="player_"],
   [class*="video-"], [id*="video-"], [class*="controls"], [id*="controls"],
   [class*="control-bar"], [id*="control-bar"], [class*="seekbar"], [id*="seekbar"] {
-    display: block !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+
+  /* Bảo vệ hiển thị thời gian (00:00 / 45:00), slider, timeline, progress bar mà không phá vỡ flex layout */
+  [class*="time"], [id*="time"],
+  [class*="duration"], [id*="duration"],
+  [class*="progress"], [id*="progress"],
+  [class*="slider"], [id*="slider"],
+  [class*="timeline"], [id*="timeline"],
+  .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
+  .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress,
+  .plyr__time, .plyr__progress, .art-time, .dplayer-time {
     visibility: visible !important;
     pointer-events: auto !important;
     opacity: 1 !important;
@@ -272,7 +285,7 @@ if (window.location.hostname.includes('youtube.com')) {
     const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
     const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
 
-    // Helper to check if element is a video player or video control bar
+    // Helper to check if element is a video player, video control bar, or time/progress display
     function isVideoPlayerOrControls(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
@@ -282,9 +295,20 @@ if (window.location.hostname.includes('youtube.com')) {
 
         const elId = (el.id || '').toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-        if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elId.includes('jwplayer') || elId.includes('plyr') || elId.includes('artplayer') || elId.includes('dplayer') || elId.includes('vjs') ||
-            elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('jwplayer') || elClass.includes('plyr') || elClass.includes('artplayer') || elClass.includes('dplayer') || elClass.includes('vjs')) {
-          return true;
+        
+        const keywords = [
+          'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs',
+          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed'
+        ];
+
+        if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
+          // If it is inside or near a player container
+          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]')) {
+            return true;
+          }
+          if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('time') || elClass.includes('progress') || elClass.includes('duration')) {
+            return true;
+          }
         }
       } catch(e) {}
       return false;

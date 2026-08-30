@@ -308,7 +308,7 @@
     try {
       const tagName = el.tagName.toLowerCase();
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, [class*="player-"], [id*="player-"], [class*="video-"], [id*="video-"]')) return true;
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
       if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
 
       if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"]')) return true;
