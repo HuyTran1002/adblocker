@@ -13,7 +13,25 @@
         "googleadservices.com",
         "googlesyndication.com",
         "animevietsub.by"
-      ],
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
+      ]
+    }
+  }
+],
       "resourceTypes": [
         "main_frame",
         "sub_frame",
@@ -24,7 +42,25 @@
         "other",
         "ping",
         "websocket"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -42,7 +78,25 @@
         "image",
         "media",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -59,7 +113,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -77,7 +149,25 @@
         "image",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -95,7 +185,25 @@
         "image",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -113,7 +221,25 @@
         "image",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -131,7 +257,25 @@
         "image",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -148,7 +292,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -165,7 +327,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -182,7 +362,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -199,7 +397,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -215,7 +431,25 @@
         "sub_frame",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -232,7 +466,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -249,7 +501,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -266,7 +536,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -283,7 +571,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -298,7 +604,25 @@
         "script",
         "xmlhttprequest",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -315,7 +639,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -332,7 +674,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -349,7 +709,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -366,7 +744,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -381,7 +777,25 @@
         "script",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -396,7 +810,25 @@
         "script",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -411,7 +843,25 @@
         "script",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -428,7 +878,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -445,7 +913,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -462,7 +948,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -479,7 +983,25 @@
         "xmlhttprequest",
         "image",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -499,7 +1021,25 @@
         "other",
         "ping",
         "websocket"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -516,7 +1056,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -533,7 +1091,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -550,7 +1126,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -567,7 +1161,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -584,7 +1196,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -601,7 +1231,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -618,7 +1266,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -635,7 +1301,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -652,7 +1336,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -669,7 +1371,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -686,7 +1406,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -703,7 +1441,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -720,7 +1476,25 @@
         "xmlhttprequest",
         "main_frame",
         "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
       ]
+    }
+  }
+]
     }
   },
   {
@@ -731,6 +1505,42 @@
     },
     "condition": {
       "urlFilter": "*astrology*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
+      ,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "main_frame",
+        "other"
+      ]
+    }
+  }
+]
+    }
+  }
+,
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*phimhdc.com/hdc.html*",
       "resourceTypes": [
         "script",
         "sub_frame",

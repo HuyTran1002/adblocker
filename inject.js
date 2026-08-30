@@ -893,7 +893,20 @@
 
     const targetLower = String(target || '').toLowerCase();
     if (['_self', '_top', '_parent'].includes(targetLower)) {
-      if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
+      if (gamblingRegex.test(url) || adUrlRegex.test(url)) {
+        return createDummyWindow();
+      }
+      try {
+        const targetHost = new URL(url, window.location.href).hostname.toLowerCase();
+        const currentHost = window.location.hostname.toLowerCase();
+        const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
+        if (isExt && !isWhitelisted(url)) {
+          // Pass it to checkNavigationOrPopup to block external _self redirects
+        } else {
+          // Allow same-domain or whitelisted _self redirects immediately to not break site features
+          return originalOpen.apply(this, arguments);
+        }
+      } catch (e) {
         return originalOpen.apply(this, arguments);
       }
     }

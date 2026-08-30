@@ -791,3 +791,105 @@ if (window.location.hostname.includes('youtube.com')) {
       if (window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
     });
+
+
+    // --- GLOBAL CLICK INTERCEPTOR (ANTI-CLICKJACKING) ---
+    document.addEventListener('click', function(e) {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      try {
+        let target = e.target;
+        if (!target || target.nodeType !== 1) return;
+
+        // 1. Detect if click is inside an anchor (<a>)
+        let anchor = null;
+        let curr = target;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          if (curr.tagName === 'A') {
+            anchor = curr;
+            break;
+          }
+          curr = curr.parentElement;
+        }
+
+        if (anchor) {
+          const href = anchor.href || '';
+          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
+          
+          try {
+            const targetUrl = new URL(href, window.location.href);
+            const currentHost = window.location.hostname.replace(/^www\./i, '');
+            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
+            
+            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
+            
+            if (isExternal) {
+              const style = window.getComputedStyle(anchor);
+              const rect = anchor.getBoundingClientRect();
+              
+              // Check if it's a huge overlay (covers > 40% of screen)
+              const isHuge = rect.width > window.innerWidth * 0.4 || rect.height > window.innerHeight * 0.4;
+              const opacity = parseFloat(style.opacity);
+              const isTransparent = opacity < 0.1 || style.visibility === 'hidden' || style.display === 'none';
+              
+              // Block HUGE external links (rarely legitimate)
+              if (isHuge || isTransparent) {
+                e.preventDefault();
+                e.stopPropagation();
+                anchor.remove();
+                console.log('[Anti Pop-Under] Intercepted and destroyed huge clickjacking anchor:', anchor);
+                return;
+              }
+              
+              // Block EMPTY external links (often used to clickjack small buttons)
+              const text = (anchor.innerText || anchor.textContent || '').trim();
+              const mediaCount = anchor.querySelectorAll('img, svg, canvas, video').length;
+              if (text.length === 0 && mediaCount === 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                anchor.remove();
+                console.log('[Anti Pop-Under] Intercepted and destroyed empty clickjacking anchor:', anchor);
+                return;
+              }
+            }
+          } catch (err) {}
+        } else {
+          // 2. Detect if click is on a huge invisible DIV/SECTION overlay
+          const style = window.getComputedStyle(target);
+          const isFloating = style.position === 'absolute' || style.position === 'fixed';
+          
+          if (isFloating) {
+            const rect = target.getBoundingClientRect();
+            const isHuge = rect.width > window.innerWidth * 0.4 || rect.height > window.innerHeight * 0.4;
+            
+            if (isHuge) {
+              const opacity = parseFloat(style.opacity);
+              const bgColor = style.backgroundColor;
+              const isTransparent = opacity < 0.1 || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent';
+              
+              const text = (target.innerText || target.textContent || '').trim();
+              
+              if (isTransparent && text.length < 50) {
+                // Before destroying, ensure it's NOT a legitimate video player overlay (e.g. play/pause click zone)
+                let c = target;
+                let inPlayer = false;
+                while (c && c !== document.body && c !== document.documentElement) {
+                  if (isVideoPlayerOrControls(c)) {
+                    inPlayer = true;
+                    break;
+                  }
+                  c = c.parentElement;
+                }
+                
+                if (!inPlayer) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  target.remove();
+                  console.log('[Anti Pop-Under] Intercepted and destroyed huge invisible clickjacking div:', target);
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {}
+    }, true); // Use capture phase to intercept before page scripts
+
