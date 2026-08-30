@@ -105,31 +105,24 @@ function injectAdBlockCSS() {
   
   /* Bảo vệ tuyệt đối trình phát phim, canvas, thanh hiển thị thời gian và thanh điều khiển */
   video, canvas,
-  .jwplayer, .plyr, .video-js, .vjs-controls, .flowplayer, .artplayer, .dplayer,
-  [class*="player-"], [id*="player-"], [class*="player_"], [id*="player_"],
-  [class*="video-"], [id*="video-"], [class*="controls"], [id*="controls"],
-  [class*="control-bar"], [id*="control-bar"], [class*="seekbar"], [id*="seekbar"] {
-    visibility: visible !important;
-    pointer-events: auto !important;
-    opacity: 1 !important;
-  }
-
-  /* Bảo vệ hiển thị thời gian (00:00 / 45:00), slider, timeline, progress bar mà không phá vỡ flex layout */
+  .jwplayer, .plyr, .video-js, .vjs-controls, .vjs-control-bar, .flowplayer, .artplayer, .dplayer,
+  .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
+  .jw-controlbar, .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress, .jw-time-tip,
+  .plyr__time, .plyr__progress, .plyr__controls,
+  .art-time, .art-control-time, .art-controls,
+  .dplayer-time, .dplayer-controller,
+  [class*="player"], [id*="player"],
+  [class*="video"], [id*="video"],
+  [class*="control"], [id*="control"],
+  [class*="seekbar"], [id*="seekbar"],
   [class*="time"], [id*="time"],
   [class*="duration"], [id*="duration"],
   [class*="progress"], [id*="progress"],
   [class*="slider"], [id*="slider"],
-  [class*="timeline"], [id*="timeline"],
-  [class*="elapsed"], [id*="elapsed"],
-  .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
-  .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress, .jw-controlbar,
-  .plyr__time, .plyr__progress, .art-time, .dplayer-time {
-    display: flex !important;
+  [class*="timeline"], [id*="timeline"] {
     visibility: visible !important;
     pointer-events: auto !important;
     opacity: 1 !important;
-    max-height: none !important;
-    height: auto !important;
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */

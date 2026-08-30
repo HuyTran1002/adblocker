@@ -439,15 +439,9 @@
         return;
       }
 
-      // 3. Direct click on video screen -> auto toggle play/pause smoothly
-      if (e.type === 'click' && target.tagName && target.tagName.toLowerCase() === 'video') {
-        toggleVideoPlayPause(target);
-        return;
-      }
-
-      // 4. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
+      // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
       // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
-      // Return instantly in 0.001ms so play/pause & seek actions execute smoothly!
+      // Return instantly in 0.001ms so native player play/pause & seek actions execute smoothly!
       if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
         return;
       }
