@@ -1,20 +1,7 @@
 // Developed by HuyTran1002
 // @ts-nocheck
-console.log('[Anti Pop-Under] Content Script loaded successfully! (Developed by HuyTran1002)');
+console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
 
-// Inject inject.js into the main world dynamically (compatible with Firefox Android & Chrome)
-(function injectMainScript() {
-  try {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject.js');
-    script.onload = function() {
-      this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-  } catch (e) {
-    console.error('[Anti Pop-Under] Failed to inject main script:', e);
-  }
-})();
 
 // Check whether this extension context is still alive
 function isContextValid() {
