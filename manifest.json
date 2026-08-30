@@ -7,7 +7,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "anti-popunder@huytran1002",
-      "strict_min_version": "109.0"
+      "strict_min_version": "113.0"
     }
   },
   "permissions": [
@@ -16,6 +16,7 @@
     "activeTab"
   ],
   "background": {
+    "scripts": ["background.js"],
     "service_worker": "background.js"
   },
   "content_scripts": [
