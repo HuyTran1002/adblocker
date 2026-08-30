@@ -16,22 +16,20 @@
     "activeTab"
   ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["inject.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "world": "MAIN"
-    },
-    {
-      "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_start",
-      "all_frames": true,
-      "world": "ISOLATED"
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "declarative_net_request": {
