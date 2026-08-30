@@ -251,7 +251,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
       'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
       'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
-      'googleadservices', 'ad-delivery', 'adservice'
+      'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
+      '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link'
     ];
 
     // Compile regexes once for high-performance scanning

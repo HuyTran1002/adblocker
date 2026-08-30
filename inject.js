@@ -632,7 +632,8 @@
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
-    'googleadservices', 'ad-delivery', 'adservice'
+    'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
+    '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -702,19 +703,17 @@
       }
     }
 
-    // 1. If it explicitly matches ad or gambling keywords, block it 100%
-    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url))) {
-      reportBlocked(url, `Blocked ad/gambling URL in ${context}`);
+    // 1. If it explicitly matches ad/gambling keywords or popunder params, block it 100%
+    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url) || (url.includes('ab=') && url.includes('rl=')))) {
+      reportBlocked(url, `Blocked ad/popunder URL in ${context}`);
       return false;
     }
 
     // 2. Location changes (window.location / replace / assign)
     if (isLocationChange) {
       if (isExternal && !isWhitelisted(url)) {
-        if (!isClickedLink(url)) {
-          reportBlocked(url, `Blocked unrequested external location redirect (${context})`);
-          return false;
-        }
+        reportBlocked(url, `Blocked unrequested external location redirect (${context})`);
+        return false;
       }
       return true;
     }
