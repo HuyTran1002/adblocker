@@ -323,8 +323,8 @@ if (window.location.hostname.includes('youtube.com')) {
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         
         const keywords = [
-          'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs',
-          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed'
+          'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'media', 'vp-', 'ytp-',
+          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track', 'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen'
         ];
 
         if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
@@ -397,11 +397,13 @@ if (window.location.hostname.includes('youtube.com')) {
             isAd = true;
           } else if (hasImage) {
             const imgSrc = (img.src || '').toLowerCase();
-            // Explicit ad image keywords only (never rely on width/height ratios)
-            const imgMatchesAd = ['quangcao', 'adserver'].some(kw => imgSrc.includes(kw)) ||
-                                 imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
-            if (imgMatchesAd) {
-              isAd = true;
+            if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
+              // Explicit ad image keywords only (never rely on width/height ratios)
+              const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => imgSrc.includes(kw)) ||
+                                   imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
+              if (imgMatchesAd) {
+                isAd = true;
+              }
             }
           }
 
@@ -423,7 +425,7 @@ if (window.location.hostname.includes('youtube.com')) {
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAdWrapper = isFloating ||
-                                  currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
@@ -491,7 +493,7 @@ if (window.location.hostname.includes('youtube.com')) {
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAdWrapper = isFloating ||
-                                  currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
@@ -515,17 +517,82 @@ if (window.location.hostname.includes('youtube.com')) {
         } catch(e) {}
       };
 
+      // Helper to verify and hide an img tag (safely ignores base64/blob)
+      const checkImg = (img) => {
+        if (img.hasAttribute('data-ad-blocked')) return;
+        try {
+          const src = (img.src || '').toLowerCase();
+          if (src.startsWith('data:') || src.startsWith('blob:')) return; // CRITICAL: Protect UI icons
+          
+          const alt = (img.getAttribute('alt') || '').toLowerCase();
+          
+          const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
+                               src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
+                               alt.includes('quảng cáo') || alt.includes('sponsor');
+                               
+          if (imgMatchesAd) {
+            let elementToHide = img;
+            let curr = img.parentElement;
+            let depth = 0;
+            
+            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
+              depth++;
+              if (isVideoPlayerOrControls(curr)) break;
+
+              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
+              const currId = (curr.id || '').toLowerCase();
+              const style = window.getComputedStyle(curr);
+              const isFloating = style.position === 'fixed' || style.position === 'absolute';
+              
+              const isAdWrapper = isFloating ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+
+              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+                elementToHide = curr;
+              }
+              curr = curr.parentElement;
+            }
+
+            if (!elementToHide.hasAttribute('data-ad-blocked')) {
+              elementToHide.setAttribute('data-ad-blocked', 'true');
+              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              console.log('[Anti Pop-Under] Hide Ad Image & Wrapper:', src, elementToHide);
+            }
+          }
+        } catch (e) {}
+      };
+
+      // Helper to hide explicit ad elements by aria-label
+      const hideExplicitAd = (el) => {
+        if (!el || el.hasAttribute('data-ad-blocked')) return;
+        try {
+          if (isVideoPlayerOrControls(el)) return;
+          const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+          const title = (el.getAttribute('title') || '').toLowerCase();
+          if (ariaLabel === 'quảng cáo' || ariaLabel.includes('quảng cáo ') || ariaLabel.includes('sponsor') || title === 'quảng cáo' || title.includes('quảng cáo ') || title.includes('sponsor')) {
+            el.setAttribute('data-ad-blocked', 'true');
+            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+          }
+        } catch(e) {}
+      };
+
       // Verify element itself
       if (tagName === 'a') {
         checkAnchor(el);
       } else if (tagName === 'iframe') {
         checkIframe(el);
+      } else if (tagName === 'img') {
+        checkImg(el);
       }
+      hideExplicitAd(el);
 
       // Verify children only if element has child elements
       if (el.childElementCount > 0) {
         el.querySelectorAll('a').forEach(checkAnchor);
         el.querySelectorAll('iframe').forEach(checkIframe);
+        el.querySelectorAll('img').forEach(checkImg);
+        el.querySelectorAll('[aria-label*="uảng cáo" i], [aria-label*="ponsor" i], [title*="uảng cáo" i], [title*="ponsor" i]').forEach(hideExplicitAd);
       }
     }
 
@@ -562,7 +629,9 @@ if (window.location.hostname.includes('youtube.com')) {
           const elId = (el.id || '').toLowerCase();
 
           const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
-                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish') || elClass.includes('floating');
+                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish');
+
+          if (!isOverlayClass) return;
 
           // Never touch genuine site popups (like login, auth, video player, search dialogs)
           if (el.closest('form, nav, header, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [id*="login"], [id*="auth"]')) return;
@@ -695,8 +764,20 @@ if (window.location.hostname.includes('youtube.com')) {
       scanAndRemoveAds();
       setInterval(() => {
         if (window.location.hostname.includes('youtube.com')) return;
+        let isPlaying = false;
         const video = document.querySelector('video');
-        if (video && !video.paused) return; // Pause background scan during active movie playback
+        if (video && !video.paused) isPlaying = true;
+        
+        const iframes = document.querySelectorAll('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+          const src = (iframes[i].src || '').toLowerCase();
+          if (src.includes('player') || src.includes('video') || src.includes('embed') || src.includes('watch') || src.includes('play') || src.includes('stream') || src.includes('hls') || src.includes('m3u8') || src.includes('movie') || src.includes('film') || src.includes('vids')) {
+            isPlaying = true;
+            break;
+          }
+        }
+        
+        if (isPlaying) return; // Pause background scan during active movie playback
         scanAndRemoveAds();
       }, 5000);
     });
