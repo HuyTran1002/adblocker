@@ -644,6 +644,11 @@ if (window.location.hostname.includes('youtube.com')) {
     }
 
     function queueNodeCheck(node) {
+      if (!node || node.nodeType !== 1) return;
+
+      // INSTANT SHORT-CIRCUIT: Skip player controls, seekbars, time text, and video elements completely!
+      if (isVideoPlayerOrControls(node)) return;
+
       pendingNodes.add(node);
       if (!batchScheduled) {
         batchScheduled = true;

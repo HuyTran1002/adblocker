@@ -362,6 +362,13 @@
       const target = e.target;
       if (!target) return;
 
+      // ULTRA FAST-PATH FOR VIDEO CONTROLS & SEEKBARS:
+      // If user touches/clicks/drags on video player, canvas, seekbar, slider, time display or controls:
+      // Return instantly in 0.001ms without running parent loops or getComputedStyle layout reflows!
+      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
+        return;
+      }
+
       // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
       let anchor = null;
