@@ -352,22 +352,23 @@ if (window.location.hostname.includes('youtube.com')) {
           if (isAd) {
             let elementToHide = anchor;
             let curr = anchor.parentElement;
+            let depth = 0;
 
-            // Traverse up to find the outermost floating overlay / backdrop container
-            while (curr && curr !== document.body && curr !== document.documentElement) {
+            // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
+            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
+              depth++;
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAdWrapper = currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish');
+              const isAdWrapper = isFloating ||
+                                  currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
-              if ((isFloating || isAdWrapper) && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
-                curr = curr.parentElement;
-              } else {
-                break;
               }
+              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
@@ -409,22 +410,23 @@ if (window.location.hostname.includes('youtube.com')) {
           if (isAdIframe) {
             let elementToHide = iframe;
             let curr = iframe.parentElement;
+            let depth = 0;
 
-            // Traverse up to find outer floating overlay/backdrop wrapper
-            while (curr && curr !== document.body && curr !== document.documentElement) {
+            // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
+            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
+              depth++;
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAdWrapper = currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish');
+              const isAdWrapper = isFloating ||
+                                  currClass.includes('ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
-              if ((isFloating || isAdWrapper) && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
-                curr = curr.parentElement;
-              } else {
-                break;
               }
+              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
