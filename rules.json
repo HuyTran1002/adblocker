@@ -415,22 +415,6 @@
     }
   },
   {
-    "id": 24,
-    "priority": 1,
-    "action": {
-      "type": "block"
-    },
-    "condition": {
-      "urlFilter": "*/ads/*",
-      "resourceTypes": [
-        "script",
-        "sub_frame",
-        "image",
-        "other"
-      ]
-    }
-  },
-  {
     "id": 25,
     "priority": 1,
     "action": {

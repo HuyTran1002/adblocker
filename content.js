@@ -36,21 +36,23 @@ const whitelistedDomains = [
   'auth0.com', 'firebaseapp.com', 'okta.com'
 ];
 
+let customWhitelistedDomains = [];
+
 function isCurrentPageWhitelisted() {
   try {
     const host = window.location.hostname.toLowerCase();
     const isHardcoded = whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain));
-    return isHardcoded || !currentEnabledState;
+    const isCustom = (customWhitelistedDomains || []).some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
+    return isHardcoded || isCustom || !currentEnabledState;
   } catch (e) {
     return false;
   }
 }
 
 const adSelectors = [
-  // General ad classes and IDs
-  '.adsbox', '.ad-container', '.ad-banner', '.ad-wrapper',
-  '.ads-wrapper', '.ad_box', '.ad_container', '.sponsored-post',
-  '.ad-slot', '.ads-slot', '.ad-holder', '.ads-holder', '.adBox', '.ad-box',
+  // General explicit ad classes and IDs
+  '.adsbox', '.ad-banner', '.sponsored-post', '.sponsored-ad',
+  '.ad-slot', '.ads-slot', '.ad-holder', '.ads-holder',
   
   // Specific iframe ad networks
   'iframe[src*="adserver"]', 'iframe[src*="doubleclick"]', 'iframe[src*="adsterra"]',
@@ -58,10 +60,8 @@ const adSelectors = [
   'iframe[src*="onclick"]', 'iframe[src*="greatcpmgate"]', 'iframe[src*="highcpmgate"]',
   
   // Specific ad container matchers
-  'div[class*="ad-container"]', 'div[class*="ad_box"]', 'div[class*="banner-ad"]',
-  'div[class*="sponsored-post"]', 'div[class*="sponsored-ad"]',
-  'div[class*="ad-box"]', 'div[class*="ads-box"]', 'div[class*="ad-placement"]',
-  'div[class*="ad-wrapper"]', 'div[class*="ads-wrapper"]',
+  'div[class*="banner-ad"]', 'div[class*="sponsored-post"]', 'div[class*="sponsored-ad"]',
+  'div[class*="ad-placement"]', 'div[class*="ad-slot"]', 'div[class*="ads-slot"]',
   
   // Vietnamese specific ad classes (quangcao)
   '.quangcao', '.quang-cao',
@@ -69,12 +69,12 @@ const adSelectors = [
   'div[id*="quang-cao"]',
   
   // Floating, catfish, and sticky ads
-  '.catfish', '[class*="catfish"]', '[id*="catfish"]',
+  '.catfish-ad', '[class*="catfish-ad"]', '[id*="catfish-ad"]',
   '.floating-ad', '[class*="floating-ad"]', '[id*="floating-ad"]',
   '.float-banner', '[class*="float-banner"]', '[id*="float-banner"]',
   '.sticky-ad', '[class*="sticky-ad"]', '[id*="sticky-ad"]',
-  '#floating_left', '#floating_right', '.floating-left', '.floating-right',
-  '#floating-left', '#floating-right', '#box-ad', '#ad_center',
+  '#floating_left', '#floating_right', '.floating-left-ad', '.floating-right-ad',
+  '#floating-left-ad', '#floating-right-ad', '#box-ad-banner', '#ad_center_banner',
   
   // Specific betting and gambling ad classes/IDs
   '[class*="w88"]', '[class*="fun88"]', '[class*="fb88"]', '[class*="m88"]',
@@ -173,10 +173,24 @@ function injectYouTubeAdBlockCSS() {
 
 let currentEnabledState = true;
 
+function restoreBlockedElements() {
+  try {
+    const blockedElements = document.querySelectorAll('[data-ad-blocked="true"]');
+    blockedElements.forEach(el => {
+      el.removeAttribute('data-ad-blocked');
+      el.style.display = '';
+      el.style.visibility = '';
+      el.style.pointerEvents = '';
+      el.style.opacity = '';
+    });
+  } catch(e) {}
+}
+
 // Set attribute on <html> element so inject.js can read it and handle CSS injection
 function updateEnabledState(enabled, disabledDomains) {
   const host = window.location.hostname.toLowerCase();
-  const isWhitelisted = (disabledDomains || []).some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
+  customWhitelistedDomains = disabledDomains || [];
+  const isWhitelisted = customWhitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
   const newState = (enabled !== false) && !isWhitelisted;
   
   currentEnabledState = newState;
@@ -201,6 +215,7 @@ function updateEnabledState(enabled, disabledDomains) {
   } else {
     if (styleTag) styleTag.remove();
     if (ytStyleTag) ytStyleTag.remove();
+    restoreBlockedElements();
   }
 }
 
