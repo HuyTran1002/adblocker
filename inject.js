@@ -536,11 +536,16 @@
         return false;
       }
 
+      // Protect video players, canvases, and player control bars from clickjack overlay detection
+      if (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(el)) {
+        return false;
+      }
+
       // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') ||
-          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) {
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') ||
+          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
         return false;
       }
 

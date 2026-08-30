@@ -101,6 +101,18 @@ function injectAdBlockCSS() {
     visibility: hidden !important;
     pointer-events: none !important;
     opacity: 0 !important;
+  }
+  
+  /* Bảo vệ tuyệt đối trình phát phim, canvas và thanh điều khiển (control bar, seekbar, volume, play/pause) */
+  video, canvas,
+  .jwplayer, .plyr, .video-js, .vjs-controls, .flowplayer, .artplayer, .dplayer,
+  [class*="player-"], [id*="player-"], [class*="player_"], [id*="player_"],
+  [class*="video-"], [id*="video-"], [class*="controls"], [id*="controls"],
+  [class*="control-bar"], [id*="control-bar"], [class*="seekbar"], [id*="seekbar"] {
+    display: block !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
   }`;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -260,6 +272,24 @@ if (window.location.hostname.includes('youtube.com')) {
     const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
     const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
 
+    // Helper to check if element is a video player or video control bar
+    function isVideoPlayerOrControls(el) {
+      if (!el || el === document || el === document.body || el === document.documentElement) return false;
+      try {
+        const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        if (['video', 'audio', 'canvas', 'source', 'track'].includes(tag)) return true;
+        if (el.querySelector && el.querySelector('video, audio, canvas')) return true;
+
+        const elId = (el.id || '').toLowerCase();
+        const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elId.includes('jwplayer') || elId.includes('plyr') || elId.includes('artplayer') || elId.includes('dplayer') || elId.includes('vjs') ||
+            elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('jwplayer') || elClass.includes('plyr') || elClass.includes('artplayer') || elClass.includes('dplayer') || elClass.includes('vjs')) {
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
@@ -271,6 +301,9 @@ if (window.location.hostname.includes('youtube.com')) {
       if (!isEnabled) return;
 
       if (isCurrentPageWhitelisted()) return;
+
+      // NEVER hide video players or player control bars
+      if (isVideoPlayerOrControls(el)) return;
 
       const currentDomain = window.location.hostname;
       const tagName = tag.toLowerCase();
@@ -358,6 +391,11 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
+              // STOP parent traversal immediately if we reach a video player or control bar!
+              if (isVideoPlayerOrControls(curr)) {
+                break;
+              }
+
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
@@ -416,6 +454,11 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
+              // STOP parent traversal immediately if we reach a video player or control bar!
+              if (isVideoPlayerOrControls(curr)) {
+                break;
+              }
+
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
@@ -480,6 +523,9 @@ if (window.location.hostname.includes('youtube.com')) {
         const overlays = document.querySelectorAll('div, section, dialog');
         overlays.forEach(el => {
           if (el.hasAttribute('data-ad-blocked')) return;
+
+          // NEVER touch video players or control bars
+          if (isVideoPlayerOrControls(el)) return;
 
           const style = window.getComputedStyle(el);
           const isFloating = style.position === 'fixed' || style.position === 'absolute';
