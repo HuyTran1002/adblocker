@@ -1,4 +1,5 @@
 .history/
+.history/
 *.zip
 .DS_Store
 Thumbs.db
@@ -6,3 +7,4 @@ Thumbs.db
 _metadata/
 release/
 *.zip
+*.xpi

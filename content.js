@@ -262,13 +262,16 @@ if (window.location.hostname.includes('youtube.com')) {
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
 
+      const tag = el.tagName;
+      if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'PATH') return;
+
       const isEnabled = currentEnabledState;
       if (!isEnabled) return;
 
       if (isCurrentPageWhitelisted()) return;
 
       const currentDomain = window.location.hostname;
-      const tagName = el.tagName.toLowerCase();
+      const tagName = tag.toLowerCase();
 
       // Protect interactive functional elements and episode/server buttons from being hidden
       if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return;
@@ -299,7 +302,7 @@ if (window.location.hostname.includes('youtube.com')) {
           const hrefLower = href.toLowerCase();
           const matchesGambling = gamblingRegex.test(hrefLower) ||
                                   (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99')));
-      
+
           const matchesAdServer = adUrlRegex.test(hrefLower);
           const img = anchor.querySelector('img');
           const hasImage = !!img;
@@ -311,24 +314,20 @@ if (window.location.hostname.includes('youtube.com')) {
             const imgWidth = img.naturalWidth || img.width || 0;
             const imgHeight = img.naturalHeight || img.height || 0;
             const imgSrc = (img.src || '').toLowerCase();
-            
-            // 1. Explicit ad keywords/types (excluding generic extensions like .gif)
+
+            // 1. Explicit ad keywords/types
             const imgMatchesAd = ['quangcao', 'adserver'].some(kw => imgSrc.includes(kw)) ||
                                  imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
-        
-            // 2. Layout heuristics:
-            // - Floating banner ads (fixed or absolute position)
-            // - Horizontal/Square banner ads (width >= height) that are larger than standard size
+
+            // 2. Layout heuristics (optimized without heavy getComputedStyle reflows)
             let isAdPattern = false;
             if (imgWidth > 120 || imgHeight > 50) {
               let isFloating = false;
               if (anchor.parentElement) {
-                const parentStyle = window.getComputedStyle(anchor.parentElement);
-                isFloating = parentStyle.position === 'fixed' || parentStyle.position === 'absolute';
+                const parentPos = anchor.parentElement.style ? anchor.parentElement.style.position : '';
+                isFloating = parentPos === 'fixed' || parentPos === 'absolute';
               }
-              
               const isHorizontalOrSquare = imgWidth >= imgHeight;
-              
               if (isFloating || isHorizontalOrSquare) {
                 isAdPattern = true;
               }
@@ -343,8 +342,8 @@ if (window.location.hostname.includes('youtube.com')) {
             let elementToHide = anchor;
             const parent = anchor.parentElement;
             if (parent && parent.tagName.toLowerCase() === 'div') {
-              const parentStyle = window.getComputedStyle(parent);
-              const isFloating = parentStyle.position === 'fixed' || parentStyle.position === 'absolute';
+              const parentPos = parent.style ? parent.style.position : '';
+              const isFloating = parentPos === 'fixed' || parentPos === 'absolute';
               if (isFloating && parent.innerText.trim().length < 50) {
                 elementToHide = parent;
               }
@@ -354,7 +353,7 @@ if (window.location.hostname.includes('youtube.com')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
               console.log('[Anti Pop-Under] Hide Ad:', href);
-          
+
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: href,
@@ -383,7 +382,7 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!isExternal) return;
 
           const srcLower = src.toLowerCase();
-          const isAdIframe = adUrlRegex.test(srcLower) || 
+          const isAdIframe = adUrlRegex.test(srcLower) ||
                              gamblingRegex.test(srcLower);
 
           if (isAdIframe) {
@@ -391,7 +390,7 @@ if (window.location.hostname.includes('youtube.com')) {
               iframe.setAttribute('data-ad-blocked', 'true');
               iframe.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
               console.log('[Anti Pop-Under] Hide Iframe:', src);
-          
+
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: src,
@@ -409,9 +408,11 @@ if (window.location.hostname.includes('youtube.com')) {
         checkIframe(el);
       }
 
-      // Verify children
-      el.querySelectorAll('a').forEach(checkAnchor);
-      el.querySelectorAll('iframe').forEach(checkIframe);
+      // Verify children only if element has child elements
+      if (el.childElementCount > 0) {
+        el.querySelectorAll('a').forEach(checkAnchor);
+        el.querySelectorAll('iframe').forEach(checkIframe);
+      }
     }
 
     // Scans and removes all ads currently in the document
@@ -419,7 +420,34 @@ if (window.location.hostname.includes('youtube.com')) {
       checkAndHideElement(document.body || document.documentElement);
     }
 
-    // Set up MutationObserver to intercept elements as they are created and inserted into the DOM
+    // Set up batched MutationObserver using requestIdleCallback to keep video playback smooth (no frame drops)
+    const pendingNodes = new Set();
+    let batchScheduled = false;
+
+    function processPendingNodes() {
+      batchScheduled = false;
+      if (pendingNodes.size === 0) return;
+      const nodes = Array.from(pendingNodes);
+      pendingNodes.clear();
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].isConnected) {
+          checkAndHideElement(nodes[i]);
+        }
+      }
+    }
+
+    function queueNodeCheck(node) {
+      pendingNodes.add(node);
+      if (!batchScheduled) {
+        batchScheduled = true;
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(processPendingNodes, { timeout: 150 });
+        } else {
+          setTimeout(processPendingNodes, 80);
+        }
+      }
+    }
+
     try {
       const observer = new MutationObserver((mutations) => {
         const isEnabled = currentEnabledState;
@@ -431,7 +459,7 @@ if (window.location.hostname.includes('youtube.com')) {
         mutations.forEach(mutation => {
           mutation.addedNodes.forEach(node => {
             if (node.nodeType === 1) { // Only element nodes
-              checkAndHideElement(node);
+              queueNodeCheck(node);
             }
           });
         });
@@ -446,13 +474,16 @@ if (window.location.hostname.includes('youtube.com')) {
       console.error('[Anti Pop-Under] MutationObserver setup failed:', e);
     }
 
-    // YouTube Ad Skipper logic has been moved to inject.js (Main World) to allow direct access to the YouTube player.skipAd() API.
-
-    // Fallbacks and periodic sweep to catch missed ads on normal pages
+    // Fallbacks and periodic sweep (paused when video is playing to avoid frame stutters on mobile)
     window.addEventListener('DOMContentLoaded', () => {
       if (window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
-      setInterval(scanAndRemoveAds, 3500);
+      setInterval(() => {
+        if (window.location.hostname.includes('youtube.com')) return;
+        const video = document.querySelector('video');
+        if (video && !video.paused) return; // Pause background scan during active movie playback
+        scanAndRemoveAds();
+      }, 5000);
     });
 
     if (document.readyState === 'interactive' || document.readyState === 'complete') {

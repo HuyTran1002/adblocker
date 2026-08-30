@@ -93,11 +93,24 @@
 
     function isAdBait(el) {
       if (!el || !el.tagName) return false;
+      const tag = el.tagName;
+      if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'IFRAME') return false;
+      const rawId = el.id;
+      const rawClass = el.className;
+      if (!rawId && (!rawClass || typeof rawClass !== 'string' || rawClass === '')) return false;
+
       try {
-        const id = (el.id || '').toLowerCase();
-        const className = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        const id = rawId ? rawId.toLowerCase() : '';
+        const className = (typeof rawClass === 'string') ? rawClass.toLowerCase() : '';
+
+        // Fast guard: skip elements that do not contain ad-related keyword substrings
+        if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') &&
+            !className.includes('ad') && !className.includes('qc') && !className.includes('quang')) {
+          return false;
+        }
+
         const name = (el.getAttribute && el.getAttribute('name') || '').toLowerCase();
-        
+
         const keywords = ['adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box', 'sponsored', 'ad-holder', 'qc-holder', 'ad-container'];
         if (keywords.some(kw => id.includes(kw) || className.includes(kw) || name.includes(kw))) {
           return true;
@@ -184,45 +197,47 @@
       const originalGetComputedStyle = window.getComputedStyle;
       window.getComputedStyle = function(el, pseudoElt) {
         const style = originalGetComputedStyle.call(this, el, pseudoElt);
-        if (el && isAdBait(el)) {
-          return new Proxy(style, {
-            get(target, prop) {
-              if (prop === 'display') {
-                const val = target.display;
-                return val === 'none' ? 'block' : val;
+        if (el && (el.id || (el.className && typeof el.className === 'string' && el.className !== ''))) {
+          if (isAdBait(el)) {
+            return new Proxy(style, {
+              get(target, prop) {
+                if (prop === 'display') {
+                  const val = target.display;
+                  return val === 'none' ? 'block' : val;
+                }
+                if (prop === 'visibility') {
+                  const val = target.visibility;
+                  return val === 'hidden' ? 'visible' : val;
+                }
+                if (prop === 'opacity') {
+                  const val = target.opacity;
+                  return val === '0' ? '1' : val;
+                }
+                if (prop === 'getPropertyValue') {
+                  return function(propertyName) {
+                    if (propertyName === 'display') {
+                      const val = target.getPropertyValue('display');
+                      return val === 'none' ? 'block' : val;
+                    }
+                    if (propertyName === 'visibility') {
+                      const val = target.getPropertyValue('visibility');
+                      return val === 'hidden' ? 'visible' : val;
+                    }
+                    if (propertyName === 'opacity') {
+                      const val = target.getPropertyValue('opacity');
+                      return val === '0' ? '1' : val;
+                    }
+                    return target.getPropertyValue(propertyName);
+                  };
+                }
+                const val = Reflect.get(target, prop);
+                if (typeof val === 'function') {
+                  return val.bind(target);
+                }
+                return val;
               }
-              if (prop === 'visibility') {
-                const val = target.visibility;
-                return val === 'hidden' ? 'visible' : val;
-              }
-              if (prop === 'opacity') {
-                const val = target.opacity;
-                return val === '0' ? '1' : val;
-              }
-              if (prop === 'getPropertyValue') {
-                return function(propertyName) {
-                  if (propertyName === 'display') {
-                    const val = target.getPropertyValue('display');
-                    return val === 'none' ? 'block' : val;
-                  }
-                  if (propertyName === 'visibility') {
-                    const val = target.getPropertyValue('visibility');
-                    return val === 'hidden' ? 'visible' : val;
-                  }
-                  if (propertyName === 'opacity') {
-                    const val = target.getPropertyValue('opacity');
-                    return val === '0' ? '1' : val;
-                  }
-                  return target.getPropertyValue(propertyName);
-                };
-              }
-              const val = Reflect.get(target, prop);
-              if (typeof val === 'function') {
-                return val.bind(target);
-              }
-              return val;
-            }
-          });
+            });
+          }
         }
         return style;
       };
@@ -864,11 +879,13 @@
     function patchIframeNode(node) {
       if (!node || node.nodeType !== 1) return;
       try {
-        if (node.tagName && node.tagName.toLowerCase() === 'iframe') {
+        const tag = node.tagName;
+        if (tag === 'IFRAME') {
           if (node.contentWindow) overrideWindowOpen(node.contentWindow);
           if (node.contentDocument && node.contentDocument.defaultView) overrideWindowOpen(node.contentDocument.defaultView);
+          return;
         }
-        if (node.querySelectorAll) {
+        if (node.childElementCount > 0 && node.querySelectorAll) {
           node.querySelectorAll('iframe').forEach(ifr => {
             try {
               if (ifr.contentWindow) overrideWindowOpen(ifr.contentWindow);

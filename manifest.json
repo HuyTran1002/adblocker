@@ -4,6 +4,12 @@
   "version": "2.5.0",
   "author": "HuyTran1002",
   "description": "Ngăn chặn hiệu quả các quảng cáo nhảy trang, cửa sổ ẩn tự động khi nhấp chuột trên website. Phát triển bởi HuyTran1002.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "anti-popunder@huytran1002",
+      "strict_min_version": "109.0"
+    }
+  },
   "permissions": [
     "storage",
     "declarativeNetRequest",
