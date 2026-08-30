@@ -391,39 +391,11 @@ if (window.location.hostname.includes('youtube.com')) {
           if (matchesGambling || matchesAdServer) {
             isAd = true;
           } else if (hasImage) {
-            const imgWidth = img.naturalWidth || img.width || 0;
-            const imgHeight = img.naturalHeight || img.height || 0;
             const imgSrc = (img.src || '').toLowerCase();
-
-            // 1. Explicit ad keywords/types
+            // Explicit ad image keywords only (never rely on width/height ratios)
             const imgMatchesAd = ['quangcao', 'adserver'].some(kw => imgSrc.includes(kw)) ||
                                  imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
-
-            // 2. Layout heuristics
-            let isAdPattern = false;
-            if (imgWidth > 120 || imgHeight > 50) {
-              let isFloating = false;
-              if (anchor.parentElement) {
-                const p = anchor.parentElement;
-                const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
-                const pId = (p.id || '').toLowerCase();
-                const pPos = p.style ? p.style.position : '';
-                if (pPos === 'fixed' || pPos === 'absolute' ||
-                    pClass.includes('float') || pClass.includes('catfish') || pClass.includes('ad') || pClass.includes('popup') || pClass.includes('overlay') ||
-                    pId.includes('float') || pId.includes('catfish') || pId.includes('ad') || pId.includes('popup') || pId.includes('overlay')) {
-                  isFloating = true;
-                } else {
-                  const style = window.getComputedStyle(p);
-                  isFloating = style.position === 'fixed' || style.position === 'absolute';
-                }
-              }
-              const isHorizontalOrSquare = imgWidth >= imgHeight;
-              if (isFloating || isHorizontalOrSquare) {
-                isAdPattern = true;
-              }
-            }
-
-            if (imgMatchesAd || isAdPattern) {
+            if (imgMatchesAd) {
               isAd = true;
             }
           }
