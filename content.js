@@ -53,7 +53,7 @@ const adSelectors = [
   '.ad-slot', '.ads-slot', '.ad-holder', '.ads-holder', '.adBox', '.ad-box',
   
   // Specific iframe ad networks
-  'iframe[src*="ads"]', 'iframe[src*="doubleclick"]', 'iframe[src*="adsterra"]',
+  'iframe[src*="adserver"]', 'iframe[src*="doubleclick"]', 'iframe[src*="adsterra"]',
   'iframe[src*="exoclick"]', 'iframe[src*="popads"]', 'iframe[src*="popcash"]',
   'iframe[src*="onclick"]', 'iframe[src*="greatcpmgate"]', 'iframe[src*="highcpmgate"]',
   
@@ -123,6 +123,15 @@ function injectAdBlockCSS() {
   .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
   .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress,
   .plyr__time, .plyr__progress, .art-time, .dplayer-time {
+    visibility: visible !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+
+  /* Bảo vệ tuyệt đối iframe trình phát phim */
+  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
+  iframe[class*="player"], iframe[id*="player"] {
+    display: block !important;
     visibility: visible !important;
     pointer-events: auto !important;
     opacity: 1 !important;
@@ -467,6 +476,11 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!isExternal) return;
 
           const srcLower = src.toLowerCase();
+          // Never hide movie player iframes
+          if (srcLower.includes('player') || srcLower.includes('embed') || srcLower.includes('stream') || srcLower.includes('video') || srcLower.includes('watch') || srcLower.includes('film') || srcLower.includes('movie') || srcLower.includes('vids') || srcLower.includes('hls') || srcLower.includes('m3u8') || srcLower.includes('mp4') || srcLower.includes('halim') || srcLower.includes('play')) {
+            return;
+          }
+
           const isAdIframe = adUrlRegex.test(srcLower) ||
                              gamblingRegex.test(srcLower);
 

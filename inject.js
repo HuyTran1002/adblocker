@@ -362,14 +362,7 @@
       const target = e.target;
       if (!target) return;
 
-      // ULTRA FAST-PATH FOR VIDEO CONTROLS & SEEKBARS:
-      // If user touches/clicks/drags on video player, canvas, seekbar, slider, time display or controls:
-      // Return instantly in 0.001ms without running parent loops or getComputedStyle layout reflows!
-      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
-        return;
-      }
-
-      // Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+      // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
       let anchor = null;
       let overlay = null;
@@ -384,7 +377,7 @@
         curr = curr.parentElement;
       }
 
-      // 1. If interaction is on a clickjack overlay -> block event immediately & remove overlay
+      // 2. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
       if (overlay) {
         if (anchor) {
           try {
@@ -408,7 +401,7 @@
         
         const adUrl = (anchor && anchor.href) || 'overlay';
         reportBlocked(adUrl, `Blocked ${e.type} on clickjack overlay`);
-        console.log(`[Anti Pop-Under] Blocked ${e.type} on clickjack overlay:`, overlay);
+        console.log(`[Anti Pop-Under] Blocked ${e.type} on clickjack overlay & removed overlay:`, overlay);
         
         try {
           overlay.remove();
@@ -416,7 +409,14 @@
         return;
       }
 
-      // 2. Check anchor link clicks pointing to popunder/ad URLs
+      // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
+      // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
+      // Return instantly in 0.001ms so play/pause & seek actions execute smoothly!
+      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
+        return;
+      }
+
+      // 4. Check anchor link clicks pointing to popunder/ad URLs
       if (e.type === 'click' && anchor && anchor.href) {
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
