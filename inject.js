@@ -408,16 +408,6 @@
     } catch(e) {}
   }
 
-  // Global capture-phase listener for video play/pause toggling
-  document.addEventListener('click', (e) => {
-    if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
-    const target = e.target;
-    if (!target) return;
-    if (isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
-      toggleVideoPlayPause(target);
-    }
-  }, true);
-
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
@@ -473,7 +463,7 @@
         } catch (err) {}
 
         // Automatically toggle play/pause when user clicks in the middle of video screen after clearing ad overlay
-        if (e.type === 'click' && isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
+        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
           toggleVideoPlayPause(target);
         }
         return;
@@ -481,6 +471,7 @@
 
       // 3. ULTRA FAST-PATH FOR VIDEO CONTROLS, PLAY/PAUSE & SEEKBARS:
       // If user touches/clicks/drags on genuine video player, canvas, seekbar, slider, time display or controls:
+      // Return instantly in 0.001ms so native player play/pause & seek actions execute smoothly without interference!
       if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
         return;
       }
