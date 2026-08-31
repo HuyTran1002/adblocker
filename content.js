@@ -103,28 +103,6 @@ function injectAdBlockCSS() {
     opacity: 0 !important;
   }
   
-  /* Bảo vệ hiển thị (visibility/opacity) trình phát phim — KHÔNG ép pointer-events
-     vì nhiều player dùng pointer-events: none trên overlay nội bộ để click xuyên qua video */
-  video, canvas,
-  .jwplayer, .plyr, .video-js, .vjs-controls, .vjs-control-bar, .flowplayer, .artplayer, .dplayer,
-  .vjs-time-control, .vjs-current-time, .vjs-duration, .vjs-time-divider, .vjs-remaining-time,
-  .jw-controlbar, .jw-text-elapsed, .jw-text-duration, .jw-slider-time, .jw-progress, .jw-time-tip,
-  .plyr__time, .plyr__progress, .plyr__controls,
-  .art-time, .art-control-time, .art-controls,
-  .dplayer-time, .dplayer-controller,
-  [class*="player"], [id*="player"],
-  [class*="video"], [id*="video"],
-  [class*="control"], [id*="control"],
-  [class*="seekbar"], [id*="seekbar"],
-  [class*="time"], [id*="time"],
-  [class*="duration"], [id*="duration"],
-  [class*="progress"], [id*="progress"],
-  [class*="slider"], [id*="slider"],
-  [class*="timeline"], [id*="timeline"] {
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-
   /* Chỉ ép pointer-events: auto lên thẻ video và iframe trực tiếp */
   video {
     pointer-events: auto !important;
