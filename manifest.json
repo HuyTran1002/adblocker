@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Anti Pop-Under & Clickjack",
+  "name": "Adblock Max",
   "version": "2.6.3",
   "author": "HuyTran1002",
   "description": "Ngăn chặn hiệu quả các quảng cáo nhảy trang, cửa sổ ẩn tự động khi nhấp chuột trên website. Phát triển bởi HuyTran1002.",
+  "icons": {
+    "128": "icon128.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "anti-popunder@huytran1002",
@@ -49,6 +52,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Anti Pop-Under"
+    "default_title": "Adblock Max",
+    "default_icon": "icon128.png"
   }
 }
