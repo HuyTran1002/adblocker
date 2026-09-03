@@ -5,6 +5,9 @@
   "author": "HuyTran1002",
   "description": "Ngăn chặn hiệu quả các quảng cáo nhảy trang, cửa sổ ẩn tự động khi nhấp chuột trên website. Phát triển bởi HuyTran1002.",
   "icons": {
+    "16": "icon128.png",
+    "32": "icon128.png",
+    "48": "icon128.png",
     "128": "icon128.png"
   },
   "browser_specific_settings": {
@@ -53,6 +56,11 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "Adblock Max",
-    "default_icon": "icon128.png"
+    "default_icon": {
+      "16": "icon128.png",
+      "32": "icon128.png",
+      "48": "icon128.png",
+      "128": "icon128.png"
+    }
   }
 }
