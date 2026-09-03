@@ -289,13 +289,39 @@ if (window.location.hostname.includes('youtube.com')) {
     const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
     const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
 
+    // Helper to check if a video is actually an ad
+    function isAdVideo(video) {
+      if (!video) return false;
+      try {
+        const src = (video.src || '').toLowerCase();
+        const poster = (video.getAttribute('poster') || '').toLowerCase();
+        return ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw) || poster.includes(kw)) ||
+               src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
+               poster.includes('/ads/') || poster.includes('_ad_') || poster.includes('-ad-') ||
+               gamblingRegex.test(src) || gamblingRegex.test(poster);
+      } catch(e) {
+        return false;
+      }
+    }
+
     // Helper to check if element is a video player, video control bar, or time/progress display
     function isVideoPlayerOrControls(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
-        if (['video', 'audio', 'canvas', 'source', 'track'].includes(tag)) return true;
-        if (el.querySelector && el.querySelector('video, audio, canvas')) return true;
+        if (['audio', 'canvas', 'source', 'track'].includes(tag)) return true;
+        if (tag === 'video' && !isAdVideo(el)) return true;
+        
+        if (el.querySelector) {
+          const videos = el.querySelectorAll('video');
+          if (videos.length > 0) {
+            for (let i = 0; i < videos.length; i++) {
+              if (!isAdVideo(videos[i])) return true;
+            }
+          } else if (el.querySelector('audio, canvas')) {
+            return true;
+          }
+        }
 
         const elId = (el.id || '').toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
@@ -323,7 +349,8 @@ if (window.location.hostname.includes('youtube.com')) {
       if (!el || el.nodeType !== 1) return;
 
       const tag = el.tagName;
-      if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'PATH') return;
+      if (tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'PATH') return;
+      if (tag === 'VIDEO' && !isAdVideo(el)) return;
 
       const isEnabled = currentEnabledState;
       if (!isEnabled) return;
@@ -495,6 +522,49 @@ if (window.location.hostname.includes('youtube.com')) {
         } catch(e) {}
       };
 
+      // Helper to verify and hide an ad video tag
+      const checkVideo = (video) => {
+        if (video.hasAttribute('data-ad-blocked')) return;
+        try {
+          if (isAdVideo(video)) {
+            let elementToHide = video;
+            let curr = video.parentElement;
+            let depth = 0;
+            
+            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
+              depth++;
+              if (isVideoPlayerOrControls(curr)) break;
+
+              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
+              const currId = (curr.id || '').toLowerCase();
+              const style = window.getComputedStyle(curr);
+              const isFloating = style.position === 'fixed' || style.position === 'absolute';
+              
+              const isAdWrapper = isFloating ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+
+              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+                elementToHide = curr;
+              }
+              curr = curr.parentElement;
+            }
+
+            if (!elementToHide.hasAttribute('data-ad-blocked')) {
+              elementToHide.setAttribute('data-ad-blocked', 'true');
+              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              console.log('[Anti Pop-Under] Hide Ad Video & Wrapper:', video.src, elementToHide);
+              
+              safeSendMessage({
+                type: 'AD_BLOCKED',
+                url: video.src || 'video-ad',
+                reason: 'Ẩn video quảng cáo & lớp mờ'
+              });
+            }
+          }
+        } catch (e) {}
+      };
+
       // Helper to verify and hide an img tag (safely ignores base64/blob)
       const checkImg = (img) => {
         if (img.hasAttribute('data-ad-blocked')) return;
@@ -562,6 +632,8 @@ if (window.location.hostname.includes('youtube.com')) {
         checkIframe(el);
       } else if (tagName === 'img') {
         checkImg(el);
+      } else if (tagName === 'video') {
+        checkVideo(el);
       }
       hideExplicitAd(el);
 
@@ -570,6 +642,7 @@ if (window.location.hostname.includes('youtube.com')) {
         el.querySelectorAll('a').forEach(checkAnchor);
         el.querySelectorAll('iframe').forEach(checkIframe);
         el.querySelectorAll('img').forEach(checkImg);
+        el.querySelectorAll('video').forEach(checkVideo);
         el.querySelectorAll('[aria-label*="uảng cáo" i], [aria-label*="ponsor" i], [title*="uảng cáo" i], [title*="ponsor" i]').forEach(hideExplicitAd);
       }
     }
