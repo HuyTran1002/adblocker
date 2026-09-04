@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Tạo Ảnh Chụp Màn Hình CWS</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f0f2f5; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    canvas { max-width: 100%; border: 1px solid #ccc; margin-top: 20px; border-radius: 8px; }
+    button { background: #1a73e8; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 10px; }
+    button:hover { background: #1557b0; }
+    input[type="file"] { margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Trình tạo ảnh chuẩn 1280x800 cho Chrome Web Store</h2>
+    <p>Chọn ảnh chụp popup của bạn, công cụ này sẽ tự động ghép nó vào nền đẹp chuẩn kích thước của Google Chrome Web Store.</p>
+    
+    <input type="file" id="imageLoader" accept="image/*" />
+    <br>
+    <p id="instruction" style="display:none; color: #b21f1f; font-weight: bold;">✅ Đã tạo xong 2 ảnh! Vui lòng Click chuột phải vào từng ảnh -> Chọn "Lưu hình ảnh thành..."</p>
+    
+    <div id="outputArea" style="display:none; margin-top: 20px;">
+      <h3>1. Ảnh chụp màn hình (1280x800) - BẮT BUỘC</h3>
+      <canvas id="imageCanvas" width="1280" height="800" style="display:none;"></canvas>
+      <img id="resultImg" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+
+      <h3 style="margin-top:40px;">2. Ảnh Quảng cáo (440x280) - BẮT BUỘC</h3>
+      <p style="font-size:14px; color:#555;">(Google yêu cầu ảnh này để hiển thị trên Store)</p>
+      <canvas id="promoCanvas" width="440" height="280" style="display:none;"></canvas>
+      <img id="promoImg" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+
+      <h3 style="margin-top:40px;">3. Ảnh Quảng cáo Marquee (1400x560) - TÙY CHỌN</h3>
+      <canvas id="marqueeCanvas" width="1400" height="560" style="display:none;"></canvas>
+      <img id="marqueeImg" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+    </div>
+  </div>
+
+  <script>
+    const imageLoader = document.getElementById('imageLoader');
+    const canvas = document.getElementById('imageCanvas');
+    const ctx = canvas.getContext('2d');
+    const resultImg = document.getElementById('resultImg');
+    const instruction = document.getElementById('instruction');
+
+    imageLoader.addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          // Vẽ nền gradient
+          const gradient = ctx.createLinearGradient(0, 0, 1280, 800);
+          gradient.addColorStop(0, '#1a2a6c');
+          gradient.addColorStop(0.5, '#b21f1f');
+          gradient.addColorStop(1, '#fdbb2d');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, 1280, 800);
+
+          // Thêm text trang trí
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 60px "Segoe UI", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 10;
+          ctx.fillText('Adblock Max', 340, 350);
+          ctx.font = '30px "Segoe UI", sans-serif';
+          ctx.fillText('Bảo vệ toàn diện khỏi quảng cáo ẩn', 340, 420);
+          
+          // Reset shadow cho ảnh
+          ctx.shadowColor = 'rgba(0,0,0,0.3)';
+          ctx.shadowBlur = 30;
+          ctx.shadowOffsetX = 10;
+          ctx.shadowOffsetY = 15;
+
+          // Tính toán vị trí để vẽ ảnh (Căn lề phải)
+          const scale = Math.min(600 / img.width, 700 / img.height); // Đảm bảo ảnh vừa vặn
+          const w = img.width * scale;
+          const h = img.height * scale;
+          const x = 1280 - w - 100; // Cách lề phải 100px
+          const y = (800 - h) / 2; // Căn giữa theo chiều dọc
+
+          // Vẽ popup có viền bo tròn
+          ctx.beginPath();
+          ctx.roundRect(x, y, w, h, 16);
+          ctx.fillStyle = '#0f172a'; // Nền đen xanh giống popup
+          ctx.fill();
+          ctx.clip(); // Clip để bo góc ảnh
+          
+          ctx.drawImage(img, x, y, w, h);
+
+          // --- VẼ ẢNH PROMO 440x280 ---
+          const promoCanvas = document.getElementById('promoCanvas');
+          const pCtx = promoCanvas.getContext('2d');
+          
+          const pGradient = pCtx.createLinearGradient(0, 0, 440, 280);
+          pGradient.addColorStop(0, '#1a2a6c');
+          pGradient.addColorStop(0.5, '#b21f1f');
+          pGradient.addColorStop(1, '#fdbb2d');
+          pCtx.fillStyle = pGradient;
+          pCtx.fillRect(0, 0, 440, 280);
+
+          pCtx.fillStyle = 'white';
+          pCtx.font = 'bold 36px "Segoe UI", sans-serif';
+          pCtx.textAlign = 'center';
+          pCtx.shadowColor = 'rgba(0,0,0,0.5)';
+          pCtx.shadowBlur = 8;
+          pCtx.fillText('Adblock Max', 220, 130);
+          
+          pCtx.font = '16px "Segoe UI", sans-serif';
+          pCtx.fillText('Chặn quảng cáo ẩn & clickjack', 220, 170);
+
+          // --- VẼ ẢNH MARQUEE 1400x560 ---
+          const marqueeCanvas = document.getElementById('marqueeCanvas');
+          const mCtx = marqueeCanvas.getContext('2d');
+          
+          const mGradient = mCtx.createLinearGradient(0, 0, 1400, 560);
+          mGradient.addColorStop(0, '#1a2a6c');
+          mGradient.addColorStop(0.5, '#b21f1f');
+          mGradient.addColorStop(1, '#fdbb2d');
+          mCtx.fillStyle = mGradient;
+          mCtx.fillRect(0, 0, 1400, 560);
+
+          mCtx.fillStyle = 'white';
+          mCtx.font = 'bold 80px "Segoe UI", sans-serif';
+          mCtx.textAlign = 'left';
+          mCtx.shadowColor = 'rgba(0,0,0,0.5)';
+          mCtx.shadowBlur = 12;
+          mCtx.fillText('Adblock Max', 150, 260);
+          
+          mCtx.font = '36px "Segoe UI", sans-serif';
+          mCtx.fillText('Bảo vệ toàn diện khỏi quảng cáo ẩn & clickjack', 150, 340);
+
+          // Vẽ ảnh popup vào bên phải của Marquee
+          mCtx.shadowColor = 'rgba(0,0,0,0.3)';
+          mCtx.shadowBlur = 30;
+          mCtx.shadowOffsetX = 10;
+          mCtx.shadowOffsetY = 15;
+          const mScale = Math.min(600 / img.width, 480 / img.height);
+          const mw = img.width * mScale;
+          const mh = img.height * mScale;
+          const mx = 1400 - mw - 150;
+          const my = (560 - mh) / 2;
+          
+          mCtx.beginPath();
+          mCtx.roundRect(mx, my, mw, mh, 16);
+          mCtx.fillStyle = '#0f172a';
+          mCtx.fill();
+          mCtx.clip();
+          mCtx.drawImage(img, mx, my, mw, mh);
+
+          // Chuyển canvas thành ảnh
+          resultImg.src = canvas.toDataURL('image/png');
+          document.getElementById('promoImg').src = promoCanvas.toDataURL('image/png');
+          document.getElementById('marqueeImg').src = marqueeCanvas.toDataURL('image/png');
+          
+          document.getElementById('outputArea').style.display = 'block';
+          instruction.style.display = 'block';
+        }
+        img.src = event.target.result;
+      }
+      reader.readAsDataURL(e.target.files[0]);
+    });
+  </script>
+</body>
+</html>

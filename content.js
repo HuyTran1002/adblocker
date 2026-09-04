@@ -103,13 +103,85 @@ function injectAdBlockCSS() {
     opacity: 0 !important;
   }
   
+  /* === PRE-BLOCK: Hide ad elements by domain BEFORE they render (zero flash) === */
+  
+  /* Ad network iframes - block at CSS level before JS can scan */
+  iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="googleadservices"],
+  iframe[src*="adsterra"], iframe[src*="exoclick"], iframe[src*="popads"], iframe[src*="popcash"],
+  iframe[src*="propellerads"], iframe[src*="juicyads"], iframe[src*="jads.co"],
+  iframe[src*="9splt.com"], iframe[src*="playhubconnect"], iframe[src*="cm8806.com"],
+  iframe[src*="monetag"], iframe[src*="hilltopads"], iframe[src*="galaksion"],
+  iframe[src*="clickadu"], iframe[src*="admaven"], iframe[src*="richads"],
+  iframe[src*="onclickads"], iframe[src*="clktag"], iframe[src*="adserver"],
+  iframe[src*="popunder"], iframe[src*="adtrue"], iframe[src*="adflex"],
+  iframe[src*="eclick.vn"], iframe[src*="novanet.vn"], iframe[src*="mgid"],
+  iframe[src*="taboola"], iframe[src*="outbrain"], iframe[src*="yuelongyy"],
+  iframe[src*="linkroyal"], iframe[src*="abroadad"], iframe[src*="vast.xml"],
+  iframe[src*="vpaid"], iframe[src*="getjuicy"] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Ad network images - prevent flash */
+  img[src*="playhubconnect"], img[src*="juicyads"], img[src*="jads.co"],
+  img[src*="adsterra"], img[src*="exoclick"], img[src*="adserver"],
+  img[src*="abroadad.cache.wpscdn"], img[src*="streamvl.top/file/"],
+  img[src*="cm8806.com"], img[src*="9splt.com"], img[src*="yuelongyy"] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Ad network video elements - prevent pre-roll/overlay flash */
+  video[src*="playhubconnect"], video[src*="adserver"], video[src*="popunder"],
+  video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Ad network anchor links - prevent clickable ad areas from showing */
+  a[href*="juicyads"], a[href*="jads.co"], a[href*="getjuicy"],
+  a[href*="exoclick"], a[href*="adsterra"], a[href*="popads"],
+  a[href*="popcash"], a[href*="propellerads"], a[href*="9splt.com"],
+  a[href*="playhubconnect"], a[href*="cm8806.com"], a[href*="yuelongyy"],
+  a[href*="linkroyal"], a[href*="onclickads"], a[href*="clktag"],
+  a[href*="monetag"], a[href*="hilltopads"], a[href*="clickadu"],
+  a[href*="streamvl.top"], a[href*="adserver"], a[href*="popunder"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Ad containers with explicit aria-labels */
+  [aria-label*="quảng cáo" i], [aria-label*="Quảng cáo" i],
+  [aria-label*="quang cao" i], [aria-label*="Quang cao" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* === END PRE-BLOCK === */
+
   /* Chỉ ép pointer-events: auto lên thẻ video và iframe trực tiếp */
-  video {
+  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]) {
     pointer-events: auto !important;
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */
-  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
+  iframe[src*="player"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
+  iframe[src*="embed"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
+  iframe[src*="stream"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
+  iframe[src*="video"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
   iframe[class*="player"], iframe[id*="player"] {
     display: block !important;
     visibility: visible !important;
@@ -272,7 +344,9 @@ if (window.location.hostname.includes('youtube.com')) {
       '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
       'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
       'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-      'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88'
+      'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88',
+      'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin', 
+      'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88'
     ];
 
     const adUrlKeywords = [
@@ -282,7 +356,12 @@ if (window.location.hostname.includes('youtube.com')) {
       'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
       'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
       'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
-      '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link'
+      '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
+      'playhubconnect.com', 'cm8806.com', 'linkroyal.workers.dev',
+      'abroadad.cache.wpscdn.com', 'propellerads',
+      'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
+      'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
+      '/static/video/bn/'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -298,7 +377,8 @@ if (window.location.hostname.includes('youtube.com')) {
         return ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw) || poster.includes(kw)) ||
                src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
                poster.includes('/ads/') || poster.includes('_ad_') || poster.includes('-ad-') ||
-               gamblingRegex.test(src) || gamblingRegex.test(poster);
+               gamblingRegex.test(src) || gamblingRegex.test(poster) ||
+               adUrlRegex.test(src) || adUrlRegex.test(poster);
       } catch(e) {
         return false;
       }
@@ -357,9 +437,6 @@ if (window.location.hostname.includes('youtube.com')) {
 
       if (isCurrentPageWhitelisted()) return;
 
-      // NEVER hide video players or player control bars
-      if (isVideoPlayerOrControls(el)) return;
-
       const currentDomain = window.location.hostname;
       const tagName = tag.toLowerCase();
 
@@ -398,14 +475,26 @@ if (window.location.hostname.includes('youtube.com')) {
           const hasImage = !!img;
 
           let isAd = false;
-          if (matchesGambling || matchesAdServer) {
+          const rel = (anchor.getAttribute('rel') || '').toLowerCase();
+          const hasAdAttributes = Array.from(anchor.attributes).some(attr => {
+            const name = attr.name.toLowerCase();
+            return name.includes('ad_id') || name.includes('ad-id') || 
+                   name.includes('ad_slot') || name.includes('ad-slot');
+          });
+
+          if (matchesGambling || matchesAdServer || rel.includes('sponsored') || hasAdAttributes) {
             isAd = true;
           } else if (hasImage) {
             const imgSrc = (img.src || '').toLowerCase();
-            if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
+            const imgAlt = (img.getAttribute('alt') || '').toLowerCase();
+            
+            if (/\b(ads|ad)\b/i.test(imgAlt) || imgAlt.includes('quảng cáo') || imgAlt.includes('sponsor')) {
+              isAd = true;
+            } else if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
               // Explicit ad image keywords only (never rely on width/height ratios)
               const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => imgSrc.includes(kw)) ||
-                                   imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-');
+                                   imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-') ||
+                                   gamblingRegex.test(imgSrc) || adUrlRegex.test(imgSrc);
               if (imgMatchesAd) {
                 isAd = true;
               }
@@ -429,7 +518,8 @@ if (window.location.hostname.includes('youtube.com')) {
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAdWrapper = isFloating ||
+              const isAnchor = curr.tagName.toLowerCase() === 'a';
+              const isAdWrapper = isAnchor || isFloating ||
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
@@ -497,7 +587,8 @@ if (window.location.hostname.includes('youtube.com')) {
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAdWrapper = isFloating ||
+              const isAnchor = curr.tagName.toLowerCase() === 'a';
+              const isAdWrapper = isAnchor || isFloating ||
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
@@ -539,8 +630,8 @@ if (window.location.hostname.includes('youtube.com')) {
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              
-              const isAdWrapper = isFloating ||
+              const isAnchor = curr.tagName.toLowerCase() === 'a';
+              const isAdWrapper = isAnchor || isFloating ||
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
@@ -570,13 +661,16 @@ if (window.location.hostname.includes('youtube.com')) {
         if (img.hasAttribute('data-ad-blocked')) return;
         try {
           const src = (img.src || '').toLowerCase();
-          if (src.startsWith('data:') || src.startsWith('blob:')) return; // CRITICAL: Protect UI icons
-          
           const alt = (img.getAttribute('alt') || '').toLowerCase();
           
-          const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
-                               src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
-                               alt.includes('quảng cáo') || alt.includes('sponsor');
+          let imgMatchesAd = false;
+          if (/\b(ads|ad)\b/i.test(alt) || alt.includes('quảng cáo') || alt.includes('sponsor')) {
+            imgMatchesAd = true;
+          } else if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+            imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
+                           src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
+                           gamblingRegex.test(src) || adUrlRegex.test(src);
+          }
                                
           if (imgMatchesAd) {
             let elementToHide = img;
@@ -591,8 +685,8 @@ if (window.location.hostname.includes('youtube.com')) {
               const currId = (curr.id || '').toLowerCase();
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              
-              const isAdWrapper = isFloating ||
+              const isAnchor = curr.tagName.toLowerCase() === 'a';
+              const isAdWrapper = isAnchor || isFloating ||
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
@@ -768,10 +862,6 @@ if (window.location.hostname.includes('youtube.com')) {
 
     function queueNodeCheck(node) {
       if (!node || node.nodeType !== 1) return;
-
-      // INSTANT SHORT-CIRCUIT: Skip player controls, seekbars, time text, and video elements completely!
-      if (isVideoPlayerOrControls(node)) return;
-
       pendingNodes.add(node);
       if (!batchScheduled) {
         batchScheduled = true;
@@ -943,4 +1033,156 @@ if (window.location.hostname.includes('youtube.com')) {
         }
       } catch (err) {}
     }, true); // Use capture phase to intercept before page scripts
+
+    // --- MANUAL ELEMENT BLOCKER (Context Menu & Long Press) ---
+    let lastRightClickedElement = null;
+  
+    document.addEventListener('contextmenu', (e) => {
+      lastRightClickedElement = e.target;
+    }, true);
+  
+    // Generate robust CSS selector
+    function getRobustSelector(el) {
+      if (!el || el === document.body || el === document.documentElement) return null;
+      if (el.id && !/^\d|-|_/.test(el.id)) return '#' + CSS.escape(el.id);
+      
+      let path = [];
+      let current = el;
+      while (current && current !== document.body && current !== document.documentElement) {
+        let selector = current.tagName.toLowerCase();
+        // Try to use robust attributes like data-id, name, src, href if present
+        const dataId = current.getAttribute('data-id');
+        const srcAttr = current.getAttribute('src');
+        const hrefAttr = current.getAttribute('href');
+        
+        if (dataId) {
+          selector += `[data-id="${CSS.escape(dataId)}"]`;
+          path.unshift(selector);
+          break; // Very specific
+        }
+        if (srcAttr && srcAttr.length < 200 && !srcAttr.startsWith('data:') && !srcAttr.startsWith('blob:')) {
+          selector += `[src="${CSS.escape(srcAttr)}"]`;
+        } else if (hrefAttr && hrefAttr.length < 200 && current.tagName.toLowerCase() === 'a' && !hrefAttr.startsWith('javascript:')) {
+          selector += `[href="${CSS.escape(hrefAttr)}"]`;
+        } else {
+          // Use class name only if it looks stable (no random digits/hashes)
+          const classes = Array.from(current.classList).filter(c => !/\d/.test(c) && c.length > 2);
+          if (classes.length > 0) {
+            selector += '.' + CSS.escape(classes[0]);
+          } else {
+            // Fallback to nth-child
+            let sibling = current.previousElementSibling;
+            let nth = 1;
+            while (sibling) {
+              if (sibling.tagName === current.tagName) nth++;
+              sibling = sibling.previousElementSibling;
+            }
+            selector += `:nth-of-type(${nth})`;
+          }
+        }
+        path.unshift(selector);
+        current = current.parentElement;
+      }
+      return path.join(' > ');
+    }
+  
+    function blockElement(el) {
+      if (!el) return;
+      const selector = getRobustSelector(el);
+      if (!selector) return;
+  
+      el.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
+      
+      // Save to storage
+      const domain = window.location.hostname;
+      chrome.storage.local.get(['manualFilters'], (res) => {
+        let filters = res.manualFilters || {};
+        if (!filters[domain]) filters[domain] = [];
+        if (!filters[domain].includes(selector)) {
+          filters[domain].push(selector);
+          chrome.storage.local.set({ manualFilters: filters });
+          
+          // Report
+          safeSendMessage({
+            type: 'AD_BLOCKED',
+            url: 'Phần tử chặn thủ công',
+            reason: 'Người dùng chặn qua Menu'
+          });
+          applyManualFilters(filters[domain]); // Re-apply to make sure
+        }
+      });
+    }
+  
+    // Listen for background message
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'START_MANUAL_BLOCK' && lastRightClickedElement) {
+        // Find the outermost ad wrapper up to 3 levels to avoid blocking just an image instead of the banner container
+        let target = lastRightClickedElement;
+        let depth = 0;
+        while (target && target !== document.body && depth < 3) {
+          if (target.tagName === 'A' || target.tagName === 'IFRAME') break; // Good wrappers
+          const pos = window.getComputedStyle(target).position;
+          if (pos === 'fixed' || pos === 'absolute') break; // Floating wrappers
+          target = target.parentElement;
+          depth++;
+        }
+        blockElement(target || lastRightClickedElement);
+      }
+    });
+  
+    // Mobile Long Press Logic
+    let touchStartTime = 0;
+    let touchStartElement = null;
+    let longPressTimer = null;
+  
+    document.addEventListener('touchstart', (e) => {
+      if (!currentEnabledState) return;
+      if (e.touches.length > 1) return;
+      touchStartTime = Date.now();
+      touchStartElement = e.target;
+      longPressTimer = setTimeout(() => {
+        // Show confirmation popup
+        if (confirm('🚫 Adblock Max:\nBạn có muốn chặn và ẩn vĩnh viễn quảng cáo/phần tử này không?')) {
+          let target = touchStartElement;
+          let depth = 0;
+          while (target && target !== document.body && depth < 3) {
+            if (target.tagName === 'A' || target.tagName === 'IFRAME') break;
+            const pos = window.getComputedStyle(target).position;
+            if (pos === 'fixed' || pos === 'absolute') break;
+            target = target.parentElement;
+            depth++;
+          }
+          blockElement(target || touchStartElement);
+        }
+      }, 800);
+    }, { passive: true });
+  
+    document.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+    
+    document.addEventListener('touchmove', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+  
+    function applyManualFilters(selectors) {
+      if (!selectors || selectors.length === 0) return;
+      let styleEl = document.getElementById('adblock-max-manual-filters');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'adblock-max-manual-filters';
+        document.documentElement.appendChild(styleEl);
+      }
+      const css = selectors.map(s => s + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }').join('\n');
+      styleEl.textContent = css;
+    }
+  
+    // Load filters on start
+    chrome.storage.local.get(['manualFilters'], (res) => {
+      const domain = window.location.hostname;
+      if (res.manualFilters && res.manualFilters[domain]) {
+        applyManualFilters(res.manualFilters[domain]);
+      }
+    });
+    // --- END MANUAL ELEMENT BLOCKER ---
 

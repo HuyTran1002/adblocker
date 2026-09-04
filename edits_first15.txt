@@ -1,0 +1,33 @@
+﻿
+planner_responses.txt:183:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Edit content.js\""}}]}
+planner_responses.txt:265:Files\\\\Code\\\\adblocker\\\\manifest.json\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Update 
+planner_responses.txt:349:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Update content.js 
+planner_responses.txt:368:Files\\\\Code\\\\adblocker\\\\inject.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Update inject.js 
+planner_responses.txt:545:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Add inset-0 to 
+planner_responses.txt:703:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Update genuine content 
+planner_responses.txt:820:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Expand 
+planner_responses.txt:907:Files\\\\Code\\\\adblocker\\\\inject.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Fix isClickjackOverlay 
+planner_responses.txt:1022:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Enhance ad detection in 
+planner_responses.txt:1162:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Add checkImg to 
+planner_responses.txt:1258:Files\\\\Code\\\\adblocker\\\\inject.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Update window.open in 
+planner_responses.txt:1298:Files\\\\Code\\\\adblocker\\\\inject.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Fix window.open syntax 
+planner_responses.txt:1419:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Fix 
+planner_responses.txt:1446:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Clean body blur 
+planner_responses.txt:1728:Files\\\\Code\\\\adblocker\\\\content.js\"","toolAction":"\"Editing 
+file\"","toolSummary":"\"Add popunder to 
+
+

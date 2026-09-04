@@ -29,6 +29,13 @@ chrome.runtime.onInstalled.addListener(() => {
   
   // Set badge background color
   chrome.action.setBadgeBackgroundColor({ color: "#FF4757" });
+  
+  // Create context menu for manual ad blocking
+  chrome.contextMenus.create({
+    id: "block_element",
+    title: "🚫 Chặn quảng cáo này (Adblock Max)",
+    contexts: ["all"]
+  });
 });
 
 
@@ -138,5 +145,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     
     sendResponse({ success: true });
+  }
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "block_element" && tab.id) {
+    chrome.tabs.sendMessage(tab.id, { type: "START_MANUAL_BLOCK" }, { frameId: info.frameId }, (res) => {
+      if (chrome.runtime.lastError) {
+        console.warn("Could not send START_MANUAL_BLOCK message to tab:", chrome.runtime.lastError);
+      }
+    });
   }
 });

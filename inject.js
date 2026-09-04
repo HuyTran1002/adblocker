@@ -399,7 +399,13 @@
             depth++;
           }
         }
-        // Do NOT fall back to document.querySelector('video') — too dangerous on multi-player pages
+        // Safe fallback: if there is only exactly ONE video on the page, play it!
+        if (!video) {
+          const allVideos = document.querySelectorAll('video');
+          if (allVideos.length === 1) {
+            video = allVideos[0];
+          }
+        }
       }
 
       if (video) {
@@ -421,14 +427,6 @@
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
-
-      // ── FAST-PATH (MUST BE FIRST) ──────────────────────────────────────────
-      // If the user clicked directly on a player element or any interactive control,
-      // allow the event IMMEDIATELY before any overlay or anchor scanning.
-      // This guarantees that NOTHING can block play/pause, seek, fullscreen, volume etc.
-      if (isPlayerOrPlayButton(target) || isInteractiveElement(target)) {
-        return;
-      }
 
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
@@ -492,6 +490,25 @@
           e.stopImmediatePropagation();
           reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
+          
+          if (isPlayerOrPlayButton(anchor)) {
+             console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
+             try { anchor.remove(); } catch(e) {}
+             
+             let isInternal = false;
+             try {
+                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
+                isInternal = targetHost === window.location.hostname.toLowerCase();
+             } catch(e) {}
+             
+             if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
+                 console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
+                 window.location.assign(anchor.href);
+                 return;
+             }
+             
+             toggleVideoPlayPause(target);
+          }
           return;
         }
       }
@@ -679,18 +696,25 @@
       if (!isPositioned) return false;
       
       const opacity = parseFloat(style.opacity);
-      const isTransparent = opacity < 0.35 || 
-                            style.backgroundColor === 'transparent' || 
-                            style.backgroundColor.includes('rgba(0, 0, 0, 0)') ||
-                            style.backgroundColor.includes('rgba(255, 255, 255, 0)');
+      let bgAlpha = 1;
+      const bgMatch = style.backgroundColor.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+      if (bgMatch && bgMatch[1]) {
+         bgAlpha = parseFloat(bgMatch[1]);
+      } else if (style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)') {
+         bgAlpha = 0;
+      }
+      
+      const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
       if (!isTransparent) return false;
 
       // Real overlay area check: spans a significant part of the viewport (or > 200x200)
       const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
       const zIndex = parseInt(style.zIndex, 10);
       const isHighZ = !isNaN(zIndex) && zIndex >= 10;
-
-      return isLargeArea && isHighZ;
+      
+      // Transparent absolute/fixed elements that are large and empty are ALWAYS clickjack overlays.
+      // Ad networks deliberately omit z-index to bypass adblockers, so we no longer require high z-index.
+      return isLargeArea;
     } catch (e) {
       return false;
     }
@@ -701,7 +725,7 @@
     '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
     'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88'
+    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88'
   ];
 
   const adUrlKeywords = [
@@ -711,7 +735,12 @@
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
     'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
-    '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link'
+    '\\\\?ab=', '&ab=', '&rl=', '\\\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
+    'playhubconnect.com', 'cm8806.com', 'linkroyal.workers.dev',
+    'abroadad.cache.wpscdn.com', 'propellerads',
+    'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
+    'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
+    '/static/video/bn/'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -840,11 +869,42 @@
       
       let curr = clickedEl;
       let overlay = null;
+      let isHiddenExternalLink = false;
+      
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
         if (isClickjackOverlay(curr)) {
           overlay = curr;
           break;
         }
+        
+        if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
+           const href = curr.getAttribute('href') || '';
+           try {
+             const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+             const currentHost = window.location.hostname.toLowerCase();
+             const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+             if (isExt) {
+               const text = curr.innerText || '';
+               if (text.trim().length === 0) {
+                 let hasVisibleMedia = false;
+                 const media = curr.querySelectorAll('img, svg, canvas, video, iframe, i, span[class*="icon"], div[class*="icon"]');
+                 for (let i = 0; i < media.length; i++) {
+                   const style = window.getComputedStyle(media[i]);
+                   if (style.display !== 'none' && style.opacity !== '0' && style.visibility !== 'hidden' && style.width !== '0px') {
+                     hasVisibleMedia = true;
+                     break;
+                   }
+                 }
+                 // If there's no visible content inside this external anchor, it's a click trap!
+                 if (!hasVisibleMedia) {
+                   isHiddenExternalLink = true;
+                   break;
+                 }
+               }
+             }
+           } catch(e) {}
+        }
+        
         curr = curr.parentElement;
       }
 
@@ -854,11 +914,16 @@
         try { overlay.remove(); } catch(e) {}
         return false;
       }
+      if (isHiddenExternalLink) {
+        reportBlocked(url || 'blank', `Blocked ${context} via invisible external link wrapper`);
+        return false;
+      }
+
 
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
       
-      // A play button/player click should NEVER open a new tab/window (window.open) or trigger _blank link redirects
-      if (isPlayerClick && (isWindowOpen || context.includes('_blank'))) {
+      // A play button/player click should NEVER open a new tab/window OR navigate to an external domain
+      if (isPlayerClick && (isWindowOpen || context.includes('_blank') || isExternal) && !isWhitelisted(url)) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
         return false;
       }
@@ -908,18 +973,23 @@
         }
       } catch (e) {
         return originalOpen.apply(this, arguments);
+
       }
     }
 
     if (!checkNavigationOrPopup(url, 'window.open')) {
-      // Return a dummy window proxy to prevent script crashes on calling methods/properties
+      let _closed = false;
       const dummyWindow = new Proxy({}, {
         get(targetProp, prop) {
-          if (prop === 'focus') return () => {};
-          if (prop === 'blur') return () => {};
-          if (prop === 'close') return () => {};
-          return dummyWindow;
-        }
+          if (prop === 'closed') return _closed;
+          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
+          if (prop === 'close') return () => { _closed = true; };
+          if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
+          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
+          if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
+          return undefined;
+        },
+        set() { return true; }
       });
       return dummyWindow;
     }
