@@ -58,14 +58,15 @@
     var lastYtReport = 0;
     function reportYtBlocked(reason) {
       if (window.top !== window.self) return; // Only count on main page, ignore child iframes / widgets
+      if (!window.location.href.includes('watch?v=')) return; // Only count when actually watching a video!
       var now = Date.now();
-      if (now - lastYtReport > 10000) { // Max 1 count per 10s on top window
+      if (now - lastYtReport > 10000) { // Max 1 count per 10s on video watch page
         lastYtReport = now;
         try {
           window.postMessage({
             type: 'ANTI_POPUP_BLOCKED_EVENT',
             url: 'YouTube Video Ad',
-            reason: reason || 'Quảng cáo YouTube bị triệt tiêu từ gốc'
+            reason: reason || 'Quảng cáo Video YouTube bị triệt tiêu từ gốc'
           }, '*');
         } catch(e) {}
       }
