@@ -80,8 +80,12 @@
       seen.add(obj);
 
       for (var i = 0; i < AD_KEYS.length; i++) {
-        if (AD_KEYS[i] in obj) {
-          delete obj[AD_KEYS[i]];
+        var key = AD_KEYS[i];
+        if (key in obj) {
+          if (key === 'adPlacements' || key === 'playerAds' || key === 'adSlots' || key === 'instreamAdBreak' || key === 'adPlacementRenderer') {
+            reportYtBlocked('Quảng cáo Video YouTube');
+          }
+          delete obj[key];
           removed++;
         }
       }
