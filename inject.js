@@ -93,9 +93,6 @@
           removed += sanitize(val, depth + 1, seen);
         }
       }
-      if (depth === 0 && removed > 0) {
-        reportYtBlocked();
-      }
       return removed;
     }
 
@@ -105,14 +102,16 @@
       try {
         if (typeof resp === 'string') {
           var parsed = JSON.parse(resp);
-          if (sanitize(parsed) > 0) {
-            reportYtBlocked();
+          if (parsed && (parsed.adPlacements || parsed.playerAds || parsed.instreamAdBreak)) {
+            reportYtBlocked('Quảng cáo Video YouTube');
           }
+          sanitize(parsed);
           return JSON.stringify(parsed);
         } else if (typeof resp === 'object') {
-          if (sanitize(resp) > 0) {
-            reportYtBlocked();
+          if (resp && (resp.adPlacements || resp.playerAds || resp.instreamAdBreak)) {
+            reportYtBlocked('Quảng cáo Video YouTube');
           }
+          sanitize(resp);
           return resp;
         }
       } catch(e) {}
@@ -306,11 +305,7 @@
       // 4. Rate-limited report
       if (now - lastReportTime > 15000) {
         lastReportTime = now;
-        window.postMessage({
-          type: 'ANTI_POPUP_BLOCKED_EVENT',
-          url: 'YouTube Video Ad',
-          reason: 'Ad eliminated by Adblock Max'
-        }, '*');
+        reportYtBlocked('Quảng cáo Video YouTube');
       }
     }
 
