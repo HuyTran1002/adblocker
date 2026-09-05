@@ -81,7 +81,14 @@ const adSelectors = [
   '[class*="kubet"]', '[class*="shbet"]', '[class*="789bet"]', '[class*="jun88"]',
   
   // Widgets
-  '.mgid-widget', '.taboola-ad', '.outbrain-ad', '.criteo-ad'
+  '.mgid-widget', '.taboola-ad', '.outbrain-ad', '.criteo-ad',
+
+  // uBlock & AdGuard standard cosmetic filter selectors
+  '[class*="popup-ad"]', '[id*="popup-ad"]', '[class*="modal-ad"]', '[id*="modal-ad"]',
+  '[class*="ad-overlay"]', '[id*="ad-overlay"]', '[class*="overlay-ad"]', '[id*="overlay-ad"]',
+  '[class*="ad_box"]', '[class*="ads_box"]', '[id*="ad_box"]', '[id*="ads_box"]',
+  '[class*="banner_ad"]', '[id*="banner_ad"]', '[class*="ads-banner"]', '[id*="ads-banner"]',
+  'div[id^="google_ads_"]', 'div[id^="div-gpt-ad-"]', 'ins.adsbygoogle'
 ];
 
 function injectAdBlockCSS() {
@@ -206,24 +213,45 @@ function injectYouTubeAdBlockCSS() {
       opacity: 0 !important;
       z-index: -9999 !important;
     }
-
-    /* Tắt hình ảnh quảng cáo ngay lập tức bằng CSS */
-    #movie_player.ad-showing .html5-video-container {
+    
+    /* Ẩn các banner quảng cáo tĩnh, cột phải, và quảng cáo tài trợ (Sponsorships) */
+    #masthead-ad,
+    ytd-rich-item-renderer.style-scope.ytd-rich-grid-row #content:has(ytd-ad-slot-renderer),
+    .ytd-display-ad-renderer,
+    ytd-action-companion-ad-renderer,
+    ytd-promoted-sparkles-web-renderer,
+    ytd-compact-promoted-video-renderer,
+    .ytd-video-masthead-ad-v3-renderer,
+    .ytd-promoted-video-renderer,
+    ytd-in-feed-ad-layout-renderer,
+    ytd-banner-promoted-video-renderer,
+    #player-ads,
+    #panels:has(ytd-ads-engagement-panel-content-renderer) {
+      display: none !important;
+      visibility: hidden !important;
       opacity: 0 !important;
-    }
-    #movie_player.ad-showing::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: #000 !important;
-      z-index: 3 !important;
+      width: 0 !important;
+      height: 0 !important;
       pointer-events: none !important;
     }
-
-    /* The black premium overlay covers the player visually, so we keep the native ad elements opaque
-       and clickable beneath it to prevent YouTube's bot detection from rejecting our clicks. */
   `;
   (document.head || document.documentElement).appendChild(style);
+}
+
+function injectCustomRulesCSS(customRules) {
+  let customStyle = document.getElementById('anti-popunder-custom-css');
+  if (!customRules || customRules.length === 0) {
+    if (customStyle) customStyle.remove();
+    return;
+  }
+  if (!customStyle) {
+    customStyle = document.createElement('style');
+    customStyle.id = 'anti-popunder-custom-css';
+    (document.head || document.documentElement).appendChild(customStyle);
+  }
+  try {
+    customStyle.textContent = `${customRules.join(',\n')} { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }`;
+  } catch(e) {}
 }
 
 let currentEnabledState = true;
@@ -242,7 +270,7 @@ function restoreBlockedElements() {
 }
 
 // Set attribute on <html> element so inject.js can read it and handle CSS injection
-function updateEnabledState(enabled, disabledDomains) {
+function updateEnabledState(enabled, disabledDomains, customRules) {
   const host = window.location.hostname.toLowerCase();
   customWhitelistedDomains = disabledDomains || [];
   const isWhitelisted = customWhitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
@@ -258,6 +286,7 @@ function updateEnabledState(enabled, disabledDomains) {
   const ytStyleTag = document.getElementById('anti-popunder-youtube-css');
   
   if (newState) {
+    injectCustomRulesCSS(customRules);
     if (window.location.hostname.includes('youtube.com')) {
       if (!ytStyleTag) {
         injectYouTubeAdBlockCSS();
@@ -270,6 +299,8 @@ function updateEnabledState(enabled, disabledDomains) {
   } else {
     if (styleTag) styleTag.remove();
     if (ytStyleTag) ytStyleTag.remove();
+    const customStyle = document.getElementById('anti-popunder-custom-css');
+    if (customStyle) customStyle.remove();
     restoreBlockedElements();
   }
 }
@@ -284,20 +315,22 @@ if (window.location.hostname.includes('youtube.com')) {
     // Get initial state and watch for updates
     if (isContextValid()) {
       try {
-        chrome.storage.local.get(['enabled', 'disabledDomains'], (result) => {
-          const isEnabled = result.enabled !== false; // true by default
+        chrome.storage.local.get(['enabled', 'disabledDomains', 'customBlockedSelectors'], (result) => {
+          const isEnabled = result.enabled !== false;
           const disabledDomains = result.disabledDomains || [];
-          updateEnabledState(isEnabled, disabledDomains);
+          const customRules = result.customBlockedSelectors || [];
+          updateEnabledState(isEnabled, disabledDomains, customRules);
         });
       } catch (e) {}
 
       try {
         chrome.storage.onChanged.addListener((changes, areaName) => {
           if (areaName === 'local') {
-            chrome.storage.local.get(['enabled', 'disabledDomains'], (result) => {
+            chrome.storage.local.get(['enabled', 'disabledDomains', 'customBlockedSelectors'], (result) => {
               const isEnabled = result.enabled !== false;
               const disabledDomains = result.disabledDomains || [];
-              updateEnabledState(isEnabled, disabledDomains);
+              const customRules = result.customBlockedSelectors || [];
+              updateEnabledState(isEnabled, disabledDomains, customRules);
             });
           }
         });
@@ -1130,41 +1163,7 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     });
   
-    // Mobile Long Press Logic
-    let touchStartTime = 0;
-    let touchStartElement = null;
-    let longPressTimer = null;
-  
-    document.addEventListener('touchstart', (e) => {
-      if (!currentEnabledState) return;
-      if (e.touches.length > 1) return;
-      touchStartTime = Date.now();
-      touchStartElement = e.target;
-      longPressTimer = setTimeout(() => {
-        // Show confirmation popup
-        if (confirm('🚫 Adblock Max:\nBạn có muốn chặn và ẩn vĩnh viễn quảng cáo/phần tử này không?')) {
-          let target = touchStartElement;
-          let depth = 0;
-          while (target && target !== document.body && depth < 3) {
-            if (target.tagName === 'A' || target.tagName === 'IFRAME') break;
-            const pos = window.getComputedStyle(target).position;
-            if (pos === 'fixed' || pos === 'absolute') break;
-            target = target.parentElement;
-            depth++;
-          }
-          blockElement(target || touchStartElement);
-        }
-      }, 800);
-    }, { passive: true });
-  
-    document.addEventListener('touchend', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-    
-    document.addEventListener('touchmove', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-  
+
     function applyManualFilters(selectors) {
       if (!selectors || selectors.length === 0) return;
       let styleEl = document.getElementById('adblock-max-manual-filters');

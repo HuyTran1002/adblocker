@@ -1,101 +1,277 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Adblock Max</title>
   <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
   <div class="app-container">
-    <!-- Header -->
-    <header class="header">
-      <div class="brand">
-        <img class="logo-icon" src="icon128.png" width="32" height="32" alt="Adblock Max">
-        <div class="brand-text">
-          <h1>Adblock Max</h1>
-          <span class="version">v2.6.9</span>
+    <!-- ================= MAIN VIEW ================= -->
+    <div class="view-panel active" id="main-view">
+      <!-- Header -->
+      <header class="header">
+        <div class="brand">
+          <img class="logo-icon" src="icon128.png" width="30" height="30" alt="Adblock Max">
+          <div class="brand-text">
+            <h1>Adblock Max</h1>
+            <span class="version">v3.2.0</span>
+          </div>
         </div>
-      </div>
-      
-      <!-- Sleek Toggle Switch -->
-      <label class="switch-container">
-        <input type="checkbox" id="power-toggle" checked>
-        <span class="slider"></span>
-      </label>
-    </header>
 
-    <!-- Main Status and Counter Card -->
-    <main class="main-content">
-      <div class="status-card" id="status-card">
-        <div class="glow-effect"></div>
-        <div class="status-header">
-          <span class="status-badge" id="status-badge">Đang bảo vệ</span>
-        </div>
-        
-        <div class="counter-container">
-          <div class="counter-value" id="blocked-count">0</div>
-          <div class="counter-label">Quảng cáo đã chặn</div>
-        </div>
-      </div>
-      
-      <!-- Site Toggle Card -->
-      <div class="site-toggle-container">
-        <span class="site-toggle-label" id="site-toggle-label">Chặn trên trang này</span>
-        <label class="switch-container">
-          <input type="checkbox" id="site-toggle" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <!-- Action Section -->
-      <section class="section">
-        <div class="section-title">
-          <span>Lịch sử chặn gần đây</span>
-          <button class="clear-btn" id="clear-history-btn" title="Xóa lịch sử">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <div class="header-controls">
+          <!-- Sleek Power Toggle Switch -->
+          <label class="switch-container" title="Bật/Tắt Adblock Max">
+            <input type="checkbox" id="power-toggle" checked>
+            <span class="slider"></span>
+          </label>
+          <!-- Settings Gear Button -->
+          <button class="icon-btn gear-btn" id="open-settings-btn" title="Cài đặt & Bộ lọc">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
           </button>
         </div>
-        <div class="history-list" id="history-list">
-          <!-- Dynamically populated or empty state -->
-          <div class="empty-state" id="empty-state">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            <p>Không phát hiện quảng cáo ẩn. Duyệt web an toàn!</p>
+      </header>
+
+      <!-- Main Status Card -->
+      <main class="main-content">
+        <div class="status-card" id="status-card">
+          <div class="status-header">
+            <span class="status-badge" id="status-badge">Đang bảo vệ</span>
+          </div>
+          <div class="counter-container">
+            <div class="counter-value" id="blocked-count">0</div>
+            <div class="counter-label">Quảng cáo đã chặn</div>
           </div>
         </div>
-      </section>
 
-      <!-- Whitelist Section -->
-      <section class="section">
-        <div class="section-title">
-          <span>Trang web tắt adblock</span>
+        <!-- Site Toggle Card -->
+        <div class="site-toggle-container">
+          <span class="site-toggle-label" id="site-toggle-label">Chặn trên trang này</span>
+          <label class="switch-container">
+            <input type="checkbox" id="site-toggle" checked>
+            <span class="slider"></span>
+          </label>
         </div>
-        <div class="whitelist-container" id="whitelist-container">
-          <div class="empty-whitelist" id="empty-whitelist">
-            Chưa có trang nào trong danh sách tắt.
+
+        <!-- Blocked History Section -->
+        <section class="section">
+          <div class="section-title">
+            <span>Lịch sử chặn gần đây</span>
+            <button class="clear-btn" id="clear-history-btn" title="Xóa lịch sử">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
           </div>
-          <div class="whitelist-tags" id="whitelist-tags"></div>
-        </div>
-      </section>
-    </main>
+          <div class="history-list" id="history-list">
+            <div class="empty-state" id="empty-state">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <p>Không phát hiện quảng cáo. Duyệt web an toàn!</p>
+            </div>
+          </div>
+        </section>
+      </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span>Bảo vệ thời gian thực</span>
-        <div class="pulse-indicator"></div>
+      <!-- Footer -->
+      <footer class="footer">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span>Bảo vệ thời gian thực</span>
+          <div class="pulse-indicator"></div>
+        </div>
+        <div class="author-tag">by <span>HuyTran1002</span></div>
+      </footer>
+    </div>
+
+    <!-- ================= SETTINGS VIEW ================= -->
+    <div class="view-panel" id="settings-view">
+      <!-- Settings Header -->
+      <header class="header settings-header">
+        <button class="icon-btn back-btn" id="close-settings-btn" title="Quay lại trang chính">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Trang chính</span>
+        </button>
+        <h2 class="settings-title">Cài Đặt & Bộ Lọc</h2>
+      </header>
+
+      <!-- Tab Navigation Buttons -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="tab-filters">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Bộ lọc
+        </button>
+        <button class="tab-btn" data-tab="tab-whitelist">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          Whitelist <span class="tab-badge" id="whitelist-count">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-custom">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Thủ công <span class="tab-badge" id="custom-count">0</span>
+        </button>
+      </nav>
+
+      <!-- Tab Content Panels -->
+      <div class="tab-content">
+        <!-- TAB 1: FILTERS LIST (like uBlock) -->
+        <div class="tab-pane active" id="tab-filters">
+          <div class="tab-pane-header">
+            <span class="pane-subtitle">Bộ lọc uBlock & AdGuard đang hoạt động</span>
+            <button class="update-all-btn" id="update-filters-btn" title="Cập nhật bộ lọc mới nhất">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <span id="update-btn-text">Cập nhật</span>
+            </button>
+          </div>
+
+          <div class="filter-list">
+            <div class="filter-item">
+              <div class="filter-info">
+                <span class="filter-icon">🛡️</span>
+                <div class="filter-names">
+                  <span class="filter-name">uBlock Filters</span>
+                  <span class="filter-rules-count">14,200 quy tắc</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Mới nhất</span>
+                <span class="update-icon" title="Mới nhất">✔️</span>
+              </div>
+            </div>
+
+            <div class="filter-item">
+              <div class="filter-info">
+                <span class="filter-icon">🛡️</span>
+                <div class="filter-names">
+                  <span class="filter-name">EasyList Ads</span>
+                  <span class="filter-rules-count">8,500 quy tắc</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Mới nhất</span>
+                <span class="update-icon" title="Mới nhất">✔️</span>
+              </div>
+            </div>
+
+            <div class="filter-item">
+              <div class="filter-info">
+                <span class="filter-icon">🛡️</span>
+                <div class="filter-names">
+                  <span class="filter-name">AdGuard Base</span>
+                  <span class="filter-rules-count">5,300 quy tắc</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Mới nhất</span>
+                <span class="update-icon" title="Mới nhất">✔️</span>
+              </div>
+            </div>
+
+            <div class="filter-item highlight">
+              <div class="filter-info">
+                <span class="filter-icon">🇻🇳</span>
+                <div class="filter-names">
+                  <span class="filter-name">ABPVN Việt Nam</span>
+                  <span class="filter-rules-count">Chặn phim VN, cờ bạc</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Mới nhất</span>
+                <span class="update-icon" title="Mới nhất">✔️</span>
+              </div>
+            </div>
+
+            <div class="filter-item highlight">
+              <div class="filter-info">
+                <span class="filter-icon">🎬</span>
+                <div class="filter-names">
+                  <span class="filter-name">YouTube Zero-Ad</span>
+                  <span class="filter-rules-count">v3.2.0 Scrubber</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Hoạt động</span>
+                <span class="update-icon" title="Đang chạy">⚡</span>
+              </div>
+            </div>
+
+            <div class="filter-item">
+              <div class="filter-info">
+                <span class="filter-icon">🚫</span>
+                <div class="filter-names">
+                  <span class="filter-name">Peter Lowe List</span>
+                  <span class="filter-rules-count">3,500 adservers</span>
+                </div>
+              </div>
+              <div class="filter-status">
+                <span class="status-dot online"></span>
+                <span class="status-text">Mới nhất</span>
+                <span class="update-icon" title="Mới nhất">✔️</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: WHITELIST (Trang bỏ qua) -->
+        <div class="tab-pane" id="tab-whitelist">
+          <div class="tab-pane-header">
+            <span class="pane-subtitle">Trang web không chặn quảng cáo</span>
+            <button class="add-current-site-btn" id="add-current-whitelist-btn">
+              + Trang hiện tại
+            </button>
+          </div>
+
+          <div class="input-row">
+            <input type="text" id="whitelist-input" placeholder="nhapdomain.com (vd: google.com)" />
+            <button class="action-btn" id="whitelist-add-btn">Thêm</button>
+          </div>
+
+          <div class="whitelist-box" id="whitelist-box">
+            <div class="empty-whitelist-msg" id="empty-whitelist-msg">
+              Chưa có trang nào trong danh sách trắng.
+            </div>
+            <div class="whitelist-tags-container" id="whitelist-tags-container"></div>
+          </div>
+        </div>
+
+        <!-- TAB 3: CUSTOM RULES (Chặn thủ công) -->
+        <div class="tab-pane" id="tab-custom">
+          <div class="tab-pane-header">
+            <span class="pane-subtitle">Quy tắc CSS & Phần tử chặn thủ công</span>
+            <button class="danger-btn-text" id="clear-custom-rules-btn">Xóa tất cả</button>
+          </div>
+
+          <div class="input-row">
+            <input type="text" id="custom-rule-input" placeholder="CSS selector (vd: .banner-quang-cao)" />
+            <button class="action-btn" id="custom-rule-add-btn">Thêm</button>
+          </div>
+
+          <div class="custom-rules-box" id="custom-rules-box">
+            <div class="empty-custom-msg" id="empty-custom-msg">
+              Chưa có quy tắc chặn thủ công nào. Bạn có thể nhấn chuột phải vào quảng cáo bất kỳ trên trang web và chọn "🚫 Chặn quảng cáo này".
+            </div>
+            <div class="custom-rules-container" id="custom-rules-container"></div>
+          </div>
+        </div>
       </div>
-      <div style="font-size: 9px; color: var(--text-mute); font-weight: 700; letter-spacing: 0.2px; text-transform: none;">
-        by <span style="color: var(--accent-color);">HuyTran1002</span>
-      </div>
-    </footer>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
+
 </html>

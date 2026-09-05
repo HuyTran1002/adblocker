@@ -4,7 +4,7 @@ let sessionStartTime = Date.now();
 
 // Initialize storage on install
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "sessionStartTime", "disabledDomains"], (result) => {
+  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "sessionStartTime", "disabledDomains", "lastFiltersUpdateTimestamp"], (result) => {
     const res = result || {};
     if (res.enabled === undefined) {
       chrome.storage.local.set({ enabled: true });
@@ -18,7 +18,9 @@ chrome.runtime.onInstalled.addListener(() => {
     if (res.disabledDomains === undefined) {
       chrome.storage.local.set({ disabledDomains: [] });
     }
-    // Reset history on new session/extension load to avoid memory buildup
+    if (res.lastFiltersUpdateTimestamp === undefined) {
+      chrome.storage.local.set({ lastFiltersUpdateTimestamp: Date.now() });
+    }
     sessionStartTime = Date.now();
     chrome.storage.local.set({ 
       blockedCount: 0,
@@ -38,7 +40,6 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-
 // Update extension badge text
 function updateBadge(count) {
   if (count > 0) {
@@ -52,7 +53,7 @@ function updateBadge(count) {
 function updateDeclarativeRules(disabledDomains) {
   if (!chrome.declarativeNetRequest) return;
   
-  const ruleId = 10001; // unique ID for our dynamic rule
+  const ruleId = 10001; // unique ID for whitelist rule
   
   if (!disabledDomains || disabledDomains.length === 0) {
     chrome.declarativeNetRequest.updateDynamicRules({
@@ -61,7 +62,7 @@ function updateDeclarativeRules(disabledDomains) {
   } else {
     const newRule = {
       id: ruleId,
-      priority: 3, // higher than all rules in rules.json (priority 1 or 2)
+      priority: 10, // higher than all block rules
       action: { type: "allow" },
       condition: {
         initiatorDomains: disabledDomains,
@@ -87,7 +88,102 @@ function updateRulesetState(enabled) {
   });
 }
 
-// Watch storage changes to update badge & dynamic allow rules
+// Real online filter updater (fetches uBlock / AdGuard / ABPVN latest filter lists via HTTP)
+async function fetchAndApplyOnlineFilters() {
+  const FILTER_SOURCES = [
+    { name: 'abpvn', url: 'https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt' },
+    { name: 'peterlowe', url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=nohtml&showintro=0&mimetype=plaintext' },
+    { name: 'adguard', url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt' }
+  ];
+
+  const domains = new Set();
+  const listCounts = { abpvn: 0, peterlowe: 0, adguard: 0 };
+
+  // Known top VN & global ad domains
+  [
+    'eclick.vn', 'adtima.vn', 'admicro.vn', 'ants.vn', 'novanet.vn',
+    'blueseed.tv', 'ambientdigital.com.vn', 'cleverads.vn', 'coccoc.com/ad',
+    'popads.net', 'popcash.net', 'propellerads.com', 'exoclick.com', 
+    'onclickads.net', 'adsterra.com', 'googlesyndication.com', 'doubleclick.net',
+    'mgid.com', 'taboola.com', 'outbrain.com', 'criteo.com', 'adnxs.com',
+    'juicyads.com', 'jads.co', '9splt.com', 'playhubconnect.com', 'cm8806.com'
+  ].forEach(d => domains.add(d));
+
+  for (const src of FILTER_SOURCES) {
+    try {
+      console.log(`[Adblock Max] Connecting to ${src.name} server (${src.url})...`);
+      const res = await fetch(src.url, { cache: 'no-cache' });
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.split(/\r?\n/);
+        let count = 0;
+        for (let l of lines) {
+          l = l.trim().toLowerCase();
+          if (!l || l.startsWith('#') || l.startsWith('!') || l.startsWith('[')) continue;
+          if (l.startsWith('||') && l.includes('^')) {
+            l = l.substring(2, l.indexOf('^')).trim();
+          }
+          if (l.length >= 4 && l.includes('.') && !l.includes('/') && !l.includes(':')) {
+            if (!l.includes('google') && !l.includes('youtube') && !l.includes('facebook') && !l.includes('github')) {
+              domains.add(l);
+              count++;
+            }
+          }
+        }
+        listCounts[src.name] = count;
+        console.log(`[Adblock Max] Successfully fetched ${count} domains from ${src.name}!`);
+      }
+    } catch(e) {
+      console.warn(`[Adblock Max] Could not fetch ${src.name}:`, e.message);
+    }
+  }
+
+  // Convert up to 4000 domains into dynamic block rules (safe Chrome MV3 dynamic limit)
+  if (chrome.declarativeNetRequest) {
+    try {
+      const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+      const removeIds = existingRules.filter(r => r.id >= 20000 && r.id < 30000).map(r => r.id);
+      
+      const newRules = [];
+      let ruleId = 20000;
+      for (const dom of Array.from(domains).slice(0, 4000)) {
+        newRules.push({
+          id: ruleId++,
+          priority: 2,
+          action: { type: "block" },
+          condition: {
+            urlFilter: `||${dom}^`,
+            resourceTypes: ["script", "sub_frame", "xmlhttprequest", "image", "media", "websocket", "other"]
+          }
+        });
+      }
+
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: removeIds,
+        addRules: newRules
+      });
+      console.log(`[Adblock Max] Applied ${newRules.length} dynamic declarativeNetRequest block rules.`);
+    } catch(e) {
+      console.warn('[Adblock Max] Dynamic rules update error:', e);
+    }
+  }
+
+  const now = Date.now();
+  const filterStats = {
+    lastUpdated: now,
+    totalDomains: domains.size,
+    counts: listCounts
+  };
+
+  chrome.storage.local.set({
+    lastFiltersUpdateTimestamp: now,
+    onlineFilterStats: filterStats
+  });
+
+  return { success: true, timestamp: now, stats: filterStats };
+}
+
+// Watch storage changes
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local") {
     if (changes.blockedCount) {
@@ -102,7 +198,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-// Initialize badge and declarative rules on startup
+// Initialize on startup
 chrome.storage.local.get(["blockedCount", "disabledDomains", "enabled"], (result) => {
   if (result) {
     if (result.blockedCount) {
@@ -116,13 +212,12 @@ chrome.storage.local.get(["blockedCount", "disabledDomains", "enabled"], (result
   }
 });
 
-// Listen for messages from content script
+// Listen for messages from content script & popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "AD_BLOCKED") {
     const blockedUrl = message.url || "quảng cáo ẩn";
     const domain = sender.tab && sender.tab.url ? new URL(sender.tab.url).hostname : "Trang web";
     
-    // Get and update count & history
     chrome.storage.local.get(["blockedCount", "blockedHistory"], (result) => {
       const res = result || {};
       const currentCount = res.blockedCount || 0;
@@ -135,7 +230,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now()
       };
       
-      // Keep last 15 items in history
       const newHistory = [newHistoryItem, ...history].slice(0, 15);
       
       chrome.storage.local.set({
@@ -145,6 +239,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     
     sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.type === "FETCH_LATEST_FILTERS") {
+    fetchAndApplyOnlineFilters().then(res => {
+      sendResponse(res);
+    }).catch(err => {
+      sendResponse({ success: false, error: err.message });
+    });
+    return true; // Keep channel open for async sendResponse
   }
 });
 
