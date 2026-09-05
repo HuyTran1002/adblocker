@@ -171,15 +171,30 @@
 
     // ===== LAYER 4: Intercept Fetch & XHR (SPA navigation 0-Wait) =====
     try {
-      var _origResponseJson = Response.prototype.json;
-      Response.prototype.json = function() {
-        return _origResponseJson.call(this).then(function(data) {
+      var _origFetch = window.fetch;
+      window.fetch = function(input, init) {
+        var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net') !== -1 || url.indexOf('/pagead/') !== -1)) {
+          return Promise.resolve(new Response('{}', {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'Content-Type': 'application/json' }
+          }));
+        }
+        return _origFetch.apply(this, arguments).then(function(response) {
           try {
-            if (data && typeof data === 'object') {
-              sanitize(data);
+            if (url && (url.indexOf('/youtubei/v1/player') !== -1 || url.indexOf('/youtubei/v1/next') !== -1)) {
+              return response.clone().json().then(function(data) {
+                sanitize(data);
+                return new Response(JSON.stringify(data), {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: response.headers
+                });
+              }).catch(function() { return response; });
             }
           } catch(e) {}
-          return data;
+          return response;
         });
       };
     } catch(e) {}
@@ -192,6 +207,23 @@
         return origXhrOpen.apply(this, arguments);
       };
       XMLHttpRequest.prototype.send = function() {
+        var url = this._ytUrl || '';
+        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net') !== -1 || url.indexOf('/pagead/') !== -1)) {
+          var self = this;
+          setTimeout(function() {
+            try {
+              Object.defineProperty(self, 'readyState', { value: 4, writable: true });
+              Object.defineProperty(self, 'status', { value: 200, writable: true });
+              Object.defineProperty(self, 'statusText', { value: 'OK', writable: true });
+              Object.defineProperty(self, 'responseText', { value: '{}', writable: true });
+              Object.defineProperty(self, 'response', { value: '{}', writable: true });
+              var evt = new Event('readystatechange');
+              self.dispatchEvent(evt);
+              if (typeof self.onload === 'function') self.onload();
+            } catch(e) {}
+          }, 10);
+          return;
+        }
         this.addEventListener('readystatechange', function() {
           if (this.readyState === 4) {
             try {

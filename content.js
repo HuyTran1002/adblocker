@@ -204,9 +204,11 @@ function injectYouTubeAdBlockCSS() {
   const style = document.createElement('style');
   style.id = 'anti-popunder-youtube-css';
   style.textContent = `
-    /* Hide anti-adblock enforcement popups ONLY (preserve YouTube Subscribe/Share dialogs) */
+    /* Hide anti-adblock enforcement popups & playability error screens */
     ytd-enforcement-message-renderer,
-    ytd-enforcement-message-view-model {
+    ytd-enforcement-message-view-model,
+    yt-playability-error-supported-renderers,
+    .ytp-error {
       position: absolute !important;
       top: -9999px !important;
       left: -9999px !important;
