@@ -455,6 +455,50 @@ if (window.location.hostname.includes('youtube.com')) {
       return false;
     }
 
+    // Protect movie posters and genuine content from being hidden
+    function isMoviePosterOrContent(el) {
+      if (!el || el.nodeType !== 1) return false;
+      try {
+        const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        const elId = (el.id || '').toLowerCase();
+        const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+
+        // Movie poster keywords
+        const movieKeywords = [
+          'movie', 'film', 'phim', 'poster', 'thumb', 'halim', 'item', 'card', 
+          'tray', 'grid', 'episode', 'tap', 'season', 'detail', 'info', 'media-body',
+          'entry-thumb', 'post-thumb', 'post-thumbnail', 'wp-post-image', 'avatar'
+        ];
+
+        if (movieKeywords.some(kw => elClass.includes(kw) || elId.includes(kw))) {
+          if (tag === 'img') {
+            const src = (el.src || '').toLowerCase();
+            const alt = (el.getAttribute('alt') || '').toLowerCase();
+            const isExplicitBetting = gamblingRegex.test(src) || gamblingRegex.test(alt) ||
+              ['nhacai', 'bet88', 'w88', 'fun88', 'fb88', 'kubet', 'shbet', '789bet', 'jun88', 'gamebai', 'casino', 'nohu'].some(kw => src.includes(kw) || alt.includes(kw));
+            if (!isExplicitBetting) return true;
+          } else {
+            return true;
+          }
+        }
+
+        // Check if inside any movie card / list / grid container
+        if (el.closest && el.closest('.movie-item, .film-item, .halim-item, .film_item, .item-movie, .item-film, .tray-item, .film-poster, .poster, .thumb, .entry-thumb, [class*="movie-item"], [class*="film-item"], [class*="halim-item"], [class*="item-film"], [class*="list-film"], [class*="list-movie"], [class*="movie-poster"], [class*="film-poster"], [class*="poster-film"]')) {
+          const img = tag === 'img' ? el : (el.querySelector && el.querySelector('img'));
+          if (img) {
+            const src = (img.src || '').toLowerCase();
+            const alt = (img.getAttribute('alt') || '').toLowerCase();
+            const isExplicitBetting = gamblingRegex.test(src) || gamblingRegex.test(alt) ||
+              ['nhacai', 'bet88', 'w88', 'fun88', 'fb88', 'kubet', 'shbet', '789bet', 'jun88', 'gamebai', 'casino', 'nohu'].some(kw => src.includes(kw) || alt.includes(kw));
+            if (!isExplicitBetting) return true;
+          } else {
+            return true;
+          }
+        }
+      } catch(e) {}
+      return false;
+    }
+
     // Shared helper to climb up and find the outermost widget/floating container
     function findOuterAdContainer(startEl) {
       let elementToHide = startEl;
@@ -463,7 +507,8 @@ if (window.location.hostname.includes('youtube.com')) {
 
       while (curr && curr !== document.body && curr !== document.documentElement && depth < 8) {
         depth++;
-        if (isVideoPlayerOrControls(curr)) break;
+        // STOP parent traversal immediately if we reach a video player or movie poster card!
+        if (isVideoPlayerOrControls(curr) || isMoviePosterOrContent(curr)) break;
 
         const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
         const currId = (curr.id || '').toLowerCase();
@@ -490,6 +535,8 @@ if (window.location.hostname.includes('youtube.com')) {
     // Completely remove and hide ad container
     function removeAndHideAdElement(el, url, reason) {
       if (!el || el.nodeType !== 1) return;
+      if (isMoviePosterOrContent(el)) return;
+
       el.setAttribute('data-ad-blocked', 'true');
       el.style.setProperty('display', 'none', 'important');
       el.style.setProperty('visibility', 'hidden', 'important');
@@ -520,6 +567,7 @@ if (window.location.hostname.includes('youtube.com')) {
       if (!isEnabled) return;
 
       if (isCurrentPageWhitelisted()) return;
+      if (isMoviePosterOrContent(el)) return;
 
       const currentDomain = window.location.hostname;
       const tagName = tag.toLowerCase();
@@ -544,6 +592,8 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
         try {
+          if (isMoviePosterOrContent(anchor)) return;
+
           const href = anchor.href || anchor.getAttribute('href') || '';
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
 
@@ -584,6 +634,8 @@ if (window.location.hostname.includes('youtube.com')) {
           if (matchesGambling || matchesAdServer || (isExternal && isAdRedirect) || rel.includes('sponsored') || hasAdAttributes) {
             isAd = true;
           } else if (hasImage) {
+            if (isMoviePosterOrContent(img)) return;
+
             const imgSrc = (img.src || '').toLowerCase();
             const imgAlt = (img.getAttribute('alt') || '').toLowerCase();
             
@@ -592,12 +644,8 @@ if (window.location.hostname.includes('youtube.com')) {
             } else if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
               const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => imgSrc.includes(kw)) ||
                                    imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-') ||
-                                   imgSrc.includes('/storage/files/') || imgSrc.includes('/media/ck/banners/') ||
-                                   imgSrc.includes('/images/banners/') || imgSrc.includes('/banners/') ||
-                                   imgSrc.includes('/banner/') || imgSrc.includes('/adv/') || imgSrc.includes('/qc/') ||
-                                   imgSrc.includes('banner-ads') ||
                                    gamblingRegex.test(imgSrc) || adUrlRegex.test(imgSrc) ||
-                                   ((isExternal || isAdRedirect || target === '_blank') && imgSrc.includes('.gif'));
+                                   ((isExternal || isAdRedirect || target === '_blank') && imgSrc.includes('.gif') && (gamblingRegex.test(imgSrc) || matchesGambling));
               if (imgMatchesAd) {
                 isAd = true;
               }
@@ -660,6 +708,8 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an img tag (safely ignores base64/blob)
       const checkImg = (img) => {
         if (img.hasAttribute('data-ad-blocked')) return;
+        if (isMoviePosterOrContent(img)) return;
+
         try {
           const src = (img.src || '').toLowerCase();
           const alt = (img.getAttribute('alt') || '').toLowerCase();
@@ -670,10 +720,6 @@ if (window.location.hostname.includes('youtube.com')) {
           } else if (!src.startsWith('data:') && !src.startsWith('blob:')) {
             imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
                            src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
-                           src.includes('/storage/files/') || src.includes('/media/ck/banners/') ||
-                           src.includes('/images/banners/') || src.includes('/banners/') ||
-                           src.includes('/banner/') || src.includes('/adv/') || src.includes('/qc/') ||
-                           src.includes('banner-ads') ||
                            gamblingRegex.test(src) || adUrlRegex.test(src);
           }
                                
@@ -687,6 +733,8 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to hide explicit ad elements by aria-label
       const hideExplicitAd = (el) => {
         if (!el || el.hasAttribute('data-ad-blocked')) return;
+        if (isMoviePosterOrContent(el)) return;
+
         try {
           if (isVideoPlayerOrControls(el)) return;
           const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
