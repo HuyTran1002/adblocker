@@ -985,7 +985,10 @@
     'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
     '/static/video/bn/', 'bdstatic', 'cpro', '51.la', 'cnzz', 'umeng', 'pstatp', 'tanx', 'alimama',
     'openinstall', 'appinstall', '/apk/', 'download.html?', '?from=ad', '?spm=', '/ad/', '/ads/',
-    '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php'
+    '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
+    'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
+    'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
+    'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -1036,7 +1039,7 @@
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return true;
 
     const isFormSubmit = context === 'form.submit';
-    const isAnchorClick = context === 'anchor.click' || context === 'anchor.click._blank';
+    const isAnchorClick = context.startsWith('anchor.');
     const isLocationChange = context === 'location change';
     const isWindowOpen = context === 'window.open';
 
@@ -1048,49 +1051,49 @@
       try {
         targetHost = new URL(url, window.location.href).hostname.toLowerCase();
         const currentHost = window.location.hostname.toLowerCase();
-        isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+        isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
       } catch(e) {
         isBlank = true;
       }
     }
 
-    // 1. If it explicitly matches ad/gambling keywords or popunder params, block it 100%
-    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url) || (url.includes('ab=') && url.includes('rl=')))) {
+    // 1. If it explicitly matches ad/gambling/adult/smartpop keywords, block it 100%
+    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url) || url.includes('smartpop') || (url.includes('ab=') && url.includes('rl=')))) {
       reportBlocked(url, `Blocked ad/popunder URL in ${context}`);
       return false;
     }
 
-    // 2. Location changes (window.location / replace / assign)
-    if (isLocationChange) {
-      if (isExternal && !isWhitelisted(url)) {
-        reportBlocked(url, `Blocked unrequested external location redirect (${context})`);
-        return false;
-      }
-      return true;
+    // 2. Block external form submissions unless whitelisted
+    if (isFormSubmit && isExternal && !isWhitelisted(url)) {
+      reportBlocked(url || 'external_form', `Blocked external form submit popup in ${context}`);
+      return false;
     }
 
-    // 3. Same-page form submissions and relative/whitelisted internal links
-    if (isFormSubmit && (!isExternal || isWhitelisted(url))) {
-      return true;
+    // 3. Block external location redirects (window.location / replace / assign)
+    if (isLocationChange && isExternal && !isWhitelisted(url)) {
+      reportBlocked(url || 'external_redirect', `Blocked unrequested external location redirect (${context})`);
+      return false;
     }
 
-    if (isAnchorClick && !context.includes('_blank') && (!isExternal || isWhitelisted(url))) {
-      return true;
-    }
-
-    // 4. Block external non-whitelisted popups or blank popup windows
+    // 4. Block external window.open or target="_blank" popups
     if ((isWindowOpen || context.includes('_blank')) && (isBlank || (isExternal && !isWhitelisted(url)))) {
       reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank popup in ${context}`);
       return false;
     }
 
-    // 5. If window.open is opening duplicate current page or relative ad redirect
+    // 5. Block programmatic external anchor clicks or dispatches
+    if (isAnchorClick && isExternal && !isWhitelisted(url)) {
+      reportBlocked(url || 'external_anchor', `Blocked programmatic external anchor popup in ${context}`);
+      return false;
+    }
+
+    // 6. If window.open is opening duplicate current page or relative ad redirect
     if (isWindowOpen && !isBlank && !isExternal) {
       try {
         const path = new URL(url, window.location.href).pathname.toLowerCase();
         const curPath = window.location.pathname.toLowerCase();
         const isDuplicatePage = (url === window.location.href || path === curPath) && context === 'window.open';
-        const isAdPath = adUrlRegex.test(url) || ['/click', '/out', '/go', '/redirect', '/pop', '/cpm'].some(kw => path.includes(kw));
+        const isAdPath = adUrlRegex.test(url) || ['/click', '/out', '/go', '/redirect', '/pop', '/cpm', '/jump'].some(kw => path.includes(kw));
 
         if (isDuplicatePage || isAdPath) {
           reportBlocked(url, `Blocked same-domain ad/duplicate window.open in ${context}`);
@@ -1099,16 +1102,15 @@
       } catch (e) {}
     }
 
+    // 7. If no recent user interaction, block all programmatic window.open or external popup actions
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
     const isRecentInteraction = timeSinceLastInteraction < 1000;
-
-    // 6. If no recent user interaction, block all programmatic window.open or external popup actions
-    if (!isRecentInteraction && isWindowOpen) {
-      reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
+    if (!isRecentInteraction && (isWindowOpen || isExternal)) {
+      reportBlocked(url || 'blank', `Blocked programmatic ${context} without user interaction`);
       return false;
     }
 
-    // 7. Detailed checks for overlays or player clicks
+    // 8. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
       
@@ -1125,9 +1127,9 @@
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
            const href = curr.getAttribute('href') || '';
            try {
-             const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-             const currentHost = window.location.hostname.toLowerCase();
-             const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+             const tHost = new URL(href, window.location.href).hostname.toLowerCase();
+             const cHost = window.location.hostname.toLowerCase();
+             const isExt = tHost && tHost !== cHost && !tHost.endsWith('.' + cHost);
              if (isExt) {
                const text = curr.innerText || '';
                if (text.trim().length === 0) {
@@ -1140,7 +1142,6 @@
                      break;
                    }
                  }
-                 // If there's no visible content inside this external anchor, it's a click trap!
                  if (!hasVisibleMedia) {
                    isHiddenExternalLink = true;
                    break;
@@ -1153,7 +1154,6 @@
         curr = curr.parentElement;
       }
 
-      // If clicked on an overlay, block it
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
         try { overlay.remove(); } catch(e) {}
@@ -1164,10 +1164,7 @@
         return false;
       }
 
-
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
-      
-      // A play button/player click should NEVER open a new tab/window OR navigate to an external domain
       if (isPlayerClick && (isWindowOpen || context.includes('_blank') || isExternal) && !isWhitelisted(url)) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
         return false;
