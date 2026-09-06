@@ -949,14 +949,13 @@
       const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
       if (!isTransparent) return false;
 
-      // Real overlay area check: spans a significant part of the viewport (or > 200x200)
-      const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
+      // Real overlay area check: covers large area OR is a transparent positioned external link OR cursor-following trap
+      const isLargeArea = (width >= 150 && height >= 150) || (width >= vw * 0.3 && height >= vh * 0.3);
       const zIndex = parseInt(style.zIndex, 10);
-      const isHighZ = !isNaN(zIndex) && zIndex >= 10;
+      const isHighZ = !isNaN(zIndex) && zIndex >= 5;
+      const isFloatingTrap = isPositioned && isTransparent && (isHighZ || tagName === 'a' || isLargeArea);
       
-      // Transparent absolute/fixed elements that are large and empty are ALWAYS clickjack overlays.
-      // Ad networks deliberately omit z-index to bypass adblockers, so we no longer require high z-index.
-      return isLargeArea;
+      return isLargeArea || isFloatingTrap;
     } catch (e) {
       return false;
     }
@@ -967,22 +966,26 @@
     '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
     'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88'
+    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88',
+    'macau', 'lasvegas', 'bbin', '\\bag\\b', '\\bmg\\b', '\\bpt\\b', '\\bpg\\b', 'cq9', 'jdb', 'vr',
+    '\\bbg\\b', '\\bky\\b', 'lebo', '\\bog\\b', 'ebet', 'allbet', 'kaiyuan', 'sbobet', '\\bsbo\\b',
+    'cmd368', '\\bim\\b', '\\btf\\b', 'crown', 'shengli', 'bet365', 'vwin', 'dafabet', '12bet',
+    'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot'
   ];
 
   const adUrlKeywords = [
     'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
-    'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
+    'clktag', 'exoclick', 'eclick', 'novanet', 'adsterra', 'popads', 'popcash',
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
     'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
     '\\\\?ab=', '&ab=', '&rl=', '\\\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
-    'playhubconnect.com', 'cm8806.com', 'linkroyal.workers.dev',
-    'abroadad.cache.wpscdn.com', 'propellerads',
-    'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
-    'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
-    '/static/video/bn/'
+    'playhubconnect', 'cm8806', 'linkroyal', 'abroadad', 'streamvl', 'xiazai', 'pan666',
+    'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
+    '/static/video/bn/', 'bdstatic', 'cpro', '51.la', 'cnzz', 'umeng', 'pstatp', 'tanx', 'alimama',
+    'openinstall', 'appinstall', '/apk/', 'download.html?', '?from=ad', '?spm=', '/ad/', '/ads/',
+    '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -1393,7 +1396,7 @@
     }, 1000);
   }
 
-  // Bulletproof override of HTMLAnchorElement.prototype.click
+  // Bulletproof override of HTMLAnchorElement.prototype.click & EventTarget.prototype.dispatchEvent
   if (!isYouTube) {
     try {
       Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
@@ -1427,6 +1430,67 @@
         return originalClick.apply(this, arguments);
       };
     }
+
+    // Intercept synthetic/programmatic event dispatches on <a> links to prevent ad redirects
+    try {
+      const origDispatch = EventTarget.prototype.dispatchEvent;
+      EventTarget.prototype.dispatchEvent = function(event) {
+        if (event && (event.type === 'click' || event.type === 'mouseup' || event.type === 'pointerup')) {
+          if (this instanceof HTMLAnchorElement || (this.tagName && this.tagName.toLowerCase() === 'a')) {
+            const href = this.href || this.getAttribute('href') || '';
+            const isBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
+            if (!checkNavigationOrPopup(href, isBlank ? 'anchor.dispatchEvent._blank' : 'anchor.dispatchEvent')) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopPropagation) event.stopPropagation();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return false;
+            }
+          }
+        }
+        return origDispatch.apply(this, arguments);
+      };
+    } catch(e) {}
+
+    // Global Main World capture-phase click interceptor
+    window.addEventListener('click', function(e) {
+      if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
+      try {
+        const target = e.target;
+        if (!target) return;
+
+        let anchor = null;
+        let curr = target;
+        while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+          if (isClickjackOverlay(curr)) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            try { curr.remove(); } catch(err) {}
+            reportBlocked('overlay', 'Blocked clickjack overlay in capture phase');
+            return;
+          }
+          if (curr.tagName === 'A' || curr instanceof HTMLAnchorElement) {
+            anchor = curr;
+            break;
+          }
+          curr = curr.parentElement;
+        }
+
+        if (anchor) {
+          const href = anchor.href || anchor.getAttribute('href') || '';
+          if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+            const isBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+            if (!checkNavigationOrPopup(href, isBlank ? 'anchor.click._blank' : 'anchor.click')) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              reportBlocked(href, 'Blocked external popunder/ad anchor click');
+              return;
+            }
+          }
+        }
+      } catch(err) {}
+    }, true);
   }
 
   // Bulletproof override of HTMLFormElement.prototype.submit
