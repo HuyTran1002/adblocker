@@ -980,19 +980,23 @@
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
     'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
-    '\\\\?ab=', '&ab=', '&rl=', '\\\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
+    'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
     'playhubconnect', 'cm8806', 'linkroyal', 'abroadad', 'streamvl', 'xiazai', 'pan666',
     'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
     '/static/video/bn/', 'bdstatic', 'cpro', '51.la', 'cnzz', 'umeng', 'pstatp', 'tanx', 'alimama',
-    'openinstall', 'appinstall', '/apk/', 'download.html?', '?from=ad', '?spm=', '/ad/', '/ads/',
+    'openinstall', 'appinstall', '/apk/', 'download.html', 'from=ad', 'spm=', '/ad/', '/ads/',
     '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
     'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
     'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
     'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn'
   ];
 
-  const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
-  const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
+  function safeEscapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  const gamblingRegex = new RegExp(gamblingKeywords.map(k => k.startsWith('\\b') ? k : safeEscapeRegex(k)).join('|'), 'i');
+  const adUrlRegex = new RegExp(adUrlKeywords.map(safeEscapeRegex).join('|'), 'i');
 
   function isWhitelisted(urlStr) {
     if (!urlStr) return false;

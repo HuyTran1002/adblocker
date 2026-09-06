@@ -368,62 +368,58 @@ if (window.location.hostname.includes('youtube.com')) {
     }
     window.addEventListener('message', onInjectMessage);
 
-    // Clickjacking protection disabled in content.js to avoid false positives
-    // inject.js now handles popup/redirect blocking with window.open override
-    // and HTMLAnchorElement.prototype.click override, which is more reliable
-    // and prevents legitimate movie site clicks from being blocked.
-
-    // Dynamic ad scanner logic (to handle banners, catfish and betting ads)
     const gamblingKeywords = [
       '\\bbet\\b', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
       '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
       'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
       'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-      'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88',
-      'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin', 
-      'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88'
+      'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88',
+      'macau', 'lasvegas', 'bbin', '\\bag\\b', '\\bmg\\b', '\\bpt\\b', '\\bpg\\b', 'cq9', 'jdb', 'vr',
+      '\\bbg\\b', '\\bky\\b', 'lebo', '\\bog\\b', 'ebet', 'allbet', 'kaiyuan', 'sbobet', '\\bsbo\\b',
+      'cmd368', '\\bim\\b', '\\btf\\b', 'crown', 'shengli', 'bet365', 'vwin', 'dafabet', '12bet',
+      'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot'
     ];
 
     const adUrlKeywords = [
       'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
-      'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
+      'clktag', 'exoclick', 'eclick', 'novanet', 'adsterra', 'popads', 'popcash',
       'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
       'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
       'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
       'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
-      '\\?ab=', '&ab=', '&rl=', '\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
-      'playhubconnect.com', 'cm8806.com', 'linkroyal.workers.dev',
-      'abroadad.cache.wpscdn.com', 'propellerads',
-      'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
-      'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
-      '/static/video/bn/'
+      'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
+      'playhubconnect', 'cm8806', 'linkroyal', 'abroadad', 'streamvl', 'xiazai', 'pan666',
+      'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
+      '/static/video/bn/', 'bdstatic', 'cpro', '51.la', 'cnzz', 'umeng', 'pstatp', 'tanx', 'alimama',
+      'openinstall', 'appinstall', '/apk/', 'download.html', 'from=ad', 'spm=', '/ad/', '/ads/',
+      '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
+      'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
+      'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
+      'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn'
     ];
 
-    // Compile regexes once for high-performance scanning
-    const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
-    const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
+    function safeEscapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
 
-    // Helper to check if a video is actually an ad
-    function isAdVideo(video) {
-      if (!video) return false;
+    const gamblingRegex = new RegExp(gamblingKeywords.map(k => k.startsWith('\\b') ? k : safeEscapeRegex(k)).join('|'), 'i');
+    const adUrlRegex = new RegExp(adUrlKeywords.map(safeEscapeRegex).join('|'), 'i');
+
+    function isAdVideo(videoEl) {
+      if (!videoEl) return false;
       try {
-        const src = (video.src || '').toLowerCase();
-        const poster = (video.getAttribute('poster') || '').toLowerCase();
-        return ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw) || poster.includes(kw)) ||
-               src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
-               poster.includes('/ads/') || poster.includes('_ad_') || poster.includes('-ad-') ||
-               gamblingRegex.test(src) || gamblingRegex.test(poster) ||
-               adUrlRegex.test(src) || adUrlRegex.test(poster);
-      } catch(e) {
+        const src = (videoEl.src || videoEl.currentSrc || '').toLowerCase();
+        if (!src) return false;
+        return adUrlRegex.test(src) || gamblingRegex.test(src);
+      } catch (e) {
         return false;
       }
     }
 
-    // Helper to check if element is a video player, video control bar, or time/progress display
     function isVideoPlayerOrControls(el) {
-      if (!el || el === document || el === document.body || el === document.documentElement) return false;
+      if (!el || el.nodeType !== 1) return false;
       try {
-        const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        const tag = el.tagName.toLowerCase();
         if (['audio', 'canvas', 'source', 'track'].includes(tag)) return true;
         if (tag === 'video' && !isAdVideo(el)) return true;
         
