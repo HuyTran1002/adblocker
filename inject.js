@@ -178,7 +178,7 @@
       var _origFetch = window.fetch;
       window.fetch = function(input, init) {
         var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
-        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net') !== -1 || url.indexOf('/pagead/') !== -1)) {
+        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net/pagead') !== -1)) {
           return Promise.resolve(new Response('{}', {
             status: 200,
             statusText: 'OK',
@@ -187,15 +187,20 @@
         }
         return _origFetch.apply(this, arguments).then(function(response) {
           try {
-            if (url && (url.indexOf('/youtubei/v1/player') !== -1 || url.indexOf('/youtubei/v1/next') !== -1)) {
-              return response.clone().json().then(function(data) {
-                sanitize(data);
-                return new Response(JSON.stringify(data), {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: response.headers
-                });
-              }).catch(function() { return response; });
+            if (response && response.status === 200 && url && (url.indexOf('/youtubei/v1/player') !== -1 || url.indexOf('/youtubei/v1/next') !== -1)) {
+              var contentType = response.headers ? response.headers.get('content-type') : '';
+              if (!contentType || contentType.indexOf('json') !== -1) {
+                return response.clone().json().then(function(data) {
+                  if (data && typeof data === 'object') {
+                    sanitize(data);
+                  }
+                  return new Response(JSON.stringify(data), {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers
+                  });
+                }).catch(function() { return response; });
+              }
             }
           } catch(e) {}
           return response;
