@@ -1,539 +1,319 @@
-window.__cfRLUnblockHandlers = true;
-try { window.hide_catfix = function() { return false; }; } catch(e) {}
 (function() {
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
-  // Defuse site-level popunder scripts (such as phimhdc / streamxemphimhd) by setting and spoofing popup cookies
-  try {
-    if (typeof document !== 'undefined') {
-      try { document.cookie = 'popupOpened=true; path=/; max-age=31536000'; } catch(e) {}
-      try { document.cookie = 'popcounter=9999; path=/; max-age=31536000'; } catch(e) {}
-      const origCookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
-                              Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
-      if (origCookieDesc && origCookieDesc.get) {
-        Object.defineProperty(document, 'cookie', {
-          get() {
-            const val = origCookieDesc.get.call(this) || '';
-            let res = val;
-            if (!res.includes('popupOpened=true')) res = res ? (res + '; popupOpened=true') : 'popupOpened=true';
-            if (!res.includes('popcounter=')) res = res ? (res + '; popcounter=9999') : 'popcounter=9999';
-            return res;
-          },
-          set(val) {
-            return origCookieDesc.set.call(this, val);
-          },
-          configurable: true
-        });
-      }
-    }
-  } catch(e) {}
 
-
-  // ================================================================
-  // YOUTUBE AD ELIMINATOR v3.4.1 (AdGuard / uBlock Core Protocol)
-  // Strategy: Intercept player configuration at API layer
-  // (Response.prototype.json, targeted JSON.parse & Global window properties)
-  // to prune ad metadata before player initialization.
-  // Video player starts directly with main video without loading ad videos.
-  // ================================================================
+  // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function() {
-    if (!window.location.hostname.includes('youtube.com')) return;
-    console.log('[Adblock Max] YouTube Deep Engine v3.4.1 (AdGuard Protocol) initialized.');
+    if (window.location.hostname.includes('youtube.com') || 
+        window.location.hostname.includes('google') || 
+        window.location.hostname.includes('doubleclick')) return;
 
-    // ===== LAYER 1: CSS - Instant Cosmetic Ad Elimination =====
-    const adCSS = document.createElement('style');
-    adCSS.textContent = `
-      .ad-showing .video-ads,
-      .ad-showing .ytp-ad-module,
-      .ytp-ad-overlay-container,
-      .ytp-ad-text-overlay,
-      .ytp-ad-skip-button-container,
-      .ytp-ad-player-overlay,
-      .ytp-ad-action-interstitial,
-      .ytp-ad-message-container,
-      .ytp-ad-persistent-progress-bar-container,
-      .ytp-ad-overlay-image,
-      ytd-display-ad-renderer,
-      ytd-promoted-sparkles-web-renderer,
-      ytd-promoted-video-renderer,
-      ytd-compact-promoted-video-renderer,
-      ytd-banner-promo-renderer,
-      ytd-statement-banner-renderer,
-      ytd-in-feed-ad-layout-renderer,
-      ytd-ad-slot-renderer,
-      #player-ads,
-      #masthead-ad,
-      ytd-enforcement-message-view-model,
-      tp-yt-iron-overlay-backdrop,
-      tp-yt-paper-dialog:has(#dismiss-button) {
-        display: none !important;
-      }
-      .ad-showing .ytp-ad-player-overlay-instream-info,
-      .ad-showing .ytp-ad-simple-ad-badge,
-      .ad-showing .ytp-ad-visit-advertiser-button {
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-    `;
-    (document.head || document.documentElement).appendChild(adCSS);
-
-    var lastYtReport = 0;
-    function reportYtBlocked(reason) {
-      if (window.top !== window.self) return;
-      if (!window.location.href.includes('watch?v=') && !window.location.href.includes('shorts/')) return;
-      var now = Date.now();
-      if (now - lastYtReport > 10000) {
-        lastYtReport = now;
-        try {
-          window.postMessage({
-            type: 'ANTI_POPUP_BLOCKED_EVENT',
-            url: 'YouTube Video Ad',
-            reason: reason || 'Quảng cáo Video YouTube bị triệt tiêu từ gốc (AdGuard Core)'
-          }, '*');
-        } catch(e) {}
-      }
-    }
-
-    // ===== LAYER 2: Targeted JSON Pruner (uBlock & AdGuard standard) =====
-    const AD_KEYS = [
-      'adPlacements', 'playerAds', 'adSlots',
-      'adBreakHeartbeatParams', 'adSlotLoggingData',
-      'instreamAdBreak', 'adBreakParams', 'adPlacementRenderer',
-      'playerAdParams', 'adTagUrl', 'vmap'
+    const falsyProps = [
+      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker', 
+      'isAdblock', 'isAdBlock', 'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled'
     ];
-
-    function pruneObject(obj, depth) {
-      if (!obj || typeof obj !== 'object') return;
-      if (!depth) depth = 0;
-      if (depth > 8) return;
-
-      for (var i = 0; i < AD_KEYS.length; i++) {
-        var k = AD_KEYS[i];
-        if (k in obj) {
-          delete obj[k];
-          reportYtBlocked('Quảng cáo Video YouTube (Metadata Pruned)');
-        }
-      }
-
-      var keys = Object.keys(obj);
-      for (var j = 0; j < keys.length; j++) {
-        var val = obj[keys[j]];
-        if (val && typeof val === 'object') {
-          pruneObject(val, depth + 1);
-        }
-      }
-    }
-
-    function prunePlayerResponse(resp) {
-      if (!resp) return resp;
-      if (typeof resp === 'object') {
-        pruneObject(resp, 0);
-        return resp;
-      }
-      if (typeof resp === 'string') {
-        try {
-          var parsed = JSON.parse(resp);
-          if (parsed && typeof parsed === 'object') {
-            pruneObject(parsed, 0);
-            return JSON.stringify(parsed);
-          }
-        } catch(e) {}
-      }
-      return resp;
-    }
-
-    // 1. Exact AdGuard / uBlock Proxy for window.fetch
-    try {
-      if (typeof window.fetch === 'function' && typeof Proxy !== 'undefined' && typeof Response !== 'undefined') {
-        var isYtPlayerUrl = function(url) {
-          if (typeof url !== 'string') return false;
-          return url.includes('/youtubei/v1/player') || 
-                 url.includes('/youtubei/v1/next') || 
-                 url.includes('/playlist?list=') || 
-                 url.includes('player?') || 
-                 url.includes('watch?v=');
-        };
-
-        var forgeResponse = function(original, text) {
-          var v = new Response(text, {
-            status: original.status,
-            statusText: original.statusText,
-            headers: original.headers
-          });
-          return Object.defineProperties(v, {
-            url: { value: original.url },
-            type: { value: original.type },
-            ok: { value: original.ok },
-            bodyUsed: { value: original.bodyUsed },
-            redirected: { value: original.redirected }
-          }), v;
-        };
-
-        window.fetch = new Proxy(window.fetch, {
-          apply: async function(target, thisArg, args) {
-            var req = args[0];
-            var url = typeof req === 'string' ? req : (req && req.url ? req.url : '');
-            
-            if (!isYtPlayerUrl(url)) {
-              return Reflect.apply(target, thisArg, args);
-            }
-
-            var originalResponse;
-            var clonedResponse;
-            try {
-              originalResponse = await Reflect.apply(target, thisArg, args);
-              clonedResponse = originalResponse.clone();
-            } catch(e) {
-              return Reflect.apply(target, thisArg, args);
-            }
-
-            var json;
-            try {
-              json = await originalResponse.json();
-            } catch(e) {
-              return clonedResponse;
-            }
-
-            if (json && typeof json === 'object') {
-              pruneObject(json, 0);
-              try {
-                var modifiedText = JSON.stringify(json);
-                return forgeResponse(originalResponse, modifiedText);
-              } catch(e) {
-                return clonedResponse;
-              }
-            }
-
-            return clonedResponse;
-          }
-        });
-      }
-    } catch(e) {}
-
-    // 2. XMLHttpRequest Hook (for legacy or embedded YouTube player calls)
-    try {
-      if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
-        var _origXhrOpen = XMLHttpRequest.prototype.open;
-        var _origXhrSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.open = function(method, url) {
-          this._adblockUrl = typeof url === 'string' ? url : '';
-          return _origXhrOpen.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.send = function() {
-          if (this._adblockUrl && (this._adblockUrl.includes('/player') || this._adblockUrl.includes('/next'))) {
-            this.addEventListener('readystatechange', function() {
-              if (this.readyState === 4 && this.responseText) {
-                try {
-                  var data = JSON.parse(this.responseText);
-                  if (data && typeof data === 'object') {
-                    pruneObject(data, 0);
-                    var modified = JSON.stringify(data);
-                    Object.defineProperty(this, 'responseText', { value: modified, configurable: true });
-                    Object.defineProperty(this, 'response', { value: modified, configurable: true });
-                  }
-                } catch(e) {}
-              }
-            }, true);
-          }
-          return _origXhrSend.apply(this, arguments);
-        };
-      }
-    } catch(e) {}
-
-    // 3. Hook Response.prototype.json (Fetch API intercept without replacing Response object)
-    try {
-      if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
-        var _origResponseJson = Response.prototype.json;
-        Response.prototype.json = function() {
-          return _origResponseJson.apply(this, arguments).then(function(data) {
-            if (data && typeof data === 'object') {
-              if (data.adPlacements || data.playerAds || data.adSlots || (data.playerResponse && (data.playerResponse.adPlacements || data.playerResponse.playerAds))) {
-                pruneObject(data, 0);
-              }
-            }
-            return data;
-          });
-        };
-      }
-    } catch(e) {}
-
-    // 4. Safe targeted JSON.parse hook (only prunes objects containing ad structures)
-    try {
-      var _origJsonParse = JSON.parse;
-      JSON.parse = function(text, reviver) {
-        var data = _origJsonParse.apply(this, arguments);
-        if (data && typeof data === 'object') {
-          if (data.adPlacements || data.playerAds || data.adSlots || (data.playerResponse && (data.playerResponse.adPlacements || data.playerResponse.playerAds))) {
-            pruneObject(data, 0);
-          }
-        }
-        return data;
-      };
-    } catch(e) {}
-
-    // 5. Hook Global window player objects (Full page loads)
-    function hookGlobal(prop) {
-      var val = window[prop];
-      if (val && typeof val === 'object') {
-        pruneObject(val, 0);
-      }
+    falsyProps.forEach(prop => {
       try {
         Object.defineProperty(window, prop, {
-          get: function() {
-            if (val && typeof val === 'object') {
-              pruneObject(val, 0);
+          get() { return false; },
+          set(val) { /* ignore */ },
+          configurable: true
+        });
+      } catch(e) {}
+    });
+
+    const mockGlobals = {
+      adsbygoogle: [],
+      google_ad_client: 'ca-pub-mock',
+      google_ad_slot: '1234567890',
+      google_ad_width: 728,
+      google_ad_height: 90,
+      google_analytics: { getTracker: () => ({ _trackPageview: () => {} }) },
+      ga: function() { if (arguments[0] && typeof arguments[arguments.length - 1] === 'function') { try { arguments[arguments.length - 1](); } catch(e){} } },
+      gaClassic: {},
+      _gaq: { push: function(arr) { if (arr && arr[0] === '_setCallback' && typeof arr[1] === 'function') { try { arr[1](); } catch(e){} } } },
+      AdProvider: { push: function() {} },
+      VideoSlider: { init: function() {} },
+      univresalP: function() {},
+      pickDirect: function() { console.log('[Anti Pop-Under] Blocked pickDirect ad overlay'); }
+    };
+    
+    Object.keys(mockGlobals).forEach(key => {
+      try {
+        if (!(key in window)) {
+          window[key] = mockGlobals[key];
+        }
+      } catch(e) {}
+    });
+
+    try {
+      const dummyAdProvider = { push: function() {} };
+      Object.defineProperty(window, 'AdProvider', {
+        get() { return dummyAdProvider; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+      const dummyVideoSlider = { init: function() {} };
+      Object.defineProperty(window, 'VideoSlider', {
+        get() { return dummyVideoSlider; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+      Object.defineProperty(window, 'pickDirect', {
+        get() { return function() { console.log('[Anti Pop-Under] Neutralized pickDirect ad'); }; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+
+      // Safety patch for jQuery .position() on movie sites (e.g. animevietsub home-v1.js:373)
+      // Prevents: "TypeError: Cannot read properties of undefined (reading 'top')" when active episode is not found
+      function patchJQuery(jq) {
+        if (jq && jq.fn && jq.fn.position && !jq.fn.position._safePatched) {
+          const origPos = jq.fn.position;
+          jq.fn.position = function() {
+            if (!this[0]) {
+              return { top: 0, left: 0 };
             }
-            return val;
-          },
-          set: function(newVal) {
-            if (newVal && typeof newVal === 'object') {
-              pruneObject(newVal, 0);
-              if (newVal.config && newVal.config.args) {
-                if (newVal.config.args.raw_player_response) {
-                  newVal.config.args.raw_player_response = prunePlayerResponse(newVal.config.args.raw_player_response);
-                }
-                if (newVal.config.args.player_response) {
-                  newVal.config.args.player_response = prunePlayerResponse(newVal.config.args.player_response);
-                }
-              }
+            return origPos.apply(this, arguments) || { top: 0, left: 0 };
+          };
+          jq.fn.position._safePatched = true;
+        }
+      }
+
+      let _jq = window.jQuery;
+      if (_jq) patchJQuery(_jq);
+      Object.defineProperty(window, 'jQuery', {
+        get() { return _jq; },
+        set(val) {
+          _jq = val;
+          patchJQuery(val);
+        },
+        configurable: true,
+        enumerable: true
+      });
+
+      let _dollar = window.$;
+      if (_dollar) patchJQuery(_dollar);
+      Object.defineProperty(window, '$', {
+        get() { return _dollar; },
+        set(val) {
+          _dollar = val;
+          patchJQuery(val);
+        },
+        configurable: true,
+        enumerable: true
+      });
+      // End mock globals
+    } catch(e) {}
+
+    function isAdUrl(urlStr) {
+      if (!urlStr) return false;
+      try {
+        const lower = String(urlStr).toLowerCase();
+        const keywords = [
+          'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads', 
+          'popcash', 'propellerads', 'exoclick', 'clktag', 'onclickads', 'exdynsrv', 
+          'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo', 
+          'highperformancegate', 'highcpmgate', 'greatcpmgate', 'eclick.vn', 'novanet.vn',
+          'magsrv.com', 'mnaspm.com', 'mayzaent.com', 'prplad.com', 'monetag.com', 'smartpop',
+          'ev-player.js', '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
+          'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip'
+        ];
+        return keywords.some(kw => lower.includes(kw));
+      } catch(e) {
+        return false;
+      }
+    }
+
+    try {
+      const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+      if (srcDescriptor && srcDescriptor.set) {
+        Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+          get: srcDescriptor.get,
+          set: function(val) {
+            if (typeof val === 'string' && isAdUrl(val)) {
+              console.log('[Anti Pop-Under] Intercepted and mocked script src:', val);
+              srcDescriptor.set.call(this, 'data:text/javascript;base64,console.log("Mocked ad script");');
+              return;
             }
-            val = newVal;
+            srcDescriptor.set.call(this, val);
           },
           configurable: true,
           enumerable: true
         });
-      } catch(e) {}
-    }
-    hookGlobal('ytInitialPlayerResponse');
-    hookGlobal('ytInitialData');
-    hookGlobal('ytplayer');
+      }
+    } catch(e) {}
 
-    // ===== LAYER 3: DOM Safety Net & Anti-Adblock Auto-Bypass =====
-    var wasAdShowing = false;
-    var userPlaybackRate = 1;
-    var userMuted = false;
-
-    function processYouTubeAd() {
-      var player = document.querySelector('#movie_player');
-      if (!player) return;
-
-      var video = player.querySelector('video');
-      var isAdShowing = player.classList.contains('ad-showing') || 
-                        !!player.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay, .ytp-ad-text');
-
-      if (isAdShowing) {
-        if (!wasAdShowing) {
-          wasAdShowing = true;
-          if (video) {
-            if (video.playbackRate !== 16) {
-              userPlaybackRate = video.playbackRate || 1;
+    try {
+      const originalSetAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(name, value) {
+        if (this.tagName) {
+          const tag = this.tagName.toLowerCase();
+          if (tag === 'script' && typeof name === 'string' && name.toLowerCase() === 'src') {
+            if (typeof value === 'string' && isAdUrl(value)) {
+              console.log('[Anti Pop-Under] Intercepted script setAttribute(src):', value);
+              originalSetAttribute.call(this, name, 'data:text/javascript;base64,console.log("Mocked ad script");');
+              return;
             }
-            userMuted = video.muted;
           }
         }
-        
-        // Instant speedup and skip fallback if ad is encountered
-        if (video) {
-          try {
-            video.muted = true;
-            if (isFinite(video.duration) && video.duration > 0) {
-              video.currentTime = video.duration;
-            } else {
-              video.currentTime = 9999;
-            }
-            video.playbackRate = 16;
-          } catch(e) {}
-        }
+        originalSetAttribute.call(this, name, value);
+      };
+    } catch(e) {}
 
-        try {
-          if (typeof player.skipAd === 'function') player.skipAd();
-        } catch(e) {}
+    function isAdBait(el) {
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName;
+      if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'IFRAME') return false;
+      const rawId = el.id;
+      const rawClass = el.className;
+      if (!rawId && (!rawClass || typeof rawClass !== 'string' || rawClass === '')) return false;
 
-        var skipBtns = document.querySelectorAll(
-          '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, ' +
-          '.ytp-ad-skip-button-slot button, .ytp-ad-overlay-close-button, button.ytp-ad-skip-button-modern'
-        );
-        for (var i = 0; i < skipBtns.length; i++) {
-          try {
-            skipBtns[i].click();
-            if (typeof simulateNativeClick === 'function') simulateNativeClick(skipBtns[i]);
-          } catch(e) {}
-        }
-
-        reportYtBlocked('Quảng cáo Video YouTube');
-      } else if (wasAdShowing) {
-        wasAdShowing = false;
-        if (video) {
-          try {
-            video.muted = userMuted;
-            video.playbackRate = userPlaybackRate || 1;
-            if (video.paused) video.play();
-          } catch(e) {}
-        }
-      }
-
-      // Auto-dismiss anti-adblock dialogs
       try {
-        var dismissBtn = document.querySelector('tp-yt-paper-dialog #dismiss-button, ytd-popup-container #dismiss-button, ytd-enforcement-message-view-model button');
-        if (dismissBtn) {
-          dismissBtn.click();
-          if (typeof simulateNativeClick === 'function') simulateNativeClick(dismissBtn);
-          if (video && video.paused) video.play();
+        const id = rawId ? rawId.toLowerCase() : '';
+        const className = (typeof rawClass === 'string') ? rawClass.toLowerCase() : '';
+
+        // Fast guard: skip elements that do not contain ad-related keyword substrings
+        if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') &&
+            !className.includes('ad') && !className.includes('qc') && !className.includes('quang')) {
+          return false;
         }
-        var backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop, ytd-enforcement-message-view-model');
-        for (var b = 0; b < backdrops.length; b++) {
-          backdrops[b].remove();
+
+        const name = (el.getAttribute && el.getAttribute('name') || '').toLowerCase();
+
+        const keywords = ['adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box', 'sponsored', 'ad-holder', 'qc-holder', 'ad-container'];
+        if (keywords.some(kw => id.includes(kw) || className.includes(kw) || name.includes(kw))) {
+          return true;
+        }
+        if (id === 'ad' || id === 'ads' || className === 'ad' || className === 'ads') {
+          return true;
         }
       } catch(e) {}
+      return false;
     }
 
-    setInterval(processYouTubeAd, 50);
-
     try {
-      var obs = new MutationObserver(function() { processYouTubeAd(); });
-      function startObserving() {
-        var target = document.getElementById('movie_player') || document.body || document.documentElement;
-        if (target) {
-          obs.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-        }
-      }
-      if (document.body) startObserving();
-      else document.addEventListener('DOMContentLoaded', startObserving);
-    } catch(e) {}
-
-    // Patch MediaSession to avoid NaN duration exceptions
-    try {
-      if (navigator && navigator.mediaSession && typeof navigator.mediaSession.setPositionState === 'function') {
-        var _origSetPos = navigator.mediaSession.setPositionState;
-        navigator.mediaSession.setPositionState = function(state) {
-          try {
-            if (state && typeof state.position === 'number' && typeof state.duration === 'number') {
-              if (state.position > state.duration) state.position = state.duration;
-              if (state.duration <= 0) return;
-            }
-            _origSetPos.call(this, state);
-          } catch(e) {}
-        };
-      }
-    } catch(e) {}
-
-  })();
-
-  // ================================================================
-  // UNIVERSAL IN-VIDEO AD AUTO-SKIPPER & FLOATING "X" CLOSE BUTTON CLICKER
-  // (uBlock & AdGuard Enhanced Strategy)
-  // Auto-detects and auto-clicks "Skip Ad" / "Bỏ qua" / "X" close buttons
-  // on all web video players and floating ad popups.
-  // ================================================================
-  (function() {
-    function autoSkipAndCloseAds() {
-      if (document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') return;
-      // Do not run generic skip selectors on YouTube (YouTube has its own dedicated Zero-Wait module above)
-      if (window.location.hostname.includes('youtube.com')) return;
-
-      // 1. Click all "Skip Ad" / "Bỏ qua quảng cáo" buttons across web video players (JWPlayer, Video.js, Plyr, etc.)
-      const skipSelectors = [
-        '.vjs-skip', '.vjs-ad-skip', '.vjs-skip-button',
-        '.jw-skip', '.jw-ad-skip', '.jw-skip-button',
-        '[class*="skip-ad"]', '[class*="skip_ad"]', '[class*="ad-skip"]', '[id*="skip-ad"]', '[id*="skip_ad"]',
-        'button[aria-label*="skip ad" i]', 'button[aria-label*="bỏ qua quảng cáo" i]',
-        'div[aria-label*="skip ad" i]', 'div[aria-label*="bỏ qua quảng cáo" i]'
-      ];
-
-      for (var i = 0; i < skipSelectors.length; i++) {
-        try {
-          var btns = document.querySelectorAll(skipSelectors[i]);
-          for (var j = 0; j < btns.length; j++) {
-            var btn = btns[j];
-            if (btn && !btn.disabled && !btn.hasAttribute('disabled') && btn.offsetParent !== null && !btn.hasAttribute('data-auto-clicked')) {
-              btn.setAttribute('data-auto-clicked', 'true');
-              try { btn.click(); } catch(e) {}
-              if (typeof simulateNativeClick === 'function') simulateNativeClick(btn);
-              console.log('[Anti Pop-Under] Auto-clicked video ad skip button:', btn);
-            }
+      const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight').get;
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        get() {
+          const h = originalOffsetHeight.call(this);
+          if (h === 0 && isAdBait(this)) {
+            return 250;
           }
-        } catch(e) {}
-      }
+          return h;
+        },
+        configurable: true
+      });
 
-      // 2. Eradicate floating "X" / "Close" buttons & full-screen darkened backdrops without triggering fake click traps
-      const closeSelectors = [
-        '.vjs-ad-overlay .close', '.jw-ad-overlay .close', '.ad-overlay-close',
-        '.btn-close-ad', '.close-ad', '#close-ad', '.ad_close_btn', '.ad-close-btn',
-        '[class*="close-ad"]', '[class*="ad-close"]', '[id*="close-ad"]', '[id*="ad-close"]',
-        'button[class*="bg-[#e50914]"]',
-        'div[class*="fixed"][class*="inset-0"] button[aria-label="Đóng"]',
-        'div[class*="fixed"][class*="inset-0"] button[aria-label*="đóng" i]',
-        'div[class*="fixed"][class*="inset-0"] button[aria-label*="close" i]',
-        '[class*="layoutWrapper"]', '[class*="root--wuzSh"]', '[qa-element="live-badge-plain-upper"]',
-        '.sc-widget-icon', '[class*="model-name--"]'
-      ];
+      const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth').get;
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        get() {
+          const w = originalOffsetWidth.call(this);
+          if (w === 0 && isAdBait(this)) {
+            return 300;
+          }
+          return w;
+        },
+        configurable: true
+      });
 
-      for (var k = 0; k < closeSelectors.length; k++) {
-        try {
-          var closeNodes = document.querySelectorAll(closeSelectors[k]);
-          for (var m = 0; m < closeNodes.length; m++) {
-            var node = closeNodes[m];
-            if (node) {
-              var btnText = (node.innerText || node.textContent || '').trim();
-              var aria = (node.getAttribute('aria-label') || '').toLowerCase();
-              var isAdBtn = (btnText === '✕' || btnText === '×' || btnText === 'X' || aria.includes('đóng') || aria.includes('close') || aria.includes('tắt') || node.classList.contains('close') || (typeof node.className === 'string' && node.className.includes('close')));
-              
-              var parentAd = node.closest('[class*="fixed"][class*="inset-0"], [class*="modal-backdrop"], [class*="ad-overlay"], [class*="layoutWrapper"], [class*="widget"]') || node;
-              
-              // NEVER touch elements containing movie posters or legitimate non-ad images
-              var nonAdImg = parentAd.querySelector('img:not([src*="ad"]):not([src*="popunder"]):not([src*="quangcao"])');
-              if (nonAdImg) continue;
+      const originalClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight').get;
+      Object.defineProperty(Element.prototype, 'clientHeight', {
+        get() {
+          const h = originalClientHeight.call(this);
+          if (h === 0 && isAdBait(this)) {
+            return 250;
+          }
+          return h;
+        },
+        configurable: true
+      });
 
-              // Protect legitimate video players from being hidden
-              if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer, .edge-custom-controls, #edgeplayer-root, #player, .box-player, .cc-settings, .cc-overlay') && !parentAd.querySelector('video:not([src*="ad"]), form, input, textarea, select')) {
-                parentAd.style.setProperty('display', 'none', 'important');
-                parentAd.style.setProperty('visibility', 'hidden', 'important');
-                parentAd.style.setProperty('pointer-events', 'none', 'important');
-                parentAd.style.setProperty('opacity', '0', 'important');
-                parentAd.setAttribute('data-ad-blocked', 'true');
-                
-                if (document.body) {
-                  document.body.style.overflow = '';
-                  document.body.style.position = '';
+      const originalClientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth').get;
+      Object.defineProperty(Element.prototype, 'clientWidth', {
+        get() {
+          const w = originalClientWidth.call(this);
+          if (w === 0 && isAdBait(this)) {
+            return 300;
+          }
+          return w;
+        },
+        configurable: true
+      });
+    } catch(e) {}
+
+    try {
+      const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function() {
+        const rect = originalGetBoundingClientRect.call(this);
+        if (rect.height === 0 && isAdBait(this)) {
+          return {
+            top: rect.top,
+            left: rect.left,
+            right: rect.left + 300,
+            bottom: rect.top + 250,
+            width: 300,
+            height: 250,
+            x: rect.left,
+            y: rect.top,
+            toJSON: () => {}
+          };
+        }
+        return rect;
+      };
+    } catch(e) {}
+
+    try {
+      const originalGetComputedStyle = window.getComputedStyle;
+      window.getComputedStyle = function(el, pseudoElt) {
+        const style = originalGetComputedStyle.call(this, el, pseudoElt);
+        if (el && (el.id || (el.className && typeof el.className === 'string' && el.className !== ''))) {
+          if (isAdBait(el)) {
+            return new Proxy(style, {
+              get(target, prop) {
+                if (prop === 'display') {
+                  const val = target.display;
+                  return val === 'none' ? 'block' : val;
                 }
-                if (document.documentElement) {
-                  document.documentElement.style.overflow = '';
-                  document.documentElement.style.position = '';
+                if (prop === 'visibility') {
+                  const val = target.visibility;
+                  return val === 'hidden' ? 'visible' : val;
                 }
+                if (prop === 'opacity') {
+                  const val = target.opacity;
+                  return val === '0' ? '1' : val;
+                }
+                if (prop === 'getPropertyValue') {
+                  return function(propertyName) {
+                    if (propertyName === 'display') {
+                      const val = target.getPropertyValue('display');
+                      return val === 'none' ? 'block' : val;
+                    }
+                    if (propertyName === 'visibility') {
+                      const val = target.getPropertyValue('visibility');
+                      return val === 'hidden' ? 'visible' : val;
+                    }
+                    if (propertyName === 'opacity') {
+                      const val = target.getPropertyValue('opacity');
+                      return val === '0' ? '1' : val;
+                    }
+                    return target.getPropertyValue(propertyName);
+                  };
+                }
+                const val = Reflect.get(target, prop);
+                if (typeof val === 'function') {
+                  return val.bind(target);
+                }
+                return val;
               }
-            }
-          }
-        } catch(e) {}
-      }
-
-      // 3. Fast-forward pre-roll video ads on HTML5 players (non-YouTube)
-      try {
-        var videos = document.querySelectorAll('video');
-        for (var vIdx = 0; vIdx < videos.length; vIdx++) {
-          var v = videos[vIdx];
-          if (!v) continue;
-          var src = (v.src || '').toLowerCase();
-          var parentClass = (v.parentElement ? v.parentElement.className : '').toLowerCase();
-          
-          var isAdVideo = ['adserver', 'popunder', 'vast', 'vpaid', 'preroll', 'midroll'].some(function(kw) { return src.indexOf(kw) !== -1; }) ||
-                          parentClass.indexOf('vjs-ad-playing') !== -1 || parentClass.indexOf('jw-flag-ads') !== -1;
-                       
-          if (isAdVideo && v.duration && !isNaN(v.duration) && v.duration > 0 && v.currentTime < v.duration) {
-            v.muted = true;
-            v.playbackRate = 16;
-            v.currentTime = Math.max(0, v.duration - 0.1);
-            console.log('[Anti Pop-Under] Fast-forwarded pre-roll video ad:', v);
+            });
           }
         }
-      } catch(e) {}
-    }
-
-    // Run auto-skipper periodically
-    setInterval(autoSkipAndCloseAds, 250);
+        return style;
+      };
+    } catch(e) {}
   })();
-
-
 
   // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
   let initialPlayerResponse = undefined;
@@ -710,108 +490,14 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     } catch(e) {}
   }
 
-  // Smart Video Click-to-Play/Pause Toggle
-  // Enables clicking directly in the middle of the video (left-click or middle-click)
-  // to toggle Play/Pause instantly on all video players without touching control bars.
-  if (!isYouTube) {
-    let lastVideoClickTime = 0;
-
-    function togglePlayerFullscreen(video) {
-      try {
-        const fsBtn = document.querySelector('[data-ctl-fs], .jw-icon-fullscreen, .vjs-fullscreen-control, .plyr__control--fullscreen');
-        if (fsBtn) {
-          fsBtn.click();
-          return;
-        }
-        const container = (video && video.closest) ? video.closest('#edgeplayer-root, .jwplayer, .plyr, .video-js, #player, .box-player') : video;
-        if (!document.fullscreenElement) {
-          if (container && container.requestFullscreen) container.requestFullscreen();
-          else if (video && video.requestFullscreen) video.requestFullscreen();
-        } else {
-          if (document.exitFullscreen) document.exitFullscreen();
-        }
-      } catch(e) {}
-    }
-
-    function handleVideoClickToggle(e) {
-      if (!isEnabled() || isCurrentPageWhitelisted()) return;
-      if (e.button !== 0 && e.button !== 1) return; // Left Click (0) or Middle Click (1)
-
-      const target = e.target;
-      if (!target) return;
-
-      // Ignore interactions on control elements: buttons, seekbars, volume sliders, menus, links, settings
-      if (isInteractiveElement(target) || isSeekBarOrControlButton(target)) return;
-      if (target.closest && target.closest(
-        'button, input, select, textarea, a, label, ' +
-        '.edge-custom-controls, .jw-controls, .jw-controlbar, .plyr__controls, .vjs-control-bar, .art-controls, ' +
-        '[class*="control"], [class*="seek"], [class*="progress"], [class*="slider"], [class*="volume"]'
-      )) {
-        return;
-      }
-
-      // Check if clicked element is a video or a video display surface
-      let video = null;
-      if (target.tagName && target.tagName.toLowerCase() === 'video') {
-        video = target;
-      } else if (target.id === 'edgeplayer-root' || (target.classList && (target.classList.contains('jw-media') || target.classList.contains('jw-aspect') || target.classList.contains('jw-preview')))) {
-        video = target.querySelector ? target.querySelector('video') : null;
-      } else if (target.closest) {
-        if (target.closest('.edge-dual-subtitles, .jw-text-track-display, .jw-text-track-cue')) {
-          const container = target.closest('#edgeplayer-root, .jwplayer, .plyr, .video-js, #player, .box-player');
-          if (container) video = container.querySelector('video');
-        }
-      }
-
-      if (!video) return;
-
-      if (e.button === 1) {
-        e.preventDefault(); // Prevent default middle click scroll lock
-      }
-
-      // Detect double-click to toggle fullscreen (while keeping video state consistent)
-      const now = Date.now();
-      if (e.button === 0 && now - lastVideoClickTime < 280) {
-        lastVideoClickTime = 0;
-        // Resume video state if first click paused it
-        if (video.paused) {
-          const p = video.play();
-          if (p && p.catch) p.catch(() => {});
-        }
-        togglePlayerFullscreen(video);
-        return;
-      }
-      lastVideoClickTime = now;
-
-      // Single click: toggle Play / Pause smoothly
-      try {
-        if (video.paused || video.ended) {
-          const p = video.play();
-          if (p && p.catch) p.catch(() => {});
-        } else {
-          video.pause();
-        }
-      } catch (err) {}
-    }
-
-    document.addEventListener('click', handleVideoClickToggle, false);
-    document.addEventListener('auxclick', handleVideoClickToggle, false);
-  }
-
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
       
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
-
       const target = e.target;
       if (!target) return;
-
-      // If interaction is on or inside ANY player element, controls, seekbar, or buttons -> ALLOW IMMEDIATELY!
-      if (isPlayerOrPlayButton(target) || isInteractiveElement(target) || isSeekBarOrControlButton(target)) {
-        return;
-      }
 
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
@@ -819,9 +505,6 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       let overlay = null;
 
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-        if (isPlayerOrPlayButton(curr) || isSeekBarOrControlButton(curr)) {
-          return; // Stop immediately if we encounter a player container
-        }
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
           anchor = curr;
         }
@@ -880,14 +563,28 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
           
           if (isPlayerOrPlayButton(anchor)) {
-             console.log('[Anti Pop-Under] Anchor was on video player. Resuming video...');
+             console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
+             try { anchor.remove(); } catch(e) {}
+             
+             let isInternal = false;
+             try {
+                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
+                isInternal = targetHost === window.location.hostname.toLowerCase();
+             } catch(e) {}
+             
+             if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
+                 console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
+                 window.location.assign(anchor.href);
+                 return;
+             }
+             
              toggleVideoPlayPause(target);
           }
           return;
         }
       }
 
-      // 4. Fallback check for background click or non-interactive redirect
+      // 3. Fallback check for background click or non-interactive redirect
       if (e.type === 'click') {
         blockScriptedRedirects(e);
       }
@@ -983,49 +680,80 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
   }
 
   // Helper to check if element is a clickjack overlay
-    function isClickjackOverlay(el) {
-    if (!el || el === document || el === document.body || el === document.documentElement) return false;
+  function isClickjackOverlay(el) {
+    if (!el || el === document || el === document.body || el === document.documentElement) {
+      return false;
+    }
+    
     try {
-      if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el) || isInteractiveElement(el)) return false;
-
-      // Never touch anything inside a player container or iframe
-      if (el.closest && el.closest(
-        '#player, .box-player, .embed-responsive, .jwplayer, .plyr, .video-js, .vjs-, .artplayer, .dplayer, .clappr, .xgplayer,' +
-        '[class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"],' +
-        '[class*="control"], [id*="control"], [class*="progress"], [id*="progress"], [class*="seekbar"], [id*="seekbar"],' +
-        '[class*="slider"], [id*="slider"], [class*="volume"], [id*="volume"]'
-      )) {
+      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
         return false;
       }
 
-      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['button', 'input', 'select', 'textarea', 'form', 'svg', 'path', 'canvas', 'video', 'audio', 'iframe'].includes(tagName)) return false;
-      if (el.getAttribute && el.getAttribute('role') === 'button') return false;
+      // Visible elements with text content are genuine UI elements (e.g. episode buttons "Tập 1", "Tập 2"), NOT clickjack overlays!
+      const text = (el.innerText || '').trim();
+      if (text.length > 0) {
+        return false;
+      }
 
+      // Protect video players, canvases, and player control bars from clickjack overlay detection
+      if (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(el)) {
+        return false;
+      }
+
+      // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
-          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) {
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') ||
+          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
         return false;
       }
 
-      // If it contains legitimate input controls, forms, or non-ad movie images, skip
-      if (el.querySelector('video, audio, embed, object, input, select, textarea, form, iframe, svg, [class*="control"], [class*="progress"]')) {
-        return false;
-      }
-
-      // Protect all elements containing legitimate movie images
-      const img = el.querySelector ? el.querySelector('img') : null;
-      if (img) {
-        const src = (img.src || '').toLowerCase();
-        if (!src.includes('ad') && !src.includes('popunder') && !src.includes('quangcao') && !src.includes('banner')) {
+      // Never consider elements with interactive roles, submit/reset buttons, or form controls as overlays
+      if (el.getAttribute) {
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox'].includes(role) ||
+            ['submit', 'reset', 'button'].includes(type)) {
           return false;
         }
       }
 
-      // Check text length: clickjack overlays never have substantial readable content
-      const text = (el.innerText || el.textContent || '').trim();
-      if (text.length > 50) return false;
+      // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
+      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
+        return false;
+      }
+
+      // Protect video player controls, seekbars, progress bars, timelines, fullscreen buttons, volume sliders
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="stream"], [id*="stream"], [class*="halim"], [id*="halim"], [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"], [class*="timeline"], [id*="timeline"], [class*="fullscreen"], [id*="fullscreen"]')) {
+        if (tagName !== 'a') {
+          return false;
+        }
+      }
+
+      // If anchor tag has same-origin href or no external ad href, it is NEVER a clickjack overlay
+      if (tagName === 'a') {
+        const href = el.getAttribute('href') || '';
+        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+          return false; // Episode link with id="no-link" or JS trigger
+        }
+        try {
+          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+          const currentHost = window.location.hostname.toLowerCase();
+          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+          if (!isExternal) {
+            return false; // Same-domain links are never clickjack overlays
+          }
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // If it contains genuine form controls, video media, or text-bearing children, skip
+      if (el.querySelector('video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
+        return false;
+      }
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
@@ -1047,44 +775,17 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
          bgAlpha = 0;
       }
       
-      const hasBackdropFilter = style.backdropFilter && style.backdropFilter !== 'none';
-      const isTransparent = opacity < 0.95 || bgAlpha < 0.95 || hasBackdropFilter;
+      const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
+      if (!isTransparent) return false;
+
+      // Real overlay area check: spans a significant part of the viewport (or > 200x200)
+      const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
       const zIndex = parseInt(style.zIndex, 10);
       const isHighZ = !isNaN(zIndex) && zIndex >= 10;
-      const isFullScreen = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw')) || elClass.includes('inset-0');
-      const isLargeArea = (width >= 200 && height >= 200) || isFullScreen;
-
-      // Check if it's an anchor tag: ONLY external links or ad redirect links can be clickjack overlays!
-      if (tagName === 'a') {
-        const href = el.getAttribute('href') || '';
-        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
-          return false;
-        }
-        try {
-          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-          const currentHost = window.location.hostname.toLowerCase();
-          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
-          if (!isExternal) {
-            return false; // Same-domain movie links are NEVER clickjack overlays
-          }
-          if (isPositioned && (isHighZ || isFullScreen) && isTransparent) {
-            return true;
-          }
-        } catch(e) {
-          return false;
-        }
-      }
-
-      // Check if it contains an explicit ad close button
-      if (isPositioned && (isHighZ || isFullScreen) && el.querySelector('button[class*="bg-[#e50914]"]')) {
-        return true;
-      }
-
-      if (isPositioned && (isHighZ || isFullScreen) && isTransparent && isLargeArea) {
-        return true;
-      }
-
-      return false;
+      
+      // Transparent absolute/fixed elements that are large and empty are ALWAYS clickjack overlays.
+      // Ad networks deliberately omit z-index to bypass adblockers, so we no longer require high z-index.
+      return isLargeArea;
     } catch (e) {
       return false;
     }
@@ -1095,42 +796,26 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
     'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88',
-    'macau', 'lasvegas', 'bbin', '\\bag\\b', '\\bmg\\b', '\\bpt\\b', '\\bpg\\b', 'cq9', 'jdb', 'vr',
-    '\\bbg\\b', '\\bky\\b', 'lebo', '\\bog\\b', 'ebet', 'allbet', 'kaiyuan', 'sbobet', '\\bsbo\\b',
-    'cmd368', '\\bim\\b', '\\btf\\b', 'crown', 'shengli', 'bet365', 'vwin', 'dafabet', '12bet',
-    'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot',
-    'win79', 'hitclub', 'gemwin', 'zowin', '6789x', 'rikvip', 'red88', 'uk88', 'yo88', 'go88',
-    'bom88', 'haywin', 'sunwin', '789club', 'b52club', 'iwin', 'manclub', 'top88', 'ku11', 'thabet',
-    'nohu', 'taixiu', 'banca', 'gamebaidoithuong', 'nhacaiuytin', 'dagathomo'
+    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88'
   ];
 
   const adUrlKeywords = [
     'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
-    'clktag', 'exoclick', 'eclick', 'novanet', 'adsterra', 'popads', 'popcash',
+    'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
-    'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless', 'astrologybacklightsinless',
-    'hdc.html', 'firevideoplayer',
-    'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
-    'playhubconnect', 'cm8806', 'linkroyal', 'abroadad', 'streamvl', 'xiazai', 'pan666',
-    'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
-    '/static/video/bn/', 'bdstatic', 'cpro', '51.la', 'cnzz', 'umeng', 'pstatp', 'tanx', 'alimama',
-    'openinstall', 'appinstall', '/apk/', 'download.html', 'from=ad', 'spm=', '/ad/', '/ads/',
-    '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
-    'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
-    'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
-    'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn', 'mayzaent', 'doppiocdn', 'videoslider', 'smartpopbucketid', 'mastersmartpopid', 'stripcash',
-    'animevietsubapp', 'adqc.net', 'chinhhang', 'catfish', 'hide_catfix', 'preload-ads'
+    'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
+    '\\\\?ab=', '&ab=', '&rl=', '\\\\?rl=', 'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
+    'playhubconnect.com', 'cm8806.com', 'linkroyal.workers.dev',
+    'abroadad.cache.wpscdn.com', 'propellerads',
+    'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
+    'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
+    '/static/video/bn/'
   ];
 
-  function safeEscapeRegex(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  const gamblingRegex = new RegExp(gamblingKeywords.map(k => k.startsWith('\\b') ? k : safeEscapeRegex(k)).join('|'), 'i');
-  const adUrlRegex = new RegExp(adUrlKeywords.map(safeEscapeRegex).join('|'), 'i');
+  const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
+  const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
 
   function isWhitelisted(urlStr) {
     if (!urlStr) return false;
@@ -1142,50 +827,30 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     }
   }
 
-    function isPlayerOrPlayButton(el) {
-    if (!el || el.nodeType !== 1) return false;
+  function isPlayerOrPlayButton(el) {
+    if (!el) return false;
     try {
-      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
+      const tagName = el.tagName.toLowerCase();
       // Direct media / embed elements
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'button', 'input', 'select', 'track', 'source'].includes(tagName)) return true;
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
 
-      const elId = (el.id || '').toLowerCase();
-      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      
-      const playerKeywords = [
-        'player', 'video', 'embed', 'stream', 'halim', 'film', 'movie', 'xem',
-        'control', 'progress', 'seekbar', 'slider', 'timeline', 'volume', 'fullscreen',
-        'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'clappr', 'xgplayer', 'media',
-        'play', 'pause', 'mute', 'unmute', 'setting', 'quality', 'speed', 'pip', 'scrubber',
-        'bar', 'track', 'icon', 'btn', 'thumb', 'menu', 'panel', 'mask'
-      ];
-
-      if (playerKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
-
-      if (el.closest && el.closest(
-        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, .clappr, .xgplayer,' +
-        '#player, .box-player, .embed-responsive,' +
+      // Named player container classes (all major players)
+      if (el.closest(
+        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer,' +
         '[class*="player"], [id*="player"],' +
         '[class*="video"], [id*="video"],' +
         '[class*="embed"], [id*="embed"],' +
         '[class*="stream"], [id*="stream"],' +
         '[class*="halim"], [id*="halim"],' +
         '[class*="film"], [id*="film"],' +
-        '[class*="control"], [id*="control"],' +
-        '[class*="progress"], [id*="progress"],' +
-        '[class*="seekbar"], [id*="seekbar"],' +
-        '[class*="slider"], [id*="slider"],' +
-        '[class*="volume"], [id*="volume"],' +
-        '[class*="full"], [id*="full"]'
+        '[class*="xem"], [id*="xem"]'
       )) return true;
 
-      // Inside any container that holds a video or iframe element
-      if (el.querySelector && el.querySelector('video, audio, canvas, svg, button, input, iframe, [class*="control"], [class*="progress"]')) return true;
-
+      // Inside any container that holds a <video> element (max 3 levels up)
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && depth < 4) {
-        if (p.querySelector && p.querySelector('video, iframe[src*="embed"], iframe[src*="player"], iframe[src*="phimhdc"]')) return true;
+      while (p && p !== document.body && depth < 3) {
+        if (p.querySelector && p.querySelector('video')) return true;
         p = p.parentElement;
         depth++;
       }
@@ -1197,7 +862,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return true;
 
     const isFormSubmit = context === 'form.submit';
-    const isAnchorClick = context.startsWith('anchor.');
+    const isAnchorClick = context === 'anchor.click' || context === 'anchor.click._blank';
     const isLocationChange = context === 'location change';
     const isWindowOpen = context === 'window.open';
 
@@ -1209,49 +874,49 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       try {
         targetHost = new URL(url, window.location.href).hostname.toLowerCase();
         const currentHost = window.location.hostname.toLowerCase();
-        isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
+        isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
       } catch(e) {
         isBlank = true;
       }
     }
 
-    // 1. If it explicitly matches ad/gambling/adult/smartpop keywords, block it 100%
-    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url) || url.includes('smartpop') || (url.includes('ab=') && url.includes('rl=')))) {
+    // 1. If it explicitly matches ad/gambling keywords or popunder params, block it 100%
+    if (url && (gamblingRegex.test(url) || adUrlRegex.test(url) || (url.includes('ab=') && url.includes('rl=')))) {
       reportBlocked(url, `Blocked ad/popunder URL in ${context}`);
       return false;
     }
 
-    // 2. Block external form submissions unless whitelisted
-    if (isFormSubmit && isExternal && !isWhitelisted(url)) {
-      reportBlocked(url || 'external_form', `Blocked external form submit popup in ${context}`);
-      return false;
+    // 2. Location changes (window.location / replace / assign)
+    if (isLocationChange) {
+      if (isExternal && !isWhitelisted(url)) {
+        reportBlocked(url, `Blocked unrequested external location redirect (${context})`);
+        return false;
+      }
+      return true;
     }
 
-    // 3. Block external location redirects (window.location / replace / assign)
-    if (isLocationChange && isExternal && !isWhitelisted(url)) {
-      reportBlocked(url || 'external_redirect', `Blocked unrequested external location redirect (${context})`);
-      return false;
+    // 3. Same-page form submissions and relative/whitelisted internal links
+    if (isFormSubmit && (!isExternal || isWhitelisted(url))) {
+      return true;
     }
 
-    // 4. Block external window.open or target="_blank" popups
+    if (isAnchorClick && !context.includes('_blank') && (!isExternal || isWhitelisted(url))) {
+      return true;
+    }
+
+    // 4. Block external non-whitelisted popups or blank popup windows
     if ((isWindowOpen || context.includes('_blank')) && (isBlank || (isExternal && !isWhitelisted(url)))) {
       reportBlocked(url || 'blank', `Blocked non-whitelisted external/blank popup in ${context}`);
       return false;
     }
 
-    // 5. Block programmatic external anchor clicks or dispatches
-    if (isAnchorClick && isExternal && !isWhitelisted(url)) {
-      reportBlocked(url || 'external_anchor', `Blocked programmatic external anchor popup in ${context}`);
-      return false;
-    }
-
-    // 6. If window.open is opening duplicate current page or relative ad redirect
+    // 5. If window.open is opening duplicate current page or relative ad redirect
     if (isWindowOpen && !isBlank && !isExternal) {
       try {
         const path = new URL(url, window.location.href).pathname.toLowerCase();
         const curPath = window.location.pathname.toLowerCase();
         const isDuplicatePage = (url === window.location.href || path === curPath) && context === 'window.open';
-        const isAdPath = adUrlRegex.test(url) || ['/click', '/out', '/go', '/redirect', '/pop', '/cpm', '/jump'].some(kw => path.includes(kw));
+        const isAdPath = adUrlRegex.test(url) || ['/click', '/out', '/go', '/redirect', '/pop', '/cpm'].some(kw => path.includes(kw));
 
         if (isDuplicatePage || isAdPath) {
           reportBlocked(url, `Blocked same-domain ad/duplicate window.open in ${context}`);
@@ -1260,15 +925,16 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       } catch (e) {}
     }
 
-    // 7. If no recent user interaction, block all programmatic window.open or external popup actions
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
     const isRecentInteraction = timeSinceLastInteraction < 1000;
-    if (!isRecentInteraction && (isWindowOpen || isExternal)) {
-      reportBlocked(url || 'blank', `Blocked programmatic ${context} without user interaction`);
+
+    // 6. If no recent user interaction, block all programmatic window.open or external popup actions
+    if (!isRecentInteraction && isWindowOpen) {
+      reportBlocked(url || 'blank', `Blocked programmatic ${context} with no user interaction`);
       return false;
     }
 
-    // 8. Detailed checks for overlays or player clicks
+    // 7. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
       
@@ -1285,9 +951,9 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
            const href = curr.getAttribute('href') || '';
            try {
-             const tHost = new URL(href, window.location.href).hostname.toLowerCase();
-             const cHost = window.location.hostname.toLowerCase();
-             const isExt = tHost && tHost !== cHost && !tHost.endsWith('.' + cHost);
+             const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+             const currentHost = window.location.hostname.toLowerCase();
+             const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
              if (isExt) {
                const text = curr.innerText || '';
                if (text.trim().length === 0) {
@@ -1300,6 +966,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
                      break;
                    }
                  }
+                 // If there's no visible content inside this external anchor, it's a click trap!
                  if (!hasVisibleMedia) {
                    isHiddenExternalLink = true;
                    break;
@@ -1312,9 +979,10 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         curr = curr.parentElement;
       }
 
+      // If clicked on an overlay, block it
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
-        
+        try { overlay.remove(); } catch(e) {}
         return false;
       }
       if (isHiddenExternalLink) {
@@ -1322,7 +990,10 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         return false;
       }
 
+
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
+      
+      // A play button/player click should NEVER open a new tab/window OR navigate to an external domain
       if (isPlayerClick && (isWindowOpen || context.includes('_blank') || isExternal) && !isWhitelisted(url)) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
         return false;
@@ -1350,39 +1021,17 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     return false;
   }
 
-  // Helper to create safe dummy window that sinks popunder calls without navigating
-  function createDummyWindow() {
-    let _closed = false;
-    const dummyWindow = new Proxy({}, {
-      get(targetProp, prop) {
-        if (prop === 'closed') return _closed;
-        if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
-        if (prop === 'close') return () => { _closed = true; };
-        if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
-        if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
-        if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
-        return undefined;
-      },
-      set() { return true; }
-    });
-    return dummyWindow;
-  }
-
   // The custom window.open logic
   function customOpen(url, target, features) {
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
       return originalOpen.apply(this, arguments);
     }
 
-    const urlStr = String(url || '');
-    // 1. Immediately intercept any explicit ad / popunder / redirect URLs
-    if (urlStr && (gamblingRegex.test(urlStr) || adUrlRegex.test(urlStr) || urlStr.includes('hdc.html') || urlStr.includes('astrology') || urlStr.includes('firevideoplayer'))) {
-      reportBlocked(urlStr, 'Blocked explicit ad/popunder in window.open');
-      return createDummyWindow();
-    }
-
     const targetLower = String(target || '').toLowerCase();
     if (['_self', '_top', '_parent'].includes(targetLower)) {
+      if (gamblingRegex.test(url) || adUrlRegex.test(url)) {
+        return createDummyWindow();
+      }
       try {
         const targetHost = new URL(url, window.location.href).hostname.toLowerCase();
         const currentHost = window.location.hostname.toLowerCase();
@@ -1394,12 +1043,26 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           return originalOpen.apply(this, arguments);
         }
       } catch (e) {
-        return createDummyWindow();
+        return originalOpen.apply(this, arguments);
+
       }
     }
 
     if (!checkNavigationOrPopup(url, 'window.open')) {
-      return createDummyWindow();
+      let _closed = false;
+      const dummyWindow = new Proxy({}, {
+        get(targetProp, prop) {
+          if (prop === 'closed') return _closed;
+          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
+          if (prop === 'close') return () => { _closed = true; };
+          if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
+          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
+          if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
+          return undefined;
+        },
+        set() { return true; }
+      });
+      return dummyWindow;
     }
 
     return originalOpen.apply(this, arguments);
@@ -1442,6 +1105,37 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
 
+    // Sanitize iframe attributes before DOM insertion to eliminate browser warnings
+    function sanitizeIframeNode(node) {
+      if (!node || node.nodeType !== 1) return;
+      try {
+        const clean = (ifr) => {
+          try {
+            // Fix: "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing"
+            if (ifr.hasAttribute && ifr.hasAttribute('sandbox')) {
+              const sb = ifr.getAttribute('sandbox') || '';
+              if (sb.includes('allow-scripts') && sb.includes('allow-same-origin')) {
+                ifr.removeAttribute('sandbox');
+              }
+            }
+            // Fix: "Allow attribute will take precedence over 'allowfullscreen'"
+            if (ifr.hasAttribute && ifr.hasAttribute('allowfullscreen') && ifr.hasAttribute('allow')) {
+              const curAllow = ifr.getAttribute('allow') || '';
+              if (!curAllow.includes('fullscreen')) {
+                ifr.setAttribute('allow', curAllow ? (curAllow.trim().endsWith(';') ? curAllow + ' fullscreen' : curAllow + '; fullscreen') : 'fullscreen');
+              }
+              ifr.removeAttribute('allowfullscreen');
+            }
+          } catch(e) {}
+        };
+        if (node.tagName === 'IFRAME') {
+          clean(node);
+        } else if (node.childElementCount > 0 && node.querySelectorAll) {
+          node.querySelectorAll('iframe').forEach(clean);
+        }
+      } catch(e) {}
+    }
+
     // Synchronously patch iframe window when created or appended to DOM
     function patchIframeNode(node) {
       if (!node || node.nodeType !== 1) return;
@@ -1470,6 +1164,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         const el = origCreateElement.call(this, tagName, options);
         if (el && typeof tagName === 'string' && tagName.toLowerCase() === 'iframe') {
           try {
+            sanitizeIframeNode(el);
             const hookIframe = () => {
               patchIframeNode(el);
             };
@@ -1486,6 +1181,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       try {
         const orig = Node.prototype[method];
         Node.prototype[method] = function() {
+          try { sanitizeIframeNode(arguments[0]); } catch(e) {}
           let result;
           try {
             result = orig.apply(this, arguments);
@@ -1505,6 +1201,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       try {
         const orig = Element.prototype[method];
         Element.prototype[method] = function() {
+          try { sanitizeIframeNode(arguments[0]); } catch(e) {}
           let result;
           try { result = orig.apply(this, arguments); } catch(e) { return undefined; }
           try { patchIframeNode(arguments[0]); } catch(e) {}
@@ -1542,9 +1239,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           configurable: true
         });
       }
-    } catch (err) {
-      console.warn('[Anti Pop-Under] Iframe prototyping hooks failed:', err);
-    }
+    } catch (err) {}
 
     // Fast interval check for iframe windows
     setInterval(() => {
@@ -1559,7 +1254,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     }, 1000);
   }
 
-  // Bulletproof override of HTMLAnchorElement.prototype.click & EventTarget.prototype.dispatchEvent
+  // Bulletproof override of HTMLAnchorElement.prototype.click
   if (!isYouTube) {
     try {
       Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
@@ -1579,7 +1274,6 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         configurable: false
       });
     } catch (err) {
-      console.warn('[Anti Pop-Under] Non-writable anchor click failed:', err);
       HTMLAnchorElement.prototype.click = function() {
         if (!isEnabled() || isCurrentPageWhitelisted()) {
           return originalClick.apply(this, arguments);
@@ -1593,104 +1287,314 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         return originalClick.apply(this, arguments);
       };
     }
+  }
 
-    // Intercept synthetic/programmatic event dispatches on <a> links to prevent ad redirects
+  // Bulletproof override of HTMLFormElement.prototype.submit
+  const originalSubmit = HTMLFormElement.prototype.submit;
+  if (!isYouTube) {
     try {
-      const origDispatch = EventTarget.prototype.dispatchEvent;
-      EventTarget.prototype.dispatchEvent = function(event) {
-        if (event && (event.type === 'click' || event.type === 'mouseup' || event.type === 'pointerup')) {
-          if (this instanceof HTMLAnchorElement || (this.tagName && this.tagName.toLowerCase() === 'a')) {
-            const href = this.href || this.getAttribute('href') || '';
-            const isBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
-            if (!checkNavigationOrPopup(href, isBlank ? 'anchor.dispatchEvent._blank' : 'anchor.dispatchEvent')) {
-              if (event.preventDefault) event.preventDefault();
-              if (event.stopPropagation) event.stopPropagation();
-              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-              return false;
+      Object.defineProperty(HTMLFormElement.prototype, 'submit', {
+        value: function() {
+          if (!isEnabled() || isCurrentPageWhitelisted()) {
+            return originalSubmit.apply(this, arguments);
+          }
+          
+          const action = this.getAttribute('action') || '';
+          if (!checkNavigationOrPopup(action, 'form.submit')) {
+            return; // block
+          }
+          return originalSubmit.apply(this, arguments);
+        },
+        writable: false,
+        configurable: false
+      });
+    } catch (err) {
+      HTMLFormElement.prototype.submit = function() {
+        if (!isEnabled() || isCurrentPageWhitelisted()) {
+          return originalSubmit.apply(this, arguments);
+        }
+        const action = this.getAttribute('action') || '';
+        if (!checkNavigationOrPopup(action, 'form.submit')) {
+          return; // block
+        }
+        return originalSubmit.apply(this, arguments);
+      };
+    }
+  }
+
+  // --- ADGUARD / UBLOCK ORIGIN NATIVE YOUTUBE AD ENGINE ---
+  function runYouTubeAdGuardEngine() {
+    if (!window.location.hostname.includes('youtube.com')) return;
+
+    console.log('[Anti Pop-Under] AdGuard-grade Native YouTube Ad Engine active!');
+
+    // 1. Core payload cleaner: eliminates ad definitions before YouTube player initializes them
+    function cleanPlayerPayload(obj) {
+      if (!obj || typeof obj !== 'object') return obj;
+      try {
+        // Handle nested player response if present
+        if (obj.playerResponse && typeof obj.playerResponse === 'object') {
+          cleanPlayerPayload(obj.playerResponse);
+        } else if (typeof obj.playerResponse === 'string') {
+          try {
+            const parsed = JSON.parse(obj.playerResponse);
+            cleanPlayerPayload(parsed);
+            obj.playerResponse = JSON.stringify(parsed);
+          } catch (e) {}
+        }
+
+        // Delete ad placements and slots so YouTube never schedules ads
+        if (obj.adPlacements) delete obj.adPlacements;
+        if (obj.adSlots) delete obj.adSlots;
+        if (obj.playerAds) delete obj.playerAds;
+        if (obj.adBreakHeartbeatParams) delete obj.adBreakHeartbeatParams;
+        if (obj.masthead) delete obj.masthead;
+
+        // Clean anti-adblock enforcement dialogs & prompts
+        if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
+          const mr = obj.auxiliaryUi.messageRenderers;
+          if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
+          if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
+        }
+
+        // Clean engagement panels containing ads
+        if (Array.isArray(obj.engagementPanels)) {
+          obj.engagementPanels = obj.engagementPanels.filter(panel => {
+            const panelId = panel?.engagementPanelSectionListRenderer?.targetId || '';
+            return !panelId.includes('ads') && !panelId.includes('engagement-panel-ads');
+          });
+        }
+      } catch (e) {}
+      return obj;
+    }
+
+    // 2. Intercept window.ytInitialPlayerResponse (initial video load)
+    let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
+    if (_ytInitialPlayerResponse) {
+      cleanPlayerPayload(_ytInitialPlayerResponse);
+    }
+    try {
+      Object.defineProperty(window, 'ytInitialPlayerResponse', {
+        get() {
+          return _ytInitialPlayerResponse;
+        },
+        set(val) {
+          _ytInitialPlayerResponse = cleanPlayerPayload(val);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+
+    // 3. Intercept window.ytInitialData (browse, home, search ads)
+    function cleanInitialData(obj) {
+      if (!obj || typeof obj !== 'object') return obj;
+      try {
+        if (obj.overlay && obj.overlay.adSlotRenderer) delete obj.overlay.adSlotRenderer;
+        if (obj.masthead) delete obj.masthead;
+      } catch (e) {}
+      return obj;
+    }
+
+    let _ytInitialData = window.ytInitialData;
+    if (_ytInitialData) {
+      cleanInitialData(_ytInitialData);
+    }
+    try {
+      Object.defineProperty(window, 'ytInitialData', {
+        get() {
+          return _ytInitialData;
+        },
+        set(val) {
+          _ytInitialData = cleanInitialData(val);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+
+    // 4. Intercept window.fetch (SPA navigation: /youtubei/v1/player, /youtubei/v1/next, /reel_item_watch)
+    try {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
+        if (typeof url === 'string') {
+          const isPlayerApi = url.includes('/youtubei/v1/player') || 
+                              url.includes('/youtubei/v1/next') || 
+                              url.includes('/youtubei/v1/reel/reel_item_watch');
+
+          if (isPlayerApi) {
+            let response;
+            try {
+              response = await originalFetch.apply(this, args);
+            } catch (fetchErr) {
+              throw fetchErr;
+            }
+
+            try {
+              const clone = response.clone();
+              const data = await clone.json();
+              cleanPlayerPayload(data);
+
+              const modifiedBody = JSON.stringify(data);
+              const newHeaders = new Headers(response.headers);
+              newHeaders.set('Content-Type', 'application/json; charset=utf-8');
+
+              const modifiedResponse = new Response(modifiedBody, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: newHeaders
+              });
+              try {
+                Object.defineProperty(modifiedResponse, 'url', { value: response.url });
+              } catch (e) {}
+              return modifiedResponse;
+            } catch (parseErr) {
+              return response;
             }
           }
         }
-        return origDispatch.apply(this, arguments);
+        return originalFetch.apply(this, args);
       };
-    } catch(e) {}
+    } catch (e) {}
 
-    // Global Main World capture-phase click interceptor
-    window.addEventListener('click', function(e) {
-      if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
-      try {
-        const target = e.target;
-        if (!target) return;
+    // 5. Intercept XMLHttpRequest
+    try {
+      const originalOpen = XMLHttpRequest.prototype.open;
+      const originalSend = XMLHttpRequest.prototype.send;
 
-        if (window.top !== window.self) {
-          if (isPlayerOrPlayButton(target) || isSeekBarOrControlButton(target) || isInteractiveElement(target)) {
-            return; // Allow clicks on player controls and video freely inside embed player iframes
-          }
-        }
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        this._ytUrl = (typeof url === 'string') ? url : '';
+        return originalOpen.apply(this, [method, url, ...rest]);
+      };
 
-        // Block clicks on any explicit ad widgets or blocked containers
-        const blockedContainer = target.closest && target.closest('[data-ad-blocked="true"], [class*="layoutWrapper"], [class*="sc-widget"], [class*="root--wuzSh"], [qa-element="live-badge-plain-upper"]');
-        if (blockedContainer) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          blockedContainer.setAttribute('data-ad-blocked', 'true');
-          blockedContainer.style.setProperty('display', 'none', 'important');
-          blockedContainer.style.setProperty('pointer-events', 'none', 'important');
-          reportBlocked('ad_widget', 'Blocked click on ad widget container');
-          return;
-        }
-
-        let anchor = null;
-        let curr = target;
-        while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-          if (curr.hasAttribute && (curr.hasAttribute('data-ad-blocked') || curr.getAttribute('data-ad-blocked') === 'true')) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            curr.style.setProperty('display', 'none', 'important');
-            curr.style.setProperty('pointer-events', 'none', 'important');
-            reportBlocked('ad_container', 'Blocked click on blocked ad container');
-            return;
-          }
-          if (curr.tagName === 'A' || curr instanceof HTMLAnchorElement) {
-            anchor = curr;
-            break;
-          }
-          curr = curr.parentElement;
-        }
-
-        if (anchor) {
-          const href = anchor.href || anchor.getAttribute('href') || '';
-          if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
-            try {
-              const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-              const currentHost = window.location.hostname.toLowerCase();
-              const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
-              
-              // NEVER intercept or modify internal/same-domain movie links! (Protects Next.js router)
-              if (!isExternal) {
-                return;
-              }
-
-              const isBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
-              if (!checkNavigationOrPopup(href, isBlank ? 'anchor.click._blank' : 'anchor.click')) {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                const parentBox = anchor.closest('[class*="layoutWrapper"], [class*="widget"], [class*="ad"]');
-                if (parentBox) {
-                  parentBox.setAttribute('data-ad-blocked', 'true');
-                  parentBox.style.setProperty('display', 'none', 'important');
-                  parentBox.style.setProperty('pointer-events', 'none', 'important');
+      XMLHttpRequest.prototype.send = function(...args) {
+        if (this._ytUrl && (this._ytUrl.includes('/youtubei/v1/player') || this._ytUrl.includes('/youtubei/v1/next') || this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch'))) {
+          this.addEventListener('readystatechange', function() {
+            if (this.readyState === 4 && this.status === 200) {
+              try {
+                const data = JSON.parse(this.responseText);
+                cleanPlayerPayload(data);
+                const cleanJson = JSON.stringify(data);
+                if (this.responseType === 'json') {
+                  Object.defineProperty(this, 'response', { value: data, configurable: true });
+                } else {
+                  Object.defineProperty(this, 'responseText', { value: cleanJson, configurable: true });
+                  Object.defineProperty(this, 'response', { value: cleanJson, configurable: true });
                 }
-                reportBlocked(href, 'Blocked external popunder/ad anchor click');
-                return;
-              }
-            } catch(e) {}
+              } catch (e) {}
+            }
+          });
+        }
+        return originalSend.apply(this, args);
+      };
+    } catch (e) {}
+
+    // 6. Global JSON.parse hook: automatically sanitizes adPlacements from any internal parse
+    try {
+      const originalJSONParse = JSON.parse;
+      JSON.parse = function(text, reviver) {
+        const result = originalJSONParse.apply(this, arguments);
+        if (result && typeof result === 'object') {
+          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse) {
+            cleanPlayerPayload(result);
           }
         }
-      } catch(err) {}
-    }, true);
+        return result;
+      };
+    } catch (e) {}
+
+    // 7. Neutralize Anti-Adblock Warning Modals & Preserve Smooth Playback
+    function clearYouTubeEnforcementDialogs() {
+      if (!isEnabled()) return;
+      try {
+        const dialogSelectors = [
+          'ytd-enforcement-message-view-model',
+          'ytd-enforcement-message-renderer',
+          'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
+          'tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)',
+          'tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)'
+        ];
+
+        let removed = false;
+        dialogSelectors.forEach(sel => {
+          const els = document.querySelectorAll(sel);
+          els.forEach(el => {
+            el.remove();
+            removed = true;
+          });
+        });
+
+        if (removed) {
+          const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
+          backdrops.forEach(b => b.remove());
+
+          if (document.body) {
+            document.body.style.setProperty('overflow', 'auto', 'important');
+            document.body.style.setProperty('pointer-events', 'auto', 'important');
+          }
+          if (document.documentElement) {
+            document.documentElement.style.setProperty('overflow', 'auto', 'important');
+            document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
+          }
+
+          const video = document.querySelector('video');
+          if (video && video.paused) {
+            video.play().catch(() => {});
+          }
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const observer = new MutationObserver(() => {
+        clearYouTubeEnforcementDialogs();
+      });
+      observer.observe(document.documentElement || document.body, {
+        childList: true,
+        subtree: true
+      });
+    } catch (e) {}
+
+    setInterval(clearYouTubeEnforcementDialogs, 1000);
+  }
+
+  // Bulletproof override of Location.prototype navigation to prevent scripted location changes
+  if (!isYouTube) {
+    try {
+      const locationProto = Location.prototype;
+      const originalAssign = locationProto.assign;
+      const originalReplace = locationProto.replace;
+      const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, 'href');
+      
+      function checkLocationRedirect(url) {
+        return checkNavigationOrPopup(url, 'location change');
+      }
+      
+      if (hrefDescriptor && hrefDescriptor.set) {
+        Object.defineProperty(locationProto, 'href', {
+          get: hrefDescriptor.get,
+          set: function(val) {
+            if (checkLocationRedirect(val)) {
+              hrefDescriptor.set.call(this, val);
+            }
+          },
+          configurable: true
+        });
+      }
+      
+      locationProto.assign = function(val) {
+        if (checkLocationRedirect(val)) {
+          originalAssign.call(this, val);
+        }
+      };
+      
+      locationProto.replace = function(val) {
+        if (checkLocationRedirect(val)) {
+          originalReplace.call(this, val);
+        }
+      };
+    } catch (e) {}
   }
 
   function runGenericAntiAdblockBypass() {
@@ -1699,11 +1603,9 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     function cleanOverlays() {
       if (!isEnabled()) return;
       try {
-        const divs = document.querySelectorAll('div, section, dialog');
-        divs.forEach(el => {
-          if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
-          
-          const text = (el.innerText || '').toLowerCase();
+        const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"], [class*="backdrop"]');
+        dialogs.forEach(el => {
+          const text = (el.textContent || '').toLowerCase();
           const matchesAdblockText = (
             text.includes('phát hiện trình chặn quảng cáo') ||
             text.includes('vui lòng tắt trình chặn quảng cáo') ||
@@ -1715,27 +1617,19 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           );
 
           if (matchesAdblockText) {
-            const style = window.getComputedStyle(el);
-            const isOverlay = style.position === 'fixed' || style.position === 'absolute' || el.tagName.toLowerCase() === 'dialog';
+            el.remove();
+            console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
             
-            if (isOverlay) {
-              el.setAttribute('data-ad-blocked', 'true');
-              el.style.setProperty('display', 'none', 'important');
-              el.style.setProperty('visibility', 'hidden', 'important');
-              el.style.setProperty('pointer-events', 'none', 'important');
-              console.log('[Anti Pop-Under] Hidden anti-adblock overlay element:', el);
-              
-              const html = document.documentElement;
-              const body = document.body;
-              
-              if (html) {
-                if (html.style.overflow === 'hidden') html.style.overflow = '';
-                if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
-              }
-              if (body) {
-                if (body.style.overflow === 'hidden') body.style.overflow = '';
-                if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
-              }
+            const html = document.documentElement;
+            const body = document.body;
+            
+            if (html) {
+              if (html.style.overflow === 'hidden') html.style.overflow = '';
+              if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
+            }
+            if (body) {
+              if (body.style.overflow === 'hidden') body.style.overflow = '';
+              if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
             }
           }
         });
@@ -1750,7 +1644,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
         throttleTimer = null;
         if (!isEnabled()) return;
         cleanOverlays();
-      }, 500);
+      }, 1500);
     }
 
     try {
@@ -1763,9 +1657,17 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       });
     } catch (e) {}
 
+    // Fallback scan every 5 seconds for silent background changes
+    setInterval(() => {
+      if (isEnabled() && !window.location.hostname.includes('youtube.com') && !isCurrentPageWhitelisted()) {
+        cleanOverlays();
+      }
+    }, 5000);
+
     // Initial scan
     scheduleBypassScan();
   }
 
+  runYouTubeAdGuardEngine();
   runGenericAntiAdblockBypass();
 })();

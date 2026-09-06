@@ -1,3 +1,40 @@
+// Safe mock fallback for standalone preview / browser testing
+if (typeof chrome === "undefined" || !chrome.storage) {
+  window.chrome = {
+    runtime: {
+      getManifest: () => ({ version: "3.5.0" }),
+      sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
+    },
+    storage: {
+      local: {
+        get: (keys, cb) => {
+          if (cb) cb({
+            enabled: true,
+            blockedCount: 142,
+            lastFiltersUpdateTimestamp: Date.now() - 300000,
+            onlineFilterStats: {
+              counts: {
+                ublock: 116554,
+                easylist: 137802,
+                adguard: 652337,
+                abpvn: 1076,
+                peterlowe: 3541
+              }
+            }
+          });
+        },
+        set: (obj, cb) => { if (cb) cb(); }
+      },
+      onChanged: { addListener: () => {} }
+    },
+    tabs: {
+      query: (opts, cb) => { if (cb) cb([{ id: 1, url: "https://example.com" }]); },
+      reload: () => {},
+      create: (opts) => { window.open(opts.url, '_blank'); }
+    }
+  };
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // Sync manifest version string
   try {
@@ -211,22 +248,29 @@ document.addEventListener("DOMContentLoaded", () => {
       domainRules.forEach(selector => {
         const item = document.createElement("div");
         item.className = "custom-rule-item";
+        const displayCode = selector.length > 28 ? selector.substring(0, 26) + '...' : selector;
+
         item.innerHTML = `
-          <div>
-            <span class="custom-rule-code">${selector}</span>
+          <div class="custom-rule-info" title="${selector.replace(/"/g, '&quot;')}">
+            <span class="custom-rule-code">${displayCode}</span>
             <span class="custom-rule-domain">${currentDomain || "Trang hiện tại"}</span>
           </div>
-          <button class="custom-rule-delete-btn" data-domain="${currentDomain}" data-selector="${selector}">🗑️ Gỡ chặn</button>
+          <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
         `;
-        item.querySelector(".custom-rule-delete-btn").addEventListener("click", (e) => {
-          const sel = e.currentTarget.getAttribute("data-selector");
-          const dom = e.currentTarget.getAttribute("data-domain");
+
+        const deleteBtn = item.querySelector(".custom-rule-delete-btn");
+        deleteBtn.addEventListener("click", () => {
           chrome.storage.local.get(["manualFilters"], (res) => {
             let curFilters = res.manualFilters || {};
-            if (curFilters[dom]) {
-              curFilters[dom] = curFilters[dom].filter(s => s !== sel);
-              if (curFilters[dom].length === 0) delete curFilters[dom];
-              chrome.storage.local.set({ manualFilters: curFilters });
+            if (curFilters[currentDomain]) {
+              curFilters[currentDomain] = curFilters[currentDomain].filter(s => s !== selector);
+              if (curFilters[currentDomain].length === 0) delete curFilters[currentDomain];
+              chrome.storage.local.set({ manualFilters: curFilters }, () => {
+                updateCustomRulesUI(curFilters, globalList);
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                  if (tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id);
+                });
+              });
             }
           });
         });
@@ -237,18 +281,26 @@ document.addEventListener("DOMContentLoaded", () => {
       globalList.forEach(rule => {
         const item = document.createElement("div");
         item.className = "custom-rule-item";
+        const displayCode = rule.length > 28 ? rule.substring(0, 26) + '...' : rule;
+
         item.innerHTML = `
-          <div>
-            <span class="custom-rule-code">${rule}</span>
-            <span class="custom-rule-domain">Quy tắc chung (Mọi trang)</span>
+          <div class="custom-rule-info" title="${rule.replace(/"/g, '&quot;')}">
+            <span class="custom-rule-code">${displayCode}</span>
+            <span class="custom-rule-domain">Toàn cục (Mọi trang)</span>
           </div>
-          <button class="custom-rule-delete-btn" data-global="true" data-selector="${rule}">🗑️ Gỡ chặn</button>
+          <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
         `;
-        item.querySelector(".custom-rule-delete-btn").addEventListener("click", (e) => {
-          const ruleToRemove = e.currentTarget.getAttribute("data-selector");
+
+        const deleteBtn = item.querySelector(".custom-rule-delete-btn");
+        deleteBtn.addEventListener("click", () => {
           chrome.storage.local.get(["customBlockedSelectors"], (res) => {
-            const updated = (res.customBlockedSelectors || []).filter(r => r !== ruleToRemove);
-            chrome.storage.local.set({ customBlockedSelectors: updated });
+            const updated = (res.customBlockedSelectors || []).filter(r => r !== rule);
+            chrome.storage.local.set({ customBlockedSelectors: updated }, () => {
+              updateCustomRulesUI(filters, updated);
+              chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id);
+              });
+            });
           });
         });
         customRulesContainer.appendChild(item);
@@ -322,7 +374,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (currentDomain && filters[currentDomain]) {
         delete filters[currentDomain];
       }
-      chrome.storage.local.set({ manualFilters: filters, customBlockedSelectors: [] });
+      chrome.storage.local.set({ manualFilters: filters, customBlockedSelectors: [] }, () => {
+        updateCustomRulesUI(filters, []);
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id);
+        });
+      });
     });
   });
 
@@ -338,14 +395,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (stats && stats.counts) {
       const countEls = document.querySelectorAll(".filter-rules-count");
-      if (countEls[0] && stats.totalDomains) countEls[0].textContent = `${(14200 + (stats.counts.adguard || 0)).toLocaleString()} quy tắc (Tải trực tuyến)`;
+      if (countEls[0] && stats.counts.ublock) countEls[0].textContent = `${stats.counts.ublock.toLocaleString()} quy tắc trực tuyến`;
+      if (countEls[1] && stats.counts.easylist) countEls[1].textContent = `${stats.counts.easylist.toLocaleString()} quy tắc trực tuyến`;
       if (countEls[2] && stats.counts.adguard) countEls[2].textContent = `${stats.counts.adguard.toLocaleString()} quy tắc trực tuyến`;
       if (countEls[3] && stats.counts.abpvn) countEls[3].textContent = `${stats.counts.abpvn.toLocaleString()} quy tắc ABPVN trực tuyến`;
       if (countEls[5] && stats.counts.peterlowe) countEls[5].textContent = `${stats.counts.peterlowe.toLocaleString()} adservers trực tuyến`;
     }
   }
 
-  // Real Online Filter Update Action (Fetches uBlock, AdGuard, ABPVN online via HTTP)
+  // Click handler to open filter library URLs in a new tab
+  document.querySelectorAll(".filter-item[data-url]").forEach(item => {
+    item.addEventListener("click", () => {
+      const url = item.getAttribute("data-url");
+      if (url && chrome && chrome.tabs) {
+        chrome.tabs.create({ url });
+      }
+    });
+  });
+
+  // Real Online Filter Update Action (Fetches uBlock, EasyList, AdGuard, ABPVN, Peter Lowe online via HTTP)
   updateFiltersBtn.addEventListener("click", () => {
     updateBtnText.textContent = "Đang tải...";
     updateFiltersBtn.disabled = true;
@@ -355,7 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chrome.runtime.lastError || !response || !response.success) {
           updateBtnText.textContent = "Mới nhất!";
         } else {
-          updateBtnText.textContent = "Mới nhất!";
+          updateBtnText.textContent = "Thành công!";
         }
 
         chrome.storage.local.get(["lastFiltersUpdateTimestamp", "onlineFilterStats"], (res) => {

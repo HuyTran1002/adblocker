@@ -32,16 +32,16 @@
 }
 
 body {
-  width: 350px;
+  width: 360px;
   background-color: var(--bg-app);
   color: var(--text-main);
-  overflow-x: hidden;
+  overflow: hidden;
   font-size: 13px;
 }
 
 .app-container {
   position: relative;
-  width: 350px;
+  width: 360px;
   min-height: 420px;
   background: var(--bg-app);
   overflow: hidden;
@@ -51,7 +51,7 @@ body {
 .view-panel {
   display: none;
   flex-direction: column;
-  padding: 16px;
+  padding: 14px 14px 12px 14px;
   min-height: 420px;
   opacity: 0;
   transform: translateX(10px);
@@ -429,14 +429,15 @@ input:not(:checked) ~ .pulse-indicator,
 /* ================= SETTINGS VIEW STYLES ================= */
 .settings-header {
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 10px;
-  margin-bottom: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .back-btn {
   width: auto;
-  padding: 0 10px;
-  gap: 6px;
+  padding: 0 8px;
+  height: 28px;
+  gap: 5px;
   font-size: 11px;
   font-weight: 600;
 }
@@ -458,7 +459,7 @@ input:not(:checked) ~ .pulse-indicator,
   border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 3px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   gap: 3px;
 }
 
@@ -471,7 +472,7 @@ input:not(:checked) ~ .pulse-indicator,
   background: none;
   border: none;
   color: var(--text-sub);
-  padding: 7px 4px;
+  padding: 6px 4px;
   font-size: 11px;
   font-weight: 600;
   border-radius: 8px;
@@ -519,7 +520,7 @@ input:not(:checked) ~ .pulse-indicator,
 .tab-pane {
   display: none;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .tab-pane.active {
@@ -530,10 +531,11 @@ input:not(:checked) ~ .pulse-indicator,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0 1px;
 }
 
 .pane-subtitle {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-sub);
 }
@@ -542,8 +544,8 @@ input:not(:checked) ~ .pulse-indicator,
   background: rgba(99, 102, 241, 0.15);
   border: 1px solid rgba(99, 102, 241, 0.3);
   color: #a5b4fc;
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 3px 8px;
+  font-size: 9.5px;
   font-weight: 700;
   border-radius: 6px;
   cursor: pointer;
@@ -572,13 +574,13 @@ input:not(:checked) ~ .pulse-indicator,
   text-decoration: underline;
 }
 
-/* Filter List (uBlock style) */
+/* Filter List (uBlock style - 1 Screen Zero Scroll Layout) */
 .filter-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 250px;
-  overflow-y: auto;
+  gap: 4px;
+  max-height: none;
+  overflow: visible;
 }
 
 .filter-item {
@@ -587,27 +589,57 @@ input:not(:checked) ~ .pulse-indicator,
   align-items: center;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 8px 10px;
-  gap: 8px;
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  padding: 5px 9px;
+  gap: 7px;
+  transition: all 0.15s ease;
 }
 
 .filter-item.highlight {
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: rgba(99, 102, 241, 0.35);
   background: linear-gradient(135deg, var(--bg-card) 0%, rgba(99, 102, 241, 0.08) 100%);
+}
+
+.filter-item[data-url] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-item[data-url]:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.filter-item[data-url]:active {
+  transform: translateY(0);
+}
+
+.external-link-icon {
+  font-size: 9px;
+  color: var(--accent-color);
+  margin-left: 3px;
+  opacity: 0.65;
+  display: inline-block;
+  transition: all 0.15s ease;
+}
+
+.filter-item:hover .external-link-icon {
+  opacity: 1;
+  transform: translateX(1px) translateY(-1px);
 }
 
 .filter-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex: 1;
   min-width: 0;
 }
 
 .filter-icon {
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1;
   flex-shrink: 0;
 }
 
@@ -615,11 +647,13 @@ input:not(:checked) ~ .pulse-indicator,
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 1px;
 }
 
 .filter-name {
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--text-main);
   white-space: nowrap;
   overflow: hidden;
@@ -628,6 +662,7 @@ input:not(:checked) ~ .pulse-indicator,
 
 .filter-rules-count {
   font-size: 9px;
+  line-height: 1.2;
   color: var(--text-mute);
   white-space: nowrap;
   overflow: hidden;
@@ -648,17 +683,50 @@ input:not(:checked) ~ .pulse-indicator,
   border-radius: 50%;
   flex-shrink: 0;
   background-color: var(--status-ok);
+  box-shadow: 0 0 5px var(--status-ok-glow);
 }
 
 .status-text {
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--status-ok);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .update-icon {
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Bottom Status Banner for Tab Filters */
+.filter-status-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 7px;
+  padding: 4px 8px;
+  margin-top: 1px;
+  font-size: 9px;
+  color: var(--text-sub);
+}
+
+.filter-status-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-main);
+}
+
+.filter-status-left strong {
+  color: var(--status-ok);
+}
+
+.filter-status-right {
+  font-size: 8.5px;
+  color: var(--text-mute);
+  font-weight: 500;
 }
 
 /* Inputs & Boxes for Whitelist & Custom Rules */
@@ -820,9 +888,10 @@ input:not(:checked) ~ .pulse-indicator,
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
+  padding: 6px 10px;
+  margin-bottom: 5px;
   gap: 8px;
+  box-sizing: border-box;
   transition: background 0.15s ease;
 }
 
@@ -830,31 +899,45 @@ input:not(:checked) ~ .pulse-indicator,
   background: rgba(255, 255, 255, 0.08);
 }
 
+.custom-rule-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .custom-rule-code {
   font-family: monospace;
   font-size: 11px;
-  color: #a6e3a1;
-  word-break: break-all;
-  flex: 1;
+  font-weight: 600;
+  color: #a5b4fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .custom-rule-domain {
   font-size: 9px;
   color: var(--text-mute);
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
 .custom-rule-delete-btn {
-  background: rgba(244, 63, 94, 0.15);
-  border: 1px solid rgba(244, 63, 94, 0.3);
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.25);
   color: #f43f5e;
   border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: 3px 8px;
+  font-size: 10.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .custom-rule-delete-btn:hover {
@@ -862,3 +945,4 @@ input:not(:checked) ~ .pulse-indicator,
   color: #ffffff;
   border-color: #f43f5e;
 }
+

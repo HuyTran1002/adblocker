@@ -1,10 +1,12 @@
 .history/
-.history/
 *.zip
+*.xpi
 .DS_Store
 Thumbs.db
 
 _metadata/
 release/
-*.zip
-*.xpi
+scratch/
+backup/
+adblocker-v2.6.9/
+node_modules/
