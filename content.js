@@ -1069,11 +1069,12 @@ if (window.location.hostname.includes('youtube.com')) {
       } catch (err) {}
     }, true); // Use capture phase to intercept before page scripts
 
-    // --- ADVANCED INTERACTIVE VISUAL ELEMENT PICKER & CONFIRMATION SYSTEM ---
+    // --- ADVANCED F12-STYLE TARGET INSPECTOR & CONFIRMATION SYSTEM ---
     let lastRightClickedElement = null;
     let isPickerActive = false;
     let pickerOverlay = null;
     let pickerBadge = null;
+    let pickerTopBar = null;
     let currentHoveredElement = null;
     let confirmationBackdrop = null;
 
@@ -1081,7 +1082,7 @@ if (window.location.hostname.includes('youtube.com')) {
       lastRightClickedElement = e.target;
     }, true);
 
-    // Build specific, resilient, safe selector
+    // Build specific, resilient, safe CSS selector
     function getSafeRobustSelector(el) {
       if (!el || el === document.body || el === document.documentElement) return null;
       
@@ -1090,8 +1091,8 @@ if (window.location.hostname.includes('youtube.com')) {
         return '#' + CSS.escape(el.id);
       }
 
-      // 2. Data attributes
-      const dataAttrs = ['data-id', 'data-ad-id', 'data-slot', 'data-unit', 'data-name'];
+      // 2. Data attributes commonly used for ad units
+      const dataAttrs = ['data-id', 'data-ad-id', 'data-slot', 'data-unit', 'data-name', 'data-widget-id'];
       for (const attr of dataAttrs) {
         const val = el.getAttribute(attr);
         if (val && val.length < 100) {
@@ -1171,7 +1172,7 @@ if (window.location.hostname.includes('youtube.com')) {
       return generated || `${el.tagName.toLowerCase()}`;
     }
 
-    // Initialize Picker Overlays
+    // Initialize F12-style Target Inspector Overlays
     function createPickerOverlays() {
       if (!pickerOverlay) {
         pickerOverlay = document.createElement('div');
@@ -1182,10 +1183,10 @@ if (window.location.hostname.includes('youtube.com')) {
           z-index: 2147483645 !important;
           border: 2px dashed #ff4757 !important;
           background: rgba(255, 71, 87, 0.22) !important;
-          box-shadow: 0 0 12px rgba(255, 71, 87, 0.4) !important;
+          box-shadow: 0 0 16px rgba(255, 71, 87, 0.5) !important;
           display: none !important;
           border-radius: 4px !important;
-          transition: all 0.05s ease !important;
+          transition: top 0.05s ease, left 0.05s ease, width 0.05s ease, height 0.05s ease !important;
         `);
         (document.body || document.documentElement).appendChild(pickerOverlay);
       }
@@ -1205,39 +1206,85 @@ if (window.location.hostname.includes('youtube.com')) {
           font-size: 11px !important;
           font-weight: 600 !important;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
           display: none !important;
         `);
         (document.body || document.documentElement).appendChild(pickerBadge);
       }
+
+      if (!pickerTopBar) {
+        pickerTopBar = document.createElement('div');
+        pickerTopBar.id = 'adblock-max-picker-topbar';
+        pickerTopBar.setAttribute('style', `
+          position: fixed !important;
+          top: 14px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 2147483647 !important;
+          background: #11111b !important;
+          color: #cdd6f4 !important;
+          border: 1.5px solid #ff4757 !important;
+          border-radius: 30px !important;
+          padding: 8px 18px !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+          box-shadow: 0 10px 32px rgba(0,0,0,0.65) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          pointer-events: auto !important;
+          user-select: none !important;
+        `);
+        pickerTopBar.innerHTML = `
+          <span style="font-size: 17px;">🎯</span>
+          <span><b>Chế độ Target phần tử (F12)</b>: Rê chuột vào object & click để chặn</span>
+          <button id="adblock-picker-topbar-exit" style="
+            background: rgba(255, 71, 87, 0.18) !important;
+            color: #ff6b81 !important;
+            border: 1px solid rgba(255, 71, 87, 0.4) !important;
+            border-radius: 14px !important;
+            padding: 4px 12px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            transition: all 0.2s !important;
+          ">Thoát (ESC)</button>
+        `;
+        (document.body || document.documentElement).appendChild(pickerTopBar);
+        document.getElementById('adblock-picker-topbar-exit').addEventListener('click', stopElementPicker);
+      }
     }
 
-    function startElementPicker() {
+    function startElementPicker(initialTarget) {
       if (isPickerActive) return;
       isPickerActive = true;
       createPickerOverlays();
+      if (pickerTopBar) pickerTopBar.style.display = 'flex';
 
       document.addEventListener('mousemove', onPickerMouseMove, true);
       document.addEventListener('click', onPickerClick, true);
       document.addEventListener('keydown', onPickerKeyDown, true);
       document.documentElement.style.cursor = 'crosshair';
+
+      if (initialTarget && initialTarget !== document.body && initialTarget !== document.documentElement) {
+        highlightTargetElement(initialTarget);
+      }
     }
 
     function stopElementPicker() {
       isPickerActive = false;
       if (pickerOverlay) pickerOverlay.style.display = 'none';
       if (pickerBadge) pickerBadge.style.display = 'none';
+      if (pickerTopBar) pickerTopBar.style.display = 'none';
       document.removeEventListener('mousemove', onPickerMouseMove, true);
       document.removeEventListener('click', onPickerClick, true);
       document.removeEventListener('keydown', onPickerKeyDown, true);
       document.documentElement.style.cursor = '';
     }
 
-    function onPickerMouseMove(e) {
-      if (!isPickerActive || confirmationBackdrop) return;
-      const target = e.target;
-      if (!target || target === pickerOverlay || target === pickerBadge || target.id?.startsWith('adblock-max-picker')) return;
-
+    function highlightTargetElement(target) {
+      if (!target || target === pickerOverlay || target === pickerBadge || target === pickerTopBar || target.id?.startsWith('adblock-max-picker')) return;
       currentHoveredElement = target;
       const rect = target.getBoundingClientRect();
       
@@ -1249,13 +1296,19 @@ if (window.location.hostname.includes('youtube.com')) {
 
       const tag = target.tagName.toLowerCase();
       const cls = target.className && typeof target.className === 'string' ? '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-      pickerBadge.textContent = `<${tag}${cls}> (${Math.round(rect.width)}x${Math.round(rect.height)}) - Bấm chuột để chọn, ESC để hủy`;
+      pickerBadge.textContent = `<${tag}${cls}> (${Math.round(rect.width)} × ${Math.round(rect.height)} px)`;
       
-      let badgeTop = rect.top - 30;
-      if (badgeTop < 10) badgeTop = rect.bottom + 10;
+      let badgeTop = rect.top - 28;
+      if (badgeTop < 60) badgeTop = rect.bottom + 8;
       pickerBadge.style.top = Math.max(10, badgeTop) + 'px';
       pickerBadge.style.left = Math.max(10, rect.left) + 'px';
       pickerBadge.style.display = 'block';
+    }
+
+    function onPickerMouseMove(e) {
+      if (!isPickerActive || confirmationBackdrop) return;
+      const target = e.target;
+      highlightTargetElement(target);
     }
 
     function onPickerClick(e) {
@@ -1265,7 +1318,7 @@ if (window.location.hostname.includes('youtube.com')) {
       e.stopImmediatePropagation();
 
       const target = currentHoveredElement || e.target;
-      if (!target || target.id?.startsWith('adblock-max-picker')) return;
+      if (!target || target === pickerTopBar || target.id?.startsWith('adblock-max-picker')) return;
 
       stopElementPicker();
       showConfirmationDialog(target);
@@ -1275,6 +1328,17 @@ if (window.location.hostname.includes('youtube.com')) {
       if (e.key === 'Escape') {
         stopElementPicker();
         removeConfirmationDialog();
+        return;
+      }
+      // F12-style Arrow key navigation (Up = Parent container, Down = First child)
+      if (isPickerActive && currentHoveredElement) {
+        if (e.key === 'ArrowUp' && currentHoveredElement.parentElement && currentHoveredElement.parentElement !== document.body) {
+          e.preventDefault();
+          highlightTargetElement(currentHoveredElement.parentElement);
+        } else if (e.key === 'ArrowDown' && currentHoveredElement.firstElementChild) {
+          e.preventDefault();
+          highlightTargetElement(currentHoveredElement.firstElementChild);
+        }
       }
     }
 
@@ -1352,7 +1416,7 @@ if (window.location.hostname.includes('youtube.com')) {
               font-weight: 600 !important;
               cursor: pointer !important;
               transition: all 0.2s !important;
-            ">Hủy (ESC)</button>
+            ">Hủy / Chọn lại (ESC)</button>
             <button id="adblock-btn-confirm" style="
               background: #ff4757 !important;
               color: #ffffff !important;
@@ -1372,13 +1436,19 @@ if (window.location.hostname.includes('youtube.com')) {
       (document.body || document.documentElement).appendChild(confirmationBackdrop);
 
       // Bind events
-      document.getElementById('adblock-btn-cancel').addEventListener('click', removeConfirmationDialog);
+      document.getElementById('adblock-btn-cancel').addEventListener('click', () => {
+        removeConfirmationDialog();
+        startElementPicker(); // Allow repicking
+      });
       document.getElementById('adblock-btn-confirm').addEventListener('click', () => {
         saveAndApplyCustomRule(selector, targetEl);
         removeConfirmationDialog();
       });
       confirmationBackdrop.addEventListener('click', (e) => {
-        if (e.target === confirmationBackdrop) removeConfirmationDialog();
+        if (e.target === confirmationBackdrop) {
+          removeConfirmationDialog();
+          startElementPicker();
+        }
       });
     }
 
@@ -1440,17 +1510,8 @@ if (window.location.hostname.includes('youtube.com')) {
 
     // Listen for background / popup messages
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-      if (msg.type === 'START_ELEMENT_PICKER') {
-        startElementPicker();
-        sendResponse({ success: true });
-        return true;
-      }
-      if (msg.type === 'START_MANUAL_BLOCK') {
-        if (lastRightClickedElement) {
-          showConfirmationDialog(lastRightClickedElement);
-        } else {
-          startElementPicker();
-        }
+      if (msg.type === 'START_ELEMENT_PICKER' || msg.type === 'START_MANUAL_BLOCK') {
+        startElementPicker(lastRightClickedElement);
         sendResponse({ success: true });
         return true;
       }

@@ -35,7 +35,7 @@ chrome.runtime.onInstalled.addListener(() => {
   // Create context menu for manual ad blocking
   chrome.contextMenus.create({
     id: "block_element",
-    title: "🚫 Chặn quảng cáo này (Adblock Max)",
+    title: "🎯 Chọn & Chặn phần tử này... (Adblock Max)",
     contexts: ["all"]
   });
 });
