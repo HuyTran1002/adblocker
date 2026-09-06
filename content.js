@@ -50,6 +50,22 @@ function isCurrentPageWhitelisted() {
 }
 
 const adSelectors = [
+  // Block any element flagged dynamically
+  '[data-ad-blocked="true"]',
+  
+  // Tailwind modal backdrop ads with close buttons
+  'div[class*="fixed"][class*="inset-0"]:has(button[aria-label*="Đóng" i])',
+  'div[class*="fixed"][class*="inset-0"]:has(button[aria-label*="close" i])',
+  'div[class*="fixed"][class*="inset-0"]:has(button[class*="rounded-full"])',
+  'div[class*="fixed"][class*="inset-0"]:has(button[class*="bg-[#e50914]"])',
+  'div[class*="fixed"][class*="inset-0"]:has(a[href*="bit.ly"])',
+  'div[class*="fixed"][class*="inset-0"]:has(img[src*="popunder"])',
+  'div[class*="fixed"][class*="inset-0"]:has(img[src*="ads/"])',
+  'div[class*="fixed"][class*="inset-0"]:has(img[src*="ad/"])',
+  'div[class*="fixed"][class*="inset-0"]:has([aria-label*="quảng cáo" i])',
+  'div[class*="fixed"][class*="inset-0"]:has([aria-label*="Quảng cáo" i])',
+  'div[class*="fixed"][class*="inset-0"][style*="backdrop-filter"]:not(:has(video)):not(:has(form)):not(:has(input))',
+
   // General explicit ad classes and IDs
   '.adsbox', '.ad-banner', '.sponsored-post', '.sponsored-ad',
   '.ad-slot', '.ads-slot', '.ad-holder', '.ads-holder',
@@ -789,11 +805,29 @@ if (window.location.hostname.includes('youtube.com')) {
         const vw = window.innerWidth || document.documentElement.clientWidth || 800;
         const vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
-        const overlays = document.querySelectorAll('div, section, dialog, [class*="overlay"], [class*="backdrop"], [class*="modal"]');
+        // 1. Direct purge for all fixed/modal backdrops with close buttons
+        const closeBtns = document.querySelectorAll('button[aria-label*="đóng" i], button[aria-label*="close" i], button[aria-label="Đóng"], button[class*="bg-[#e50914]"], [class*="fixed"] button');
+        closeBtns.forEach(btn => {
+          if (isAdCloseButton(btn)) {
+            const backdrop = btn.closest('div[class*="fixed"][class*="inset-0"], div[class*="fixed"], [class*="backdrop"], [class*="modal"], [class*="overlay"]');
+            if (backdrop && !isVideoPlayerOrControls(backdrop) && !backdrop.querySelector('video, form, input, textarea, select')) {
+              backdrop.setAttribute('data-ad-blocked', 'true');
+              backdrop.style.setProperty('display', 'none', 'important');
+              backdrop.style.setProperty('visibility', 'hidden', 'important');
+              backdrop.style.setProperty('pointer-events', 'none', 'important');
+              backdrop.style.setProperty('opacity', '0', 'important');
+              try { backdrop.remove(); } catch(e) {}
+              console.log('[Anti Pop-Under] Purged modal backdrop containing ad close button:', backdrop);
+              if (document.body) { document.body.style.overflow = ''; document.body.style.position = ''; }
+              if (document.documentElement) { document.documentElement.style.overflow = ''; document.documentElement.style.position = ''; }
+            }
+          }
+        });
+
+        // 2. Scan all general overlays
+        const overlays = document.querySelectorAll('div, section, dialog, [class*="overlay"], [class*="backdrop"], [class*="modal"], [class*="inset-0"]');
         overlays.forEach(el => {
           if (el.hasAttribute('data-ad-blocked')) return;
-
-          // NEVER touch video players, movie posters, or control bars
           if (isVideoPlayerOrControls(el) || isMoviePosterOrContent(el)) return;
 
           const style = window.getComputedStyle(el);
@@ -808,13 +842,12 @@ if (window.location.hostname.includes('youtube.com')) {
           const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
           const elId = (el.id || '').toLowerCase();
 
-          const isOverlayClass = isLargeArea ||
+          const isOverlayClass = isLargeArea || elClass.includes('inset-0') ||
                                  elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') || elClass.includes('layoutwrapper') ||
                                  elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish');
 
           if (!isOverlayClass) return;
 
-          // Never touch genuine site popups (like login, auth, video player, search dialogs)
           if (el.closest('form, nav, header, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [id*="login"], [id*="auth"]')) return;
 
           const allChildren = el.querySelectorAll('*');
@@ -842,11 +875,9 @@ if (window.location.hostname.includes('youtube.com')) {
               break;
             }
 
-            if (childTag === 'img') {
-              if (isMoviePosterOrContent(child)) {
-                hasGenuineContent = true;
-                break;
-              }
+            if (childTag === 'img' && isMoviePosterOrContent(child)) {
+              hasGenuineContent = true;
+              break;
             }
           }
 
@@ -859,15 +890,8 @@ if (window.location.hostname.includes('youtube.com')) {
             try { el.remove(); } catch(e) {}
             console.log('[Anti Pop-Under] Removed orphaned overlay backdrop & clickjack layer:', el);
 
-            // Restore scroll locks if body/html was locked
-            if (document.body && (document.body.style.overflow === 'hidden' || document.body.style.position === 'fixed')) {
-              document.body.style.overflow = '';
-              document.body.style.position = '';
-            }
-            if (document.documentElement && (document.documentElement.style.overflow === 'hidden' || document.documentElement.style.position === 'fixed')) {
-              document.documentElement.style.overflow = '';
-              document.documentElement.style.position = '';
-            }
+            if (document.body) { document.body.style.overflow = ''; document.body.style.position = ''; }
+            if (document.documentElement) { document.documentElement.style.overflow = ''; document.documentElement.style.position = ''; }
           }
         });
       } catch(e) {}
@@ -878,6 +902,9 @@ if (window.location.hostname.includes('youtube.com')) {
       checkAndHideElement(document.body || document.documentElement);
       cleanOrphanedBackdrops();
     }
+
+    // Periodic fast check to eradicate full-screen blurred backdrops and ad modals immediately
+    setInterval(cleanOrphanedBackdrops, 250);
 
     // Set up batched MutationObserver using requestIdleCallback to keep video playback smooth (no frame drops)
     const pendingNodes = new Set();

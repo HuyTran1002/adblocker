@@ -429,12 +429,13 @@
         } catch(e) {}
       }
 
-      // 2. Eradicate floating "X" / "Close" buttons & adult widget containers without triggering fake click traps
+      // 2. Eradicate floating "X" / "Close" buttons & full-screen darkened backdrops without triggering fake click traps
       const closeSelectors = [
         '.vjs-ad-overlay .close', '.jw-ad-overlay .close', '.ad-overlay-close',
         '.btn-close-ad', '.close-ad', '#close-ad', '.ad_close_btn', '.ad-close-btn',
         '[class*="close-ad"]', '[class*="ad-close"]', '[id*="close-ad"]', '[id*="ad-close"]',
-        'button[aria-label*="close ad" i]', 'button[aria-label*="đóng quảng cáo" i]',
+        'button[aria-label*="close" i]', 'button[aria-label*="đóng" i]', 'button[aria-label="Đóng"]',
+        'button[aria-label*="tắt" i]', 'button[class*="rounded-full"]', 'button[class*="bg-[#e50914]"]',
         '[class*="layoutWrapper"]', '[class*="root--wuzSh"]', '[qa-element="live-badge-plain-upper"]',
         '.sc-widget-icon', '[class*="model-name--"]'
       ];
@@ -445,14 +446,31 @@
           for (var m = 0; m < closeNodes.length; m++) {
             var node = closeNodes[m];
             if (node) {
-              var parentAd = node.closest('[class*="ad"], [id*="ad"], [class*="popup"], [id*="popup"], [class*="catfish"], [id*="catfish"], [class*="layoutWrapper"], [class*="widget"]') || node;
+              var btnText = (node.innerText || node.textContent || '').trim();
+              var aria = (node.getAttribute('aria-label') || '').toLowerCase();
+              var isAdBtn = (btnText === '✕' || btnText === '×' || btnText === 'X' || aria.includes('đóng') || aria.includes('close') || aria.includes('tắt') || node.classList.contains('close') || node.className.includes('close'));
+              
+              var parentAd = node.closest('[class*="fixed"][class*="inset-0"], [class*="fixed"], [class*="ad"], [id*="ad"], [class*="popup"], [id*="popup"], [class*="catfish"], [id*="catfish"], [class*="layoutWrapper"], [class*="widget"], [class*="modal"], [class*="backdrop"]') || node;
+              
+              // If node is a button but not matching ad pattern and has lots of text, do not treat as ad
+              if (!isAdBtn && btnText.length > 50) continue;
+
               // Protect legitimate video players from being hidden
-              if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer')) {
+              if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer') && !parentAd.querySelector('video:not([src*="ad"]), form, input, textarea, select')) {
                 parentAd.style.setProperty('display', 'none', 'important');
                 parentAd.style.setProperty('visibility', 'hidden', 'important');
                 parentAd.style.setProperty('pointer-events', 'none', 'important');
+                parentAd.style.setProperty('opacity', '0', 'important');
                 parentAd.setAttribute('data-ad-blocked', 'true');
                 try { parentAd.remove(); } catch(e) {}
+                if (document.body) {
+                  document.body.style.overflow = '';
+                  document.body.style.position = '';
+                }
+                if (document.documentElement) {
+                  document.documentElement.style.overflow = '';
+                  document.documentElement.style.position = '';
+                }
               }
             }
           }
@@ -897,13 +915,23 @@
          bgAlpha = 0;
       }
       
-      const isTransparent = opacity < 0.6 || bgAlpha < 0.6;
+      const hasBackdropFilter = style.backdropFilter && style.backdropFilter !== 'none';
+      const isTransparent = opacity < 0.95 || bgAlpha < 0.95 || hasBackdropFilter;
       const zIndex = parseInt(style.zIndex, 10);
       const isHighZ = !isNaN(zIndex) && zIndex >= 10;
-      const isFullScreen = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw'));
-      const isLargeArea = (width >= 200 && height >= 200);
+      const isFullScreen = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw')) || elClass.includes('inset-0');
+      const isLargeArea = (width >= 200 && height >= 200) || isFullScreen;
 
       if (isPositioned && (isHighZ || isFullScreen) && isTransparent && isLargeArea) {
+        return true;
+      }
+
+      // Check if it contains an ad close button
+      if (isPositioned && (isHighZ || isFullScreen) && el.querySelector('button[aria-label*="Đóng" i], button[aria-label*="close" i], button[class*="bg-[#e50914]"]')) {
+        return true;
+      }
+
+      if (tagName === 'a' && isPositioned && (isHighZ || isFullScreen) && isTransparent) {
         return true;
       }
 
