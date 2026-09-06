@@ -11,7 +11,7 @@
   // ================================================================
   (function() {
     if (!window.location.hostname.includes('youtube.com')) return;
-    console.log('[Adblock Max] YouTube Zero-Wait Instant Engine v3.3.0 initialized.');
+    console.log('[Adblock Max] YouTube Zero-Wait Instant Engine v3.4.0 initialized.');
 
     // ===== LAYER 1: CSS - Hide all ad UI elements instantly =====
     const adCSS = document.createElement('style');
