@@ -4,16 +4,17 @@
 
 
   // ================================================================
-  // YOUTUBE AD ELIMINATOR v3.1.0 (AdGuard-style approach)
-  // Strategy: Allow ad infrastructure to load at network level
-  // (passes YouTube's integrity checks), then strip ad config
-  // from player data at JavaScript level + hide ad UI with CSS.
+  // YOUTUBE AD ELIMINATOR v3.4.0 (AdGuard / uBlock Core Protocol)
+  // Strategy: Intercept player configuration at API layer
+  // (Response.prototype.json, targeted JSON.parse & Global window properties)
+  // to prune ad metadata before player initialization.
+  // Video player starts directly with main video without loading ad videos.
   // ================================================================
   (function() {
     if (!window.location.hostname.includes('youtube.com')) return;
-    console.log('[Adblock Max] YouTube Zero-Wait Instant Engine v3.4.0 initialized.');
+    console.log('[Adblock Max] YouTube Deep Engine v3.4.0 (AdGuard Protocol) initialized.');
 
-    // ===== LAYER 1: CSS - Hide all ad UI elements instantly =====
+    // ===== LAYER 1: CSS - Instant Cosmetic Ad Elimination =====
     const adCSS = document.createElement('style');
     adCSS.textContent = `
       .ad-showing .video-ads,
@@ -53,7 +54,7 @@
     var lastYtReport = 0;
     function reportYtBlocked(reason) {
       if (window.top !== window.self) return;
-      if (!window.location.href.includes('watch?v=')) return;
+      if (!window.location.href.includes('watch?v=') && !window.location.href.includes('shorts/')) return;
       var now = Date.now();
       if (now - lastYtReport > 10000) {
         lastYtReport = now;
@@ -61,13 +62,129 @@
           window.postMessage({
             type: 'ANTI_POPUP_BLOCKED_EVENT',
             url: 'YouTube Video Ad',
-            reason: reason || 'Quảng cáo Video YouTube bị triệt tiêu từ gốc'
+            reason: reason || 'Quảng cáo Video YouTube bị triệt tiêu từ gốc (AdGuard Core)'
           }, '*');
         } catch(e) {}
       }
     }
 
-    // ===== LAYER 2: Ultra-Fast Non-Destructive Ad Fast-Forwarder & Skipper =====
+    // ===== LAYER 2: Targeted JSON Pruner (uBlock & AdGuard standard) =====
+    const AD_KEYS = [
+      'adPlacements', 'playerAds', 'adSlots',
+      'adBreakHeartbeatParams', 'adSlotLoggingData',
+      'instreamAdBreak', 'adBreakParams', 'adPlacementRenderer',
+      'playerAdParams', 'adTagUrl', 'vmap'
+    ];
+
+    function pruneObject(obj, depth) {
+      if (!obj || typeof obj !== 'object') return;
+      if (!depth) depth = 0;
+      if (depth > 8) return;
+
+      for (var i = 0; i < AD_KEYS.length; i++) {
+        var k = AD_KEYS[i];
+        if (k in obj) {
+          delete obj[k];
+          reportYtBlocked('Quảng cáo Video YouTube (Metadata Pruned)');
+        }
+      }
+
+      var keys = Object.keys(obj);
+      for (var j = 0; j < keys.length; j++) {
+        var val = obj[keys[j]];
+        if (val && typeof val === 'object') {
+          pruneObject(val, depth + 1);
+        }
+      }
+    }
+
+    function prunePlayerResponse(resp) {
+      if (!resp) return resp;
+      if (typeof resp === 'object') {
+        pruneObject(resp, 0);
+        return resp;
+      }
+      if (typeof resp === 'string') {
+        try {
+          var parsed = JSON.parse(resp);
+          if (parsed && typeof parsed === 'object') {
+            pruneObject(parsed, 0);
+            return JSON.stringify(parsed);
+          }
+        } catch(e) {}
+      }
+      return resp;
+    }
+
+    // 1. Hook Response.prototype.json (Fetch API intercept without replacing Response object)
+    try {
+      if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
+        var _origResponseJson = Response.prototype.json;
+        Response.prototype.json = function() {
+          return _origResponseJson.apply(this, arguments).then(function(data) {
+            if (data && typeof data === 'object') {
+              if (data.adPlacements || data.playerAds || data.adSlots || (data.playerResponse && (data.playerResponse.adPlacements || data.playerResponse.playerAds))) {
+                pruneObject(data, 0);
+              }
+            }
+            return data;
+          });
+        };
+      }
+    } catch(e) {}
+
+    // 2. Safe targeted JSON.parse hook (only prunes objects containing ad structures)
+    try {
+      var _origJsonParse = JSON.parse;
+      JSON.parse = function(text, reviver) {
+        var data = _origJsonParse.apply(this, arguments);
+        if (data && typeof data === 'object') {
+          if (data.adPlacements || data.playerAds || data.adSlots || (data.playerResponse && (data.playerResponse.adPlacements || data.playerResponse.playerAds))) {
+            pruneObject(data, 0);
+          }
+        }
+        return data;
+      };
+    } catch(e) {}
+
+    // 3. Hook Global window player objects (Full page loads)
+    function hookGlobal(prop) {
+      var val = window[prop];
+      if (val && typeof val === 'object') {
+        pruneObject(val, 0);
+      }
+      try {
+        Object.defineProperty(window, prop, {
+          get: function() {
+            if (val && typeof val === 'object') {
+              pruneObject(val, 0);
+            }
+            return val;
+          },
+          set: function(newVal) {
+            if (newVal && typeof newVal === 'object') {
+              pruneObject(newVal, 0);
+              if (newVal.config && newVal.config.args) {
+                if (newVal.config.args.raw_player_response) {
+                  newVal.config.args.raw_player_response = prunePlayerResponse(newVal.config.args.raw_player_response);
+                }
+                if (newVal.config.args.player_response) {
+                  newVal.config.args.player_response = prunePlayerResponse(newVal.config.args.player_response);
+                }
+              }
+            }
+            val = newVal;
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch(e) {}
+    }
+    hookGlobal('ytInitialPlayerResponse');
+    hookGlobal('ytInitialData');
+    hookGlobal('ytplayer');
+
+    // ===== LAYER 3: DOM Safety Net & Anti-Adblock Auto-Bypass =====
     var wasAdShowing = false;
     var userPlaybackRate = 1;
     var userMuted = false;
@@ -83,7 +200,6 @@
       if (isAdShowing) {
         if (!wasAdShowing) {
           wasAdShowing = true;
-          // Capture user's actual playback rate and mute state before speeding up ad
           if (video) {
             if (video.playbackRate !== 16) {
               userPlaybackRate = video.playbackRate || 1;
@@ -92,7 +208,7 @@
           }
         }
         
-        // 1. Fast-forward & mute ad video instantly
+        // Instant speedup and skip fallback if ad is encountered
         if (video) {
           try {
             video.muted = true;
@@ -105,7 +221,6 @@
           } catch(e) {}
         }
 
-        // 2. Click player skip button API or DOM button
         try {
           if (typeof player.skipAd === 'function') player.skipAd();
         } catch(e) {}
@@ -124,7 +239,6 @@
         reportYtBlocked('Quảng cáo Video YouTube');
       } else if (wasAdShowing) {
         wasAdShowing = false;
-        // Restore user's exact state when ad ends
         if (video) {
           try {
             video.muted = userMuted;
@@ -134,7 +248,7 @@
         }
       }
 
-      // Auto-dismiss anti-adblock dialogs if any appear
+      // Auto-dismiss anti-adblock dialogs
       try {
         var dismissBtn = document.querySelector('tp-yt-paper-dialog #dismiss-button, ytd-popup-container #dismiss-button, ytd-enforcement-message-view-model button');
         if (dismissBtn) {
@@ -149,7 +263,6 @@
       } catch(e) {}
     }
 
-    // High frequency check (every 50ms) + MutationObserver for zero-delay response
     setInterval(processYouTubeAd, 50);
 
     try {
