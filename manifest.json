@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Adblock Max",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "author": "HuyTran1002",
   "description": "Duyệt web nhanh và sạch sẽ. Chặn hiệu quả các quảng cáo tự động nhảy trang, cửa sổ bật lên và bảo vệ quyền riêng tư của bạn.",
   "icons": {

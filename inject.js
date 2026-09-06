@@ -4,7 +4,7 @@
 
 
   // ================================================================
-  // YOUTUBE AD ELIMINATOR v3.4.0 (AdGuard / uBlock Core Protocol)
+  // YOUTUBE AD ELIMINATOR v3.4.1 (AdGuard / uBlock Core Protocol)
   // Strategy: Intercept player configuration at API layer
   // (Response.prototype.json, targeted JSON.parse & Global window properties)
   // to prune ad metadata before player initialization.
@@ -12,7 +12,7 @@
   // ================================================================
   (function() {
     if (!window.location.hostname.includes('youtube.com')) return;
-    console.log('[Adblock Max] YouTube Deep Engine v3.4.0 (AdGuard Protocol) initialized.');
+    console.log('[Adblock Max] YouTube Deep Engine v3.4.1 (AdGuard Protocol) initialized.');
 
     // ===== LAYER 1: CSS - Instant Cosmetic Ad Elimination =====
     const adCSS = document.createElement('style');
