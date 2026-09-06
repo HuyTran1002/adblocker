@@ -567,9 +567,6 @@ if (window.location.hostname.includes('youtube.com')) {
       el.style.setProperty('opacity', '0', 'important');
       el.style.setProperty('width', '0', 'important');
       el.style.setProperty('height', '0', 'important');
-      try {
-        el.remove();
-      } catch(e) {}
       
       safeSendMessage({
         type: 'AD_BLOCKED',
@@ -827,7 +824,7 @@ if (window.location.hostname.includes('youtube.com')) {
               backdrop.style.setProperty('visibility', 'hidden', 'important');
               backdrop.style.setProperty('pointer-events', 'none', 'important');
               backdrop.style.setProperty('opacity', '0', 'important');
-              try { backdrop.remove(); } catch(e) {}
+              
               console.log('[Anti Pop-Under] Purged modal backdrop containing ad close button:', backdrop);
               if (document.body) { document.body.style.overflow = ''; document.body.style.position = ''; }
               if (document.documentElement) { document.documentElement.style.overflow = ''; document.documentElement.style.position = ''; }
@@ -906,7 +903,7 @@ if (window.location.hostname.includes('youtube.com')) {
             el.style.setProperty('visibility', 'hidden', 'important');
             el.style.setProperty('pointer-events', 'none', 'important');
             el.style.setProperty('opacity', '0', 'important');
-            try { el.remove(); } catch(e) {}
+            
             console.log('[Anti Pop-Under] Removed orphaned overlay backdrop & clickjack layer:', el);
 
             if (document.body) { document.body.style.overflow = ''; document.body.style.position = ''; }
@@ -1039,453 +1036,51 @@ if (window.location.hostname.includes('youtube.com')) {
           
           try {
             const targetUrl = new URL(href, window.location.href);
-            const currentHost = window.location.hostname.replace(/^www\./i, '');
-            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
+            const currentHost = window.location.hostname.replace(/^www./i, '');
+            const targetHost = targetUrl.hostname.replace(/^www./i, '');
             
             const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
             
-            if (isExternal) {
-              const style = window.getComputedStyle(anchor);
-              const rect = anchor.getBoundingClientRect();
-              
-              // Check if it's a huge overlay (covers > 40% of screen)
-              const isHuge = rect.width > window.innerWidth * 0.4 || rect.height > window.innerHeight * 0.4;
-              const opacity = parseFloat(style.opacity);
-              const isTransparent = opacity < 0.1 || style.visibility === 'hidden' || style.display === 'none';
-              
-              // Block HUGE external links (rarely legitimate)
-              if (isHuge || isTransparent) {
-                e.preventDefault();
-                e.stopPropagation();
-                anchor.remove();
-                console.log('[Anti Pop-Under] Intercepted and destroyed huge clickjacking anchor:', anchor);
-                return;
-              }
-              
-              // Block EMPTY external links (often used to clickjack small buttons)
-              const text = (anchor.innerText || anchor.textContent || '').trim();
-              const mediaCount = anchor.querySelectorAll('img, svg, canvas, video').length;
-              if (text.length === 0 && mediaCount === 0) {
-                e.preventDefault();
-                e.stopPropagation();
-                anchor.remove();
-                console.log('[Anti Pop-Under] Intercepted and destroyed empty clickjacking anchor:', anchor);
-                return;
-              }
+            // Internal same-domain movie links are NEVER blocked or touched!
+            if (!isExternal) {
+              return;
+            }
+            
+            const style = window.getComputedStyle(anchor);
+            const rect = anchor.getBoundingClientRect();
+            
+            // Check if it's a huge overlay (covers > 50% of screen)
+            const isHuge = rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5;
+            const opacity = parseFloat(style.opacity);
+            const isTransparent = opacity < 0.1 || style.visibility === 'hidden' || style.display === 'none';
+            
+            // Block HUGE external links (rarely legitimate)
+            if (isHuge || isTransparent) {
+              e.preventDefault();
+              e.stopPropagation();
+              anchor.setAttribute('data-ad-blocked', 'true');
+              anchor.style.setProperty('display', 'none', 'important');
+              anchor.style.setProperty('pointer-events', 'none', 'important');
+              console.log('[Anti Pop-Under] Intercepted huge clickjacking anchor:', anchor);
+              return;
+            }
+            
+            // Block EMPTY external links (often used to clickjack small buttons)
+            const text = (anchor.innerText || anchor.textContent || '').trim();
+            const mediaCount = anchor.querySelectorAll('img, svg, canvas, video').length;
+            if (text.length === 0 && mediaCount === 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              anchor.setAttribute('data-ad-blocked', 'true');
+              anchor.style.setProperty('display', 'none', 'important');
+              anchor.style.setProperty('pointer-events', 'none', 'important');
+              console.log('[Anti Pop-Under] Intercepted empty clickjacking anchor:', anchor);
+              return;
             }
           } catch (err) {}
-        } else {
-          // 2. Detect if click is on a huge invisible DIV/SECTION overlay
-          const style = window.getComputedStyle(target);
-          const isFloating = style.position === 'absolute' || style.position === 'fixed';
-          
-          if (isFloating) {
-            const rect = target.getBoundingClientRect();
-            const isHuge = rect.width > window.innerWidth * 0.4 || rect.height > window.innerHeight * 0.4;
-            
-            if (isHuge) {
-              const opacity = parseFloat(style.opacity);
-              const bgColor = style.backgroundColor;
-              const isTransparent = opacity < 0.1 || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent';
-              
-              const text = (target.innerText || target.textContent || '').trim();
-              
-              if (isTransparent && text.length < 50) {
-                // Before destroying, ensure it's NOT a legitimate video player overlay (e.g. play/pause click zone)
-                let c = target;
-                let inPlayer = false;
-                while (c && c !== document.body && c !== document.documentElement) {
-                  if (isVideoPlayerOrControls(c)) {
-                    inPlayer = true;
-                    break;
-                  }
-                  c = c.parentElement;
-                }
-                
-                if (!inPlayer) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  target.remove();
-                  console.log('[Anti Pop-Under] Intercepted and destroyed huge invisible clickjacking div:', target);
-                }
-              }
-            }
-          }
         }
       } catch (err) {}
-    }, true); // Use capture phase to intercept before page scripts
-
-    // --- ADVANCED F12-STYLE TARGET INSPECTOR & CONFIRMATION SYSTEM ---
-    let lastRightClickedElement = null;
-    let isPickerActive = false;
-    let pickerOverlay = null;
-    let pickerBadge = null;
-    let pickerTopBar = null;
-    let currentHoveredElement = null;
-    let confirmationBackdrop = null;
-
-    document.addEventListener('contextmenu', (e) => {
-      lastRightClickedElement = e.target;
-    }, true);
-
-    // Build specific, resilient, safe CSS selector
-    function getSafeRobustSelector(el) {
-      if (!el || el === document.body || el === document.documentElement) return null;
-      
-      // 1. Explicit clean ID
-      if (el.id && typeof el.id === 'string' && el.id.trim().length > 0 && !/^\d|[^\w-]/.test(el.id)) {
-        return '#' + CSS.escape(el.id);
-      }
-
-      // 2. Data attributes commonly used for ad units
-      const dataAttrs = ['data-id', 'data-ad-id', 'data-slot', 'data-unit', 'data-name', 'data-widget-id'];
-      for (const attr of dataAttrs) {
-        const val = el.getAttribute(attr);
-        if (val && val.length < 100) {
-          return `${el.tagName.toLowerCase()}[${attr}="${CSS.escape(val)}"]`;
-        }
-      }
-
-      // 3. Meaningful stable class name
-      if (el.classList && el.classList.length > 0) {
-        const stableClasses = Array.from(el.classList).filter(c => 
-          c.length > 2 && !/\b[a-f0-9]{8,}\b/i.test(c) && !/^\d/.test(c) && !c.includes('adblock-max')
-        );
-        if (stableClasses.length > 0) {
-          const classSelector = '.' + stableClasses.map(c => CSS.escape(c)).join('.');
-          try {
-            if (document.querySelectorAll(classSelector).length <= 5) {
-              return `${el.tagName.toLowerCase()}${classSelector}`;
-            }
-          } catch(e) {}
-        }
-      }
-
-      // 4. Source attribute for img/iframe/script/video
-      const src = el.getAttribute('src');
-      if (src && src.length < 200 && !src.startsWith('data:') && !src.startsWith('blob:')) {
-        return `${el.tagName.toLowerCase()}[src="${CSS.escape(src)}"]`;
-      }
-
-      // 5. Hierarchical path builder
-      let path = [];
-      let current = el;
-      let depth = 0;
-
-      while (current && current !== document.body && current !== document.documentElement && depth < 4) {
-        let tag = current.tagName.toLowerCase();
-        let step = tag;
-
-        if (current.id && !/^\d|[^\w-]/.test(current.id)) {
-          path.unshift('#' + CSS.escape(current.id));
-          break; // Found unique ID ancestor
-        }
-
-        const stableClasses = Array.from(current.classList || []).filter(c => 
-          c.length > 2 && !/\b[a-f0-9]{8,}\b/i.test(c) && !/^\d/.test(c) && !c.includes('adblock-max')
-        );
-        if (stableClasses.length > 0) {
-          step += '.' + CSS.escape(stableClasses[0]);
-        } else {
-          let sibling = current.previousElementSibling;
-          let nth = 1;
-          while (sibling) {
-            if (sibling.tagName === current.tagName) nth++;
-            sibling = sibling.previousElementSibling;
-          }
-          step += `:nth-of-type(${nth})`;
-        }
-
-        path.unshift(step);
-        current = current.parentElement;
-        depth++;
-      }
-
-      const generated = path.join(' > ');
-      
-      // CRITICAL SAFETY CHECK: Never allow single generic tags
-      const dangerousTags = ['object', 'div', 'p', 'span', 'img', 'a', 'iframe', 'video', 'button', 'input', 'body', 'html', 'table', 'tr', 'td', 'ul', 'li', 'header', 'footer', 'section', 'article', 'main', 'aside'];
-      if (dangerousTags.includes(generated.trim().toLowerCase())) {
-        let nth = 1;
-        let s = el.previousElementSibling;
-        while (s) {
-          if (s.tagName === el.tagName) nth++;
-          s = s.previousElementSibling;
-        }
-        return `${el.tagName.toLowerCase()}:nth-of-type(${nth})`;
-      }
-
-      return generated || `${el.tagName.toLowerCase()}`;
-    }
-
-    // Initialize F12-style Target Inspector Overlays
-    function createPickerOverlays() {
-      if (!pickerOverlay) {
-        pickerOverlay = document.createElement('div');
-        pickerOverlay.id = 'adblock-max-picker-highlight';
-        pickerOverlay.setAttribute('style', `
-          position: fixed !important;
-          pointer-events: none !important;
-          z-index: 2147483645 !important;
-          border: 2px dashed #ff4757 !important;
-          background: rgba(255, 71, 87, 0.22) !important;
-          box-shadow: 0 0 16px rgba(255, 71, 87, 0.5) !important;
-          display: none !important;
-          border-radius: 4px !important;
-          transition: top 0.05s ease, left 0.05s ease, width 0.05s ease, height 0.05s ease !important;
-        `);
-        (document.body || document.documentElement).appendChild(pickerOverlay);
-      }
-
-      if (!pickerBadge) {
-        pickerBadge = document.createElement('div');
-        pickerBadge.id = 'adblock-max-picker-badge';
-        pickerBadge.setAttribute('style', `
-          position: fixed !important;
-          pointer-events: none !important;
-          z-index: 2147483646 !important;
-          background: #181825 !important;
-          color: #ffffff !important;
-          border: 1px solid #ff4757 !important;
-          border-radius: 6px !important;
-          padding: 4px 8px !important;
-          font-size: 11px !important;
-          font-weight: 600 !important;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-          display: none !important;
-        `);
-        (document.body || document.documentElement).appendChild(pickerBadge);
-      }
-
-      if (!pickerTopBar) {
-        pickerTopBar = document.createElement('div');
-        pickerTopBar.id = 'adblock-max-picker-topbar';
-        pickerTopBar.setAttribute('style', `
-          position: fixed !important;
-          top: 14px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 2147483647 !important;
-          background: #11111b !important;
-          color: #cdd6f4 !important;
-          border: 1.5px solid #ff4757 !important;
-          border-radius: 30px !important;
-          padding: 8px 18px !important;
-          font-size: 13px !important;
-          font-weight: 600 !important;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-          box-shadow: 0 10px 32px rgba(0,0,0,0.65) !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 12px !important;
-          pointer-events: auto !important;
-          user-select: none !important;
-        `);
-        pickerTopBar.innerHTML = `
-          <span style="font-size: 17px;">🎯</span>
-          <span><b>Chế độ Target phần tử (F12)</b>: Rê chuột vào object & click để chặn</span>
-          <button id="adblock-picker-topbar-exit" style="
-            background: rgba(255, 71, 87, 0.18) !important;
-            color: #ff6b81 !important;
-            border: 1px solid rgba(255, 71, 87, 0.4) !important;
-            border-radius: 14px !important;
-            padding: 4px 12px !important;
-            font-size: 11px !important;
-            font-weight: 700 !important;
-            cursor: pointer !important;
-            transition: all 0.2s !important;
-          ">Thoát (ESC)</button>
-        `;
-        (document.body || document.documentElement).appendChild(pickerTopBar);
-        document.getElementById('adblock-picker-topbar-exit').addEventListener('click', stopElementPicker);
-      }
-    }
-
-    function startElementPicker(initialTarget) {
-      if (isPickerActive) return;
-      isPickerActive = true;
-      createPickerOverlays();
-      if (pickerTopBar) pickerTopBar.style.display = 'flex';
-
-      document.addEventListener('mousemove', onPickerMouseMove, true);
-      document.addEventListener('click', onPickerClick, true);
-      document.addEventListener('keydown', onPickerKeyDown, true);
-      document.documentElement.style.cursor = 'crosshair';
-
-      if (initialTarget && initialTarget !== document.body && initialTarget !== document.documentElement) {
-        highlightTargetElement(initialTarget);
-      }
-    }
-
-    function stopElementPicker() {
-      isPickerActive = false;
-      if (pickerOverlay) pickerOverlay.style.display = 'none';
-      if (pickerBadge) pickerBadge.style.display = 'none';
-      if (pickerTopBar) pickerTopBar.style.display = 'none';
-      document.removeEventListener('mousemove', onPickerMouseMove, true);
-      document.removeEventListener('click', onPickerClick, true);
-      document.removeEventListener('keydown', onPickerKeyDown, true);
-      document.documentElement.style.cursor = '';
-    }
-
-    function highlightTargetElement(target) {
-      if (!target || target === pickerOverlay || target === pickerBadge || target === pickerTopBar || target.id?.startsWith('adblock-max-picker')) return;
-      currentHoveredElement = target;
-      const rect = target.getBoundingClientRect();
-      
-      pickerOverlay.style.top = rect.top + 'px';
-      pickerOverlay.style.left = rect.left + 'px';
-      pickerOverlay.style.width = rect.width + 'px';
-      pickerOverlay.style.height = rect.height + 'px';
-      pickerOverlay.style.display = 'block';
-
-      const tag = target.tagName.toLowerCase();
-      const cls = target.className && typeof target.className === 'string' ? '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-      pickerBadge.textContent = `<${tag}${cls}> (${Math.round(rect.width)} × ${Math.round(rect.height)} px)`;
-      
-      let badgeTop = rect.top - 28;
-      if (badgeTop < 60) badgeTop = rect.bottom + 8;
-      pickerBadge.style.top = Math.max(10, badgeTop) + 'px';
-      pickerBadge.style.left = Math.max(10, rect.left) + 'px';
-      pickerBadge.style.display = 'block';
-    }
-
-    function onPickerMouseMove(e) {
-      if (!isPickerActive || confirmationBackdrop) return;
-      const target = e.target;
-      highlightTargetElement(target);
-    }
-
-    function onPickerClick(e) {
-      if (!isPickerActive) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
-      const target = currentHoveredElement || e.target;
-      if (!target || target === pickerTopBar || target.id?.startsWith('adblock-max-picker')) return;
-
-      stopElementPicker();
-      showConfirmationDialog(target);
-    }
-
-    function onPickerKeyDown(e) {
-      if (e.key === 'Escape') {
-        stopElementPicker();
-        removeConfirmationDialog();
-        return;
-      }
-      // F12-style Arrow key navigation (Up = Parent container, Down = First child)
-      if (isPickerActive && currentHoveredElement) {
-        if (e.key === 'ArrowUp' && currentHoveredElement.parentElement && currentHoveredElement.parentElement !== document.body) {
-          e.preventDefault();
-          highlightTargetElement(currentHoveredElement.parentElement);
-        } else if (e.key === 'ArrowDown' && currentHoveredElement.firstElementChild) {
-          e.preventDefault();
-          highlightTargetElement(currentHoveredElement.firstElementChild);
-        }
-      }
-    }
-
-    // Confirmation Preview Modal
-    function showConfirmationDialog(targetEl) {
-      removeConfirmationDialog();
-      if (!targetEl) return;
-
-      const selector = getSafeRobustSelector(targetEl);
-      if (!selector) return;
-
-      confirmationBackdrop = document.createElement('div');
-      confirmationBackdrop.id = 'adblock-max-picker-backdrop';
-      confirmationBackdrop.setAttribute('style', `
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        background: rgba(0, 0, 0, 0.65) !important;
-        z-index: 2147483646 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        backdrop-filter: blur(4px) !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      `);
-
-      const rect = targetEl.getBoundingClientRect();
-      const tag = targetEl.tagName.toLowerCase();
-      const textPreview = (targetEl.innerText || targetEl.getAttribute('alt') || targetEl.getAttribute('title') || '').trim().slice(0, 60);
-
-      confirmationBackdrop.innerHTML = `
-        <div id="adblock-max-picker-dialog" style="
-          background: #181825 !important;
-          color: #cdd6f4 !important;
-          border: 1px solid #ff4757 !important;
-          border-radius: 14px !important;
-          padding: 22px !important;
-          width: 420px !important;
-          max-width: 90vw !important;
-          box-shadow: 0 16px 40px rgba(0,0,0,0.6) !important;
-        ">
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
-            <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(255,71,87,0.15); display: flex; align-items: center; justify-content: center; font-size: 18px;">🚫</div>
-            <div>
-              <h3 style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 700;">Xác nhận chặn phần tử</h3>
-              <span style="font-size: 12px; color: #a6adc8;">Trang: <b>${window.location.hostname}</b></span>
-            </div>
-          </div>
-          
-          <p style="margin: 0 0 14px 0; font-size: 13px; color: #bac2de; line-height: 1.5;">
-            Bạn có chắc chắn muốn chặn vĩnh viễn phần tử này? Bạn có thể mở lại menu Adblock Max bất kỳ lúc nào để khôi phục.
-          </p>
-
-          <div style="background: #11111b; border: 1px solid #313244; border-radius: 8px; padding: 12px; margin-bottom: 18px; font-size: 12px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #89b4fa;">
-              <span><strong>Thẻ HTML:</strong> &lt;${tag}&gt;</span>
-              <span><strong>Kích thước:</strong> ${Math.round(rect.width)} × ${Math.round(rect.height)} px</span>
-            </div>
-            <div style="color: #a6e3a1; font-family: monospace; word-break: break-all; background: rgba(0,0,0,0.3); padding: 6px 8px; border-radius: 4px; border: 1px solid #45475a;">
-              ${selector}
-            </div>
-            ${textPreview ? `<div style="margin-top: 6px; color: #6c7086; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">"${textPreview}"</div>` : ''}
-          </div>
-
-          <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button id="adblock-btn-cancel" style="
-              background: #313244 !important;
-              color: #cdd6f4 !important;
-              border: none !important;
-              border-radius: 8px !important;
-              padding: 9px 16px !important;
-              font-size: 13px !important;
-              font-weight: 600 !important;
-              cursor: pointer !important;
-              transition: all 0.2s !important;
-            ">Hủy / Chọn lại (ESC)</button>
-            <button id="adblock-btn-confirm" style="
-              background: #ff4757 !important;
-              color: #ffffff !important;
-              border: none !important;
-              border-radius: 8px !important;
-              padding: 9px 20px !important;
-              font-size: 13px !important;
-              font-weight: 700 !important;
-              cursor: pointer !important;
-              box-shadow: 0 4px 14px rgba(255,71,87,0.4) !important;
-              transition: all 0.2s !important;
-            ">✅ Xác nhận Chặn</button>
-          </div>
-        </div>
-      `;
-
-      (document.body || document.documentElement).appendChild(confirmationBackdrop);
-
-      // Bind events
-      document.getElementById('adblock-btn-cancel').addEventListener('click', () => {
-        removeConfirmationDialog();
-        startElementPicker(); // Allow repicking
-      });
+    });
       document.getElementById('adblock-btn-confirm').addEventListener('click', () => {
         saveAndApplyCustomRule(selector, targetEl);
         removeConfirmationDialog();

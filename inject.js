@@ -465,7 +465,7 @@
                 parentAd.style.setProperty('pointer-events', 'none', 'important');
                 parentAd.style.setProperty('opacity', '0', 'important');
                 parentAd.setAttribute('data-ad-blocked', 'true');
-                try { parentAd.remove(); } catch(e) {}
+                
                 if (document.body) {
                   document.body.style.overflow = '';
                   document.body.style.position = '';
@@ -757,7 +757,7 @@
           
           if (isPlayerOrPlayButton(anchor)) {
              console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
-             try { anchor.remove(); } catch(e) {}
+             
              
              let isInternal = false;
              try {
@@ -1169,7 +1169,7 @@
 
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
-        try { overlay.remove(); } catch(e) {}
+        
         return false;
       }
       if (isHiddenExternalLink) {
@@ -1468,13 +1468,15 @@
         const target = e.target;
         if (!target) return;
 
-        // Block clicks on any ad widgets, blocked containers, or fake close buttons
+        // Block clicks on any explicit ad widgets or blocked containers
         const blockedContainer = target.closest && target.closest('[data-ad-blocked="true"], [class*="layoutWrapper"], [class*="sc-widget"], [class*="root--wuzSh"], [qa-element="live-badge-plain-upper"]');
         if (blockedContainer) {
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
-          try { blockedContainer.remove(); } catch(err) {}
+          blockedContainer.setAttribute('data-ad-blocked', 'true');
+          blockedContainer.style.setProperty('display', 'none', 'important');
+          blockedContainer.style.setProperty('pointer-events', 'none', 'important');
           reportBlocked('ad_widget', 'Blocked click on ad widget container');
           return;
         }
@@ -1486,16 +1488,9 @@
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            try { curr.remove(); } catch(err) {}
+            curr.style.setProperty('display', 'none', 'important');
+            curr.style.setProperty('pointer-events', 'none', 'important');
             reportBlocked('ad_container', 'Blocked click on blocked ad container');
-            return;
-          }
-          if (isClickjackOverlay(curr)) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            try { curr.remove(); } catch(err) {}
-            reportBlocked('overlay', 'Blocked clickjack overlay in capture phase');
             return;
           }
           if (curr.tagName === 'A' || curr instanceof HTMLAnchorElement) {
@@ -1508,95 +1503,35 @@
         if (anchor) {
           const href = anchor.href || anchor.getAttribute('href') || '';
           if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
-            const isBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
-            if (!checkNavigationOrPopup(href, isBlank ? 'anchor.click._blank' : 'anchor.click')) {
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-              try { anchor.closest('[class*="layoutWrapper"], [class*="widget"], [class*="ad"]')?.remove(); } catch(err) {}
-              reportBlocked(href, 'Blocked external popunder/ad anchor click');
-              return;
-            }
+            try {
+              const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+              const currentHost = window.location.hostname.toLowerCase();
+              const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
+              
+              // NEVER intercept or modify internal/same-domain movie links! (Protects Next.js router)
+              if (!isExternal) {
+                return;
+              }
+
+              const isBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+              if (!checkNavigationOrPopup(href, isBlank ? 'anchor.click._blank' : 'anchor.click')) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                const parentBox = anchor.closest('[class*="layoutWrapper"], [class*="widget"], [class*="ad"]');
+                if (parentBox) {
+                  parentBox.setAttribute('data-ad-blocked', 'true');
+                  parentBox.style.setProperty('display', 'none', 'important');
+                  parentBox.style.setProperty('pointer-events', 'none', 'important');
+                }
+                reportBlocked(href, 'Blocked external popunder/ad anchor click');
+                return;
+              }
+            } catch(e) {}
           }
         }
       } catch(err) {}
     }, true);
-  }
-
-  // Bulletproof override of HTMLFormElement.prototype.submit
-  const originalSubmit = HTMLFormElement.prototype.submit;
-  if (!isYouTube) {
-    try {
-      Object.defineProperty(HTMLFormElement.prototype, 'submit', {
-        value: function() {
-          if (!isEnabled() || isCurrentPageWhitelisted()) {
-            return originalSubmit.apply(this, arguments);
-          }
-          
-          const action = this.getAttribute('action') || '';
-          if (!checkNavigationOrPopup(action, 'form.submit')) {
-            return; // block
-          }
-          return originalSubmit.apply(this, arguments);
-        },
-        writable: false,
-        configurable: false
-      });
-    } catch (err) {
-      HTMLFormElement.prototype.submit = function() {
-        if (!isEnabled() || isCurrentPageWhitelisted()) {
-          return originalSubmit.apply(this, arguments);
-        }
-        const action = this.getAttribute('action') || '';
-        if (!checkNavigationOrPopup(action, 'form.submit')) {
-          return; // block
-        }
-        return originalSubmit.apply(this, arguments);
-      };
-    }
-  }
-
-  // YouTube Ad Skipper handled by v2.8.0
-  function runYouTubeAdSkipper() {}
-
-  // Bulletproof override of Location.prototype navigation to prevent scripted location changes
-  if (!isYouTube) {
-    try {
-      const locationProto = Location.prototype;
-      const originalAssign = locationProto.assign;
-      const originalReplace = locationProto.replace;
-      const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, 'href');
-      
-      function checkLocationRedirect(url) {
-        return checkNavigationOrPopup(url, 'location change');
-      }
-      
-      if (hrefDescriptor && hrefDescriptor.set) {
-        Object.defineProperty(locationProto, 'href', {
-          get: hrefDescriptor.get,
-          set: function(val) {
-            if (checkLocationRedirect(val)) {
-              hrefDescriptor.set.call(this, val);
-            }
-          },
-          configurable: true
-        });
-      }
-      
-      locationProto.assign = function(val) {
-        if (checkLocationRedirect(val)) {
-          originalAssign.call(this, val);
-        }
-      };
-      
-      locationProto.replace = function(val) {
-        if (checkLocationRedirect(val)) {
-          originalReplace.call(this, val);
-        }
-      };
-    } catch (e) {
-      console.warn('[Anti Pop-Under] Location overrides failed:', e);
-    }
   }
 
   function runGenericAntiAdblockBypass() {
@@ -1625,8 +1560,11 @@
             const isOverlay = style.position === 'fixed' || style.position === 'absolute' || el.tagName.toLowerCase() === 'dialog';
             
             if (isOverlay) {
-              el.remove();
-              console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
+              el.setAttribute('data-ad-blocked', 'true');
+              el.style.setProperty('display', 'none', 'important');
+              el.style.setProperty('visibility', 'hidden', 'important');
+              el.style.setProperty('pointer-events', 'none', 'important');
+              console.log('[Anti Pop-Under] Hidden anti-adblock overlay element:', el);
               
               const html = document.documentElement;
               const body = document.body;
@@ -1642,21 +1580,6 @@
             }
           }
         });
-      } catch (e) {
-        console.warn('[Anti Pop-Under] Error in generic anti-adblock watchdog:', e);
-      }
-    }
-
-    function scanAndRemoveClickjacks() {
-      if (!isEnabled()) return;
-      try {
-        const anchors = document.querySelectorAll('a');
-        anchors.forEach(el => {
-          if (isClickjackOverlay(el)) {
-            console.log('[Anti Pop-Under] Auto-removed clickjack overlay before click:', el);
-            el.remove();
-          }
-        });
       } catch (e) {}
     }
 
@@ -1668,8 +1591,7 @@
         throttleTimer = null;
         if (!isEnabled()) return;
         cleanOverlays();
-        scanAndRemoveClickjacks();
-      }, 150);
+      }, 500);
     }
 
     try {
@@ -1681,14 +1603,6 @@
         subtree: true
       });
     } catch (e) {}
-
-    // Fallback scan every 3 seconds for silent background changes
-    setInterval(() => {
-      if (isEnabled() && !window.location.hostname.includes('youtube.com') && !isCurrentPageWhitelisted()) {
-        cleanOverlays();
-        scanAndRemoveClickjacks();
-      }
-    }, 50);
 
     // Initial scan
     scheduleBypassScan();
