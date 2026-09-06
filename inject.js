@@ -270,17 +270,16 @@
         '.ytp-ad-skip-button-slot, .ytp-ad-player-overlay, .ytp-ad-text'
       );
 
-      // If ad-showing class is present without actual ad UI (leftover class), clean it instantly so video plays smoothly!
-      if (isAdShowing && !hasAdUI) {
+      if (isAdShowing) {
         try {
           player.classList.remove('ad-showing');
+          if (typeof player.playVideo === 'function') player.playVideo();
           var v = player.querySelector('video');
           if (v) {
             if (v.playbackRate !== 1) v.playbackRate = 1;
             if (v.paused) v.play();
           }
         } catch(e) {}
-        return;
       }
 
       if (!isAdShowing && !hasAdUI) return;
@@ -299,12 +298,11 @@
         try { skipBtns[i].click(); } catch(e) {}
       }
 
-      // 3. Ensure normal video playback speed and un-mute (NEVER mutate currentTime to avoid breaking live stream sync)
+      // 3. Ensure normal video playback speed and un-mute
       var video = player.querySelector('video');
       if (video) {
-        if (!isAdShowing && video.playbackRate !== 1) {
-          video.playbackRate = 1;
-        }
+        if (video.playbackRate !== 1) video.playbackRate = 1;
+        if (video.paused) video.play();
       }
 
       // 4. Rate-limited report
