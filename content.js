@@ -196,11 +196,9 @@ function injectAdBlockCSS() {
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */
-  iframe[src*="player"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="embed"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="stream"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="video"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[class*="player"], iframe[id*="player"] {
+  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
+  iframe[src*="phimhdc"], iframe[src*="streamxemphimhd"], iframe[src*="edgeplayer"],
+  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"], #player iframe, .box-player iframe {
     display: block !important;
     visibility: visible !important;
     pointer-events: auto !important;

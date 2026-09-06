@@ -1,3 +1,4 @@
+window.__cfRLUnblockHandlers = true;
 (function() {
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
