@@ -116,7 +116,105 @@
       return resp;
     }
 
-    // 1. Hook Response.prototype.json (Fetch API intercept without replacing Response object)
+    // 1. Exact AdGuard / uBlock Proxy for window.fetch
+    try {
+      if (typeof window.fetch === 'function' && typeof Proxy !== 'undefined' && typeof Response !== 'undefined') {
+        var isYtPlayerUrl = function(url) {
+          if (typeof url !== 'string') return false;
+          return url.includes('/youtubei/v1/player') || 
+                 url.includes('/youtubei/v1/next') || 
+                 url.includes('/playlist?list=') || 
+                 url.includes('player?') || 
+                 url.includes('watch?v=');
+        };
+
+        var forgeResponse = function(original, text) {
+          var v = new Response(text, {
+            status: original.status,
+            statusText: original.statusText,
+            headers: original.headers
+          });
+          return Object.defineProperties(v, {
+            url: { value: original.url },
+            type: { value: original.type },
+            ok: { value: original.ok },
+            bodyUsed: { value: original.bodyUsed },
+            redirected: { value: original.redirected }
+          }), v;
+        };
+
+        window.fetch = new Proxy(window.fetch, {
+          apply: async function(target, thisArg, args) {
+            var req = args[0];
+            var url = typeof req === 'string' ? req : (req && req.url ? req.url : '');
+            
+            if (!isYtPlayerUrl(url)) {
+              return Reflect.apply(target, thisArg, args);
+            }
+
+            var originalResponse;
+            var clonedResponse;
+            try {
+              originalResponse = await Reflect.apply(target, thisArg, args);
+              clonedResponse = originalResponse.clone();
+            } catch(e) {
+              return Reflect.apply(target, thisArg, args);
+            }
+
+            var json;
+            try {
+              json = await originalResponse.json();
+            } catch(e) {
+              return clonedResponse;
+            }
+
+            if (json && typeof json === 'object') {
+              pruneObject(json, 0);
+              try {
+                var modifiedText = JSON.stringify(json);
+                return forgeResponse(originalResponse, modifiedText);
+              } catch(e) {
+                return clonedResponse;
+              }
+            }
+
+            return clonedResponse;
+          }
+        });
+      }
+    } catch(e) {}
+
+    // 2. XMLHttpRequest Hook (for legacy or embedded YouTube player calls)
+    try {
+      if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
+        var _origXhrOpen = XMLHttpRequest.prototype.open;
+        var _origXhrSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function(method, url) {
+          this._adblockUrl = typeof url === 'string' ? url : '';
+          return _origXhrOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function() {
+          if (this._adblockUrl && (this._adblockUrl.includes('/player') || this._adblockUrl.includes('/next'))) {
+            this.addEventListener('readystatechange', function() {
+              if (this.readyState === 4 && this.responseText) {
+                try {
+                  var data = JSON.parse(this.responseText);
+                  if (data && typeof data === 'object') {
+                    pruneObject(data, 0);
+                    var modified = JSON.stringify(data);
+                    Object.defineProperty(this, 'responseText', { value: modified, configurable: true });
+                    Object.defineProperty(this, 'response', { value: modified, configurable: true });
+                  }
+                } catch(e) {}
+              }
+            }, true);
+          }
+          return _origXhrSend.apply(this, arguments);
+        };
+      }
+    } catch(e) {}
+
+    // 3. Hook Response.prototype.json (Fetch API intercept without replacing Response object)
     try {
       if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
         var _origResponseJson = Response.prototype.json;
@@ -133,7 +231,7 @@
       }
     } catch(e) {}
 
-    // 2. Safe targeted JSON.parse hook (only prunes objects containing ad structures)
+    // 4. Safe targeted JSON.parse hook (only prunes objects containing ad structures)
     try {
       var _origJsonParse = JSON.parse;
       JSON.parse = function(text, reviver) {
@@ -147,7 +245,7 @@
       };
     } catch(e) {}
 
-    // 3. Hook Global window player objects (Full page loads)
+    // 5. Hook Global window player objects (Full page loads)
     function hookGlobal(prop) {
       var val = window[prop];
       if (val && typeof val === 'object') {
