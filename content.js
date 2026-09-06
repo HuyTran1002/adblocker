@@ -544,23 +544,29 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
         try {
-          const href = anchor.href;
+          const href = anchor.href || anchor.getAttribute('href') || '';
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
 
           let targetDomain = '';
           try {
             targetDomain = new URL(href, window.location.href).hostname;
           } catch (err) {
-            return;
+            targetDomain = '';
           }
 
           const cleanDom = (d) => d.replace(/^www\./i, '');
           const isExternal = targetDomain && cleanDom(targetDomain) !== cleanDom(currentDomain);
-          if (!isExternal) return;
-
           const hrefLower = href.toLowerCase();
+
+          // Check if link is an internal or external ad redirect script
+          const isAdRedirect = hrefLower.includes('/go.php') || hrefLower.includes('/out.php') ||
+                               hrefLower.includes('/redirect.php') || hrefLower.includes('/jump.php') ||
+                               hrefLower.includes('/click.php') || hrefLower.includes('/pop.php') ||
+                               hrefLower.includes('/cpm.php') || hrefLower.includes('?url=http') ||
+                               hrefLower.includes('&url=http');
+
           const matchesGambling = gamblingRegex.test(hrefLower) ||
-                                  (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99')));
+                                  (isExternal && /\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99')));
 
           const matchesAdServer = adUrlRegex.test(hrefLower);
           const img = anchor.querySelector('img');
@@ -568,13 +574,14 @@ if (window.location.hostname.includes('youtube.com')) {
 
           let isAd = false;
           const rel = (anchor.getAttribute('rel') || '').toLowerCase();
+          const target = (anchor.getAttribute('target') || '').toLowerCase();
           const hasAdAttributes = Array.from(anchor.attributes).some(attr => {
             const name = attr.name.toLowerCase();
             return name.includes('ad_id') || name.includes('ad-id') || 
                    name.includes('ad_slot') || name.includes('ad-slot');
           });
 
-          if (matchesGambling || matchesAdServer || rel.includes('sponsored') || hasAdAttributes) {
+          if (matchesGambling || matchesAdServer || (isExternal && isAdRedirect) || rel.includes('sponsored') || hasAdAttributes) {
             isAd = true;
           } else if (hasImage) {
             const imgSrc = (img.src || '').toLowerCase();
@@ -583,14 +590,20 @@ if (window.location.hostname.includes('youtube.com')) {
             if (/\b(ads|ad)\b/i.test(imgAlt) || imgAlt.includes('quảng cáo') || imgAlt.includes('sponsor')) {
               isAd = true;
             } else if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
-              // Explicit ad image keywords only (never rely on width/height ratios)
               const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => imgSrc.includes(kw)) ||
                                    imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-') ||
-                                   gamblingRegex.test(imgSrc) || adUrlRegex.test(imgSrc);
+                                   imgSrc.includes('/storage/files/') || imgSrc.includes('/media/ck/banners/') ||
+                                   imgSrc.includes('/images/banners/') || imgSrc.includes('/banners/') ||
+                                   imgSrc.includes('/banner/') || imgSrc.includes('/adv/') || imgSrc.includes('/qc/') ||
+                                   imgSrc.includes('banner-ads') ||
+                                   gamblingRegex.test(imgSrc) || adUrlRegex.test(imgSrc) ||
+                                   ((isExternal || isAdRedirect || target === '_blank') && imgSrc.includes('.gif'));
               if (imgMatchesAd) {
                 isAd = true;
               }
             }
+          } else if (isExternal && target === '_blank' && (matchesGambling || matchesAdServer || isAdRedirect)) {
+            isAd = true;
           }
 
           if (isAd) {
@@ -657,6 +670,10 @@ if (window.location.hostname.includes('youtube.com')) {
           } else if (!src.startsWith('data:') && !src.startsWith('blob:')) {
             imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
                            src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
+                           src.includes('/storage/files/') || src.includes('/media/ck/banners/') ||
+                           src.includes('/images/banners/') || src.includes('/banners/') ||
+                           src.includes('/banner/') || src.includes('/adv/') || src.includes('/qc/') ||
+                           src.includes('banner-ads') ||
                            gamblingRegex.test(src) || adUrlRegex.test(src);
           }
                                
