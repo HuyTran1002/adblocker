@@ -685,7 +685,95 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     } catch(e) {}
   }
 
-    if (!isYouTube) {
+  // Smart Video Click-to-Play/Pause Toggle
+  // Enables clicking directly in the middle of the video (left-click or middle-click)
+  // to toggle Play/Pause instantly on all video players without touching control bars.
+  if (!isYouTube) {
+    let lastVideoClickTime = 0;
+
+    function togglePlayerFullscreen(video) {
+      try {
+        const fsBtn = document.querySelector('[data-ctl-fs], .jw-icon-fullscreen, .vjs-fullscreen-control, .plyr__control--fullscreen');
+        if (fsBtn) {
+          fsBtn.click();
+          return;
+        }
+        const container = (video && video.closest) ? video.closest('#edgeplayer-root, .jwplayer, .plyr, .video-js, #player, .box-player') : video;
+        if (!document.fullscreenElement) {
+          if (container && container.requestFullscreen) container.requestFullscreen();
+          else if (video && video.requestFullscreen) video.requestFullscreen();
+        } else {
+          if (document.exitFullscreen) document.exitFullscreen();
+        }
+      } catch(e) {}
+    }
+
+    function handleVideoClickToggle(e) {
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      if (e.button !== 0 && e.button !== 1) return; // Left Click (0) or Middle Click (1)
+
+      const target = e.target;
+      if (!target) return;
+
+      // Ignore interactions on control elements: buttons, seekbars, volume sliders, menus, links, settings
+      if (isInteractiveElement(target) || isSeekBarOrControlButton(target)) return;
+      if (target.closest && target.closest(
+        'button, input, select, textarea, a, label, ' +
+        '.edge-custom-controls, .jw-controls, .jw-controlbar, .plyr__controls, .vjs-control-bar, .art-controls, ' +
+        '[class*="control"], [class*="seek"], [class*="progress"], [class*="slider"], [class*="volume"]'
+      )) {
+        return;
+      }
+
+      // Check if clicked element is a video or a video display surface
+      let video = null;
+      if (target.tagName && target.tagName.toLowerCase() === 'video') {
+        video = target;
+      } else if (target.id === 'edgeplayer-root' || (target.classList && (target.classList.contains('jw-media') || target.classList.contains('jw-aspect') || target.classList.contains('jw-preview')))) {
+        video = target.querySelector ? target.querySelector('video') : null;
+      } else if (target.closest) {
+        if (target.closest('.edge-dual-subtitles, .jw-text-track-display, .jw-text-track-cue')) {
+          const container = target.closest('#edgeplayer-root, .jwplayer, .plyr, .video-js, #player, .box-player');
+          if (container) video = container.querySelector('video');
+        }
+      }
+
+      if (!video) return;
+
+      if (e.button === 1) {
+        e.preventDefault(); // Prevent default middle click scroll lock
+      }
+
+      // Detect double-click to toggle fullscreen (while keeping video state consistent)
+      const now = Date.now();
+      if (e.button === 0 && now - lastVideoClickTime < 280) {
+        lastVideoClickTime = 0;
+        // Resume video state if first click paused it
+        if (video.paused) {
+          const p = video.play();
+          if (p && p.catch) p.catch(() => {});
+        }
+        togglePlayerFullscreen(video);
+        return;
+      }
+      lastVideoClickTime = now;
+
+      // Single click: toggle Play / Pause smoothly
+      try {
+        if (video.paused || video.ended) {
+          const p = video.play();
+          if (p && p.catch) p.catch(() => {});
+        } else {
+          video.pause();
+        }
+      } catch (err) {}
+    }
+
+    document.addEventListener('click', handleVideoClickToggle, false);
+    document.addEventListener('auxclick', handleVideoClickToggle, false);
+  }
+
+  if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
