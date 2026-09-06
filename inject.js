@@ -36,6 +36,8 @@
       ytd-ad-slot-renderer,
       #player-ads,
       #masthead-ad,
+      ytd-enforcement-message-view-model,
+      tp-yt-iron-overlay-backdrop,
       tp-yt-paper-dialog:has(#dismiss-button) {
         display: none !important;
       }
@@ -67,16 +69,28 @@
 
     // ===== LAYER 2: Ultra-Fast Non-Destructive Ad Fast-Forwarder & Skipper =====
     var wasAdShowing = false;
+    var userPlaybackRate = 1;
+    var userMuted = false;
 
     function processYouTubeAd() {
       var player = document.querySelector('#movie_player');
       if (!player) return;
 
       var video = player.querySelector('video');
-      var isAdShowing = player.classList.contains('ad-showing') || !!player.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay');
+      var isAdShowing = player.classList.contains('ad-showing') || 
+                        !!player.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay, .ytp-ad-text');
 
       if (isAdShowing) {
-        wasAdShowing = true;
+        if (!wasAdShowing) {
+          wasAdShowing = true;
+          // Capture user's actual playback rate and mute state before speeding up ad
+          if (video) {
+            if (video.playbackRate !== 16) {
+              userPlaybackRate = video.playbackRate || 1;
+            }
+            userMuted = video.muted;
+          }
+        }
         
         // 1. Fast-forward & mute ad video instantly
         if (video) {
@@ -98,20 +112,23 @@
 
         var skipBtns = document.querySelectorAll(
           '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, ' +
-          '.ytp-ad-skip-button-slot button, .ytp-ad-overlay-close-button'
+          '.ytp-ad-skip-button-slot button, .ytp-ad-overlay-close-button, button.ytp-ad-skip-button-modern'
         );
         for (var i = 0; i < skipBtns.length; i++) {
-          try { skipBtns[i].click(); } catch(e) {}
+          try {
+            skipBtns[i].click();
+            if (typeof simulateNativeClick === 'function') simulateNativeClick(skipBtns[i]);
+          } catch(e) {}
         }
 
         reportYtBlocked('Quảng cáo Video YouTube');
       } else if (wasAdShowing) {
         wasAdShowing = false;
-        // Restore main video state when ad ends
+        // Restore user's exact state when ad ends
         if (video) {
           try {
-            video.muted = false;
-            video.playbackRate = 1;
+            video.muted = userMuted;
+            video.playbackRate = userPlaybackRate || 1;
             if (video.paused) video.play();
           } catch(e) {}
         }
@@ -119,8 +136,16 @@
 
       // Auto-dismiss anti-adblock dialogs if any appear
       try {
-        var dismissBtn = document.querySelector('tp-yt-paper-dialog #dismiss-button, ytd-popup-container #dismiss-button');
-        if (dismissBtn) dismissBtn.click();
+        var dismissBtn = document.querySelector('tp-yt-paper-dialog #dismiss-button, ytd-popup-container #dismiss-button, ytd-enforcement-message-view-model button');
+        if (dismissBtn) {
+          dismissBtn.click();
+          if (typeof simulateNativeClick === 'function') simulateNativeClick(dismissBtn);
+          if (video && video.paused) video.play();
+        }
+        var backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop, ytd-enforcement-message-view-model');
+        for (var b = 0; b < backdrops.length; b++) {
+          backdrops[b].remove();
+        }
       } catch(e) {}
     }
 
