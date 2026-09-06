@@ -455,6 +455,59 @@ if (window.location.hostname.includes('youtube.com')) {
       return false;
     }
 
+    // Shared helper to climb up and find the outermost widget/floating container
+    function findOuterAdContainer(startEl) {
+      let elementToHide = startEl;
+      let curr = startEl.parentElement;
+      let depth = 0;
+
+      while (curr && curr !== document.body && curr !== document.documentElement && depth < 8) {
+        depth++;
+        if (isVideoPlayerOrControls(curr)) break;
+
+        const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
+        const currId = (curr.id || '').toLowerCase();
+        const style = window.getComputedStyle(curr);
+        const isFloating = style.position === 'fixed' || style.position === 'absolute' || style.position === 'sticky';
+        const isAnchor = curr.tagName.toLowerCase() === 'a';
+        const isWidgetOrAdClass = isAnchor || isFloating ||
+          currClass.includes('layoutwrapper') || currClass.includes('wrapper') || currClass.includes('widget') || currClass.includes('slider') ||
+          currClass.includes('container') || currClass.includes('box') || currClass.includes('root') || currClass.includes('spot') ||
+          currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') ||
+          currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') ||
+          currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+          currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') ||
+          currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal') || currId.includes('widget');
+
+        if (isWidgetOrAdClass && (curr.innerText || '').trim().length < 300) {
+          elementToHide = curr;
+        }
+        curr = curr.parentElement;
+      }
+      return elementToHide;
+    }
+
+    // Completely remove and hide ad container
+    function removeAndHideAdElement(el, url, reason) {
+      if (!el || el.nodeType !== 1) return;
+      el.setAttribute('data-ad-blocked', 'true');
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+      el.style.setProperty('width', '0', 'important');
+      el.style.setProperty('height', '0', 'important');
+      try {
+        el.remove();
+      } catch(e) {}
+      
+      safeSendMessage({
+        type: 'AD_BLOCKED',
+        url: url || 'ad_container',
+        reason: reason || 'Ẩn banner & khung quảng cáo'
+      });
+    }
+
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
@@ -479,6 +532,14 @@ if (window.location.hostname.includes('youtube.com')) {
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
           elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) return;
+
+      // Direct detection of video slider ad widgets (Stripchat / Mayzaent / SmartPop widgets)
+      if (el.matches && (el.matches('[class*="layoutWrapper"], [class*="root--wuzSh"], [qa-element="live-badge-plain-upper"], .sc-widget-icon, [class*="model-name--"]') ||
+                         el.matches('a[href*="smartpop"], a[href*="mayzaent"], a[href*="stripchat"], a[href*="stripchats"], a[href*="doppiocdn"]'))) {
+        const outer = findOuterAdContainer(el);
+        removeAndHideAdElement(outer, 'smartpop_widget', 'Ẩn widget video slider quảng cáo');
+        return;
+      }
 
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
@@ -533,44 +594,8 @@ if (window.location.hostname.includes('youtube.com')) {
           }
 
           if (isAd) {
-            let elementToHide = anchor;
-            let curr = anchor.parentElement;
-            let depth = 0;
-
-            // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              // STOP parent traversal immediately if we reach a video player or control bar!
-              if (isVideoPlayerOrControls(curr)) {
-                break;
-              }
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
-            }
-
-            if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad & Outer Overlay Container:', href, elementToHide);
-
-              safeSendMessage({
-                type: 'AD_BLOCKED',
-                url: href,
-                reason: 'Ẩn banner & khung mờ quảng cáo'
-              });
-            }
+            const outer = findOuterAdContainer(anchor);
+            removeAndHideAdElement(outer, href, 'Ẩn banner & khung mờ quảng cáo');
           }
         } catch (e) {}
       };
@@ -602,44 +627,8 @@ if (window.location.hostname.includes('youtube.com')) {
                              gamblingRegex.test(srcLower);
 
           if (isAdIframe) {
-            let elementToHide = iframe;
-            let curr = iframe.parentElement;
-            let depth = 0;
-
-            // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              // STOP parent traversal immediately if we reach a video player or control bar!
-              if (isVideoPlayerOrControls(curr)) {
-                break;
-              }
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
-            }
-
-            if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Iframe & Outer Overlay Container:', src, elementToHide);
-
-              safeSendMessage({
-                type: 'AD_BLOCKED',
-                url: src,
-                reason: 'Ẩn khung quảng cáo & lớp mờ'
-              });
-            }
+            const outer = findOuterAdContainer(iframe);
+            removeAndHideAdElement(outer, src, 'Ẩn khung quảng cáo & lớp mờ');
           }
         } catch(e) {}
       };
@@ -649,40 +638,8 @@ if (window.location.hostname.includes('youtube.com')) {
         if (video.hasAttribute('data-ad-blocked')) return;
         try {
           if (isAdVideo(video)) {
-            let elementToHide = video;
-            let curr = video.parentElement;
-            let depth = 0;
-            
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              if (isVideoPlayerOrControls(curr)) break;
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
-            }
-
-            if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad Video & Wrapper:', video.src, elementToHide);
-              
-              safeSendMessage({
-                type: 'AD_BLOCKED',
-                url: video.src || 'video-ad',
-                reason: 'Ẩn video quảng cáo & lớp mờ'
-              });
-            }
+            const outer = findOuterAdContainer(video);
+            removeAndHideAdElement(outer, video.src || 'video-ad', 'Ẩn video quảng cáo & lớp mờ');
           }
         } catch (e) {}
       };
@@ -704,34 +661,8 @@ if (window.location.hostname.includes('youtube.com')) {
           }
                                
           if (imgMatchesAd) {
-            let elementToHide = img;
-            let curr = img.parentElement;
-            let depth = 0;
-            
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              if (isVideoPlayerOrControls(curr)) break;
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
-            }
-
-            if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad Image & Wrapper:', src, elementToHide);
-            }
+            const outer = findOuterAdContainer(img);
+            removeAndHideAdElement(outer, src, 'Ẩn hình ảnh quảng cáo & lớp mờ');
           }
         } catch (e) {}
       };
@@ -744,8 +675,8 @@ if (window.location.hostname.includes('youtube.com')) {
           const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
           if (ariaLabel === 'quảng cáo' || ariaLabel.includes('quảng cáo ') || ariaLabel.includes('sponsor') || title === 'quảng cáo' || title.includes('quảng cáo ') || title.includes('sponsor')) {
-            el.setAttribute('data-ad-blocked', 'true');
-            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+            const outer = findOuterAdContainer(el);
+            removeAndHideAdElement(outer, 'explicit_ad', 'Ẩn phần tử quảng cáo theo nhãn');
           }
         } catch(e) {}
       };
