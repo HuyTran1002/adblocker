@@ -36,7 +36,8 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "*://*.youtube.com/*",
+        "*://youtube.com/*"
       ],
       "js": [
         "inject.js"
