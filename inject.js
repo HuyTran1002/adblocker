@@ -685,14 +685,26 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     } catch(e) {}
   }
 
-  if (!isYouTube) {
+    if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
       
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
+
+      // In an embed/iframe player (e.g. tiktok.phimhdc.com), allow all mouse/touch interactions freely
+      // so seeking, volume sliders, fullscreen zoom, and settings work 100% without interference
+      if (window.top !== window.self) {
+        return;
+      }
+
       const target = e.target;
       if (!target) return;
+
+      // If interaction is on or inside ANY player element, controls, seekbar, or buttons -> ALLOW IMMEDIATELY!
+      if (isPlayerOrPlayButton(target) || isInteractiveElement(target) || isSeekBarOrControlButton(target)) {
+        return;
+      }
 
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
@@ -700,6 +712,9 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       let overlay = null;
 
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+        if (isPlayerOrPlayButton(curr) || isSeekBarOrControlButton(curr)) {
+          return; // Stop immediately if we encounter a player container
+        }
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
           anchor = curr;
         }
@@ -758,28 +773,14 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
           
           if (isPlayerOrPlayButton(anchor)) {
-             console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
-             
-             
-             let isInternal = false;
-             try {
-                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-                isInternal = targetHost === window.location.hostname.toLowerCase();
-             } catch(e) {}
-             
-             if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
-                 console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
-                 window.location.assign(anchor.href);
-                 return;
-             }
-             
+             console.log('[Anti Pop-Under] Anchor was on video player. Resuming video...');
              toggleVideoPlayPause(target);
           }
           return;
         }
       }
 
-      // 3. Fallback check for background click or non-interactive redirect
+      // 4. Fallback check for background click or non-interactive redirect
       if (e.type === 'click') {
         blockScriptedRedirects(e);
       }
@@ -875,13 +876,23 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
   }
 
   // Helper to check if element is a clickjack overlay
-  function isClickjackOverlay(el) {
+    function isClickjackOverlay(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
-      if (isPlayerOrPlayButton(el)) return false;
+      if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el) || isInteractiveElement(el)) return false;
+
+      // Never touch anything inside a player container or iframe
+      if (el.closest && el.closest(
+        '#player, .box-player, .embed-responsive, .jwplayer, .plyr, .video-js, .vjs-, .artplayer, .dplayer, .clappr, .xgplayer,' +
+        '[class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"],' +
+        '[class*="control"], [id*="control"], [class*="progress"], [id*="progress"], [class*="seekbar"], [id*="seekbar"],' +
+        '[class*="slider"], [id*="slider"], [class*="volume"], [id*="volume"]'
+      )) {
+        return false;
+      }
 
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return false;
+      if (['button', 'input', 'select', 'textarea', 'form', 'svg', 'path', 'canvas', 'video', 'audio', 'iframe'].includes(tagName)) return false;
       if (el.getAttribute && el.getAttribute('role') === 'button') return false;
 
       const elId = (el.id || '').toLowerCase();
@@ -892,7 +903,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       }
 
       // If it contains legitimate input controls, forms, or non-ad movie images, skip
-      if (el.querySelector('video, audio, embed, object, input, select, textarea, form')) {
+      if (el.querySelector('video, audio, embed, object, input, select, textarea, form, iframe, svg, [class*="control"], [class*="progress"]')) {
         return false;
       }
 
@@ -1023,30 +1034,50 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     }
   }
 
-  function isPlayerOrPlayButton(el) {
-    if (!el) return false;
+    function isPlayerOrPlayButton(el) {
+    if (!el || el.nodeType !== 1) return false;
     try {
-      const tagName = el.tagName.toLowerCase();
+      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
       // Direct media / embed elements
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'button', 'input', 'select', 'track', 'source'].includes(tagName)) return true;
 
-      // Named player container classes (all major players)
-      if (el.closest(
-        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer,' +
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      
+      const playerKeywords = [
+        'player', 'video', 'embed', 'stream', 'halim', 'film', 'movie', 'xem',
+        'control', 'progress', 'seekbar', 'slider', 'timeline', 'volume', 'fullscreen',
+        'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'clappr', 'xgplayer', 'media',
+        'play', 'pause', 'mute', 'unmute', 'setting', 'quality', 'speed', 'pip', 'scrubber',
+        'bar', 'track', 'icon', 'btn', 'thumb', 'menu', 'panel', 'mask'
+      ];
+
+      if (playerKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
+
+      if (el.closest && el.closest(
+        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, .clappr, .xgplayer,' +
+        '#player, .box-player, .embed-responsive,' +
         '[class*="player"], [id*="player"],' +
         '[class*="video"], [id*="video"],' +
         '[class*="embed"], [id*="embed"],' +
         '[class*="stream"], [id*="stream"],' +
         '[class*="halim"], [id*="halim"],' +
         '[class*="film"], [id*="film"],' +
-        '[class*="xem"], [id*="xem"]'
+        '[class*="control"], [id*="control"],' +
+        '[class*="progress"], [id*="progress"],' +
+        '[class*="seekbar"], [id*="seekbar"],' +
+        '[class*="slider"], [id*="slider"],' +
+        '[class*="volume"], [id*="volume"],' +
+        '[class*="full"], [id*="full"]'
       )) return true;
 
-      // Inside any container that holds a <video> element (max 3 levels up)
+      // Inside any container that holds a video or iframe element
+      if (el.querySelector && el.querySelector('video, audio, canvas, svg, button, input, iframe, [class*="control"], [class*="progress"]')) return true;
+
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && depth < 3) {
-        if (p.querySelector && p.querySelector('video')) return true;
+      while (p && p !== document.body && depth < 4) {
+        if (p.querySelector && p.querySelector('video, iframe[src*="embed"], iframe[src*="player"], iframe[src*="phimhdc"]')) return true;
         p = p.parentElement;
         depth++;
       }

@@ -112,7 +112,7 @@ const adSelectors = [
   // uBlock & AdGuard standard cosmetic filter selectors
   '[class*="popup-ad"]', '[id*="popup-ad"]', '[class*="modal-ad"]', '[id*="modal-ad"]',
   '[class*="ad-overlay"]', '[id*="ad-overlay"]', '[class*="overlay-ad"]', '[id*="overlay-ad"]',
-  '[class*="ad_box"]', '[class*="ads_box"]', '[id*="ad_box"]', '[id*="ads_box"]',
+  '.ad_box', '.ads_box', '[class~="ad_box"]', '[class~="ads_box"]',
   '[class*="banner_ad"]', '[id*="banner_ad"]', '[class*="ads-banner"]', '[id*="ads-banner"]',
   'div[id^="google_ads_"]', 'div[id^="div-gpt-ad-"]', 'ins.adsbygoogle'
 ];
@@ -210,11 +210,17 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Bảo vệ tuyệt đối iframe trình phát phim và container phim */
+  /* Bảo vệ tuyệt đối iframe trình phát phim, container phim và thanh điều khiển (seekbar, volume, fullscreen) */
   #player, .box-player, .embed-responsive, div[id*="player"]:not([id*="ad"]),
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
   iframe[src*="phimhdc"], iframe[src*="streamxemphimhd"], iframe[src*="edgeplayer"],
-  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"], #player iframe, .box-player iframe, .embed-responsive iframe {
+  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"],
+  #player iframe, .box-player iframe, .embed-responsive iframe,
+  .plyr, .plyr__controls, .plyr__control, .plyr__progress, .plyr__time, .plyr__volume,
+  .jwplayer, .jw-controls, .jw-controlbar, .jw-slider-time,
+  .video-js, .vjs-control-bar, .vjs-progress-control,
+  .artplayer, .art-controls, .art-progress, .art-control,
+  video, audio, canvas {
     display: block !important;
     visibility: visible !important;
     pointer-events: auto !important;
