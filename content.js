@@ -53,6 +53,21 @@ const adSelectors = [
   // Block any element flagged dynamically
   '[data-ad-blocked="true"]',
   
+  // Animevietsub and Vietnamese anime/movie sites specific ad containers
+  '.ads-banner', 'a.ads-banner', 'div.ads-banner', '[class*="ads-banner"]', '[id*="ads-banner"]',
+  '#url-_preload-ads-1', '[id*="preload-ads"]', 'div:has(> #url-_preload-ads-1)',
+  'a[href*="animevietsubapp"]', 'div:has(> a[href*="animevietsubapp"])', 'div:has(> div > a[href*="animevietsubapp"])',
+  'a[href*="catfish"]', '.catfish-banner', '.catfish-bottom', '#catfish', 'div[class*="catfish"]', 'div[id*="catfish"]',
+  'a[href*="hide_catfix"]', 'div:has(> a[href*="hide_catfix"])',
+  'a[href*="chinhhang"]', 'div:has(> a[href*="chinhhang"])',
+  'a[href*="win79"]', 'a[href*="hitclub"]', 'a[href*="gemwin"]', 'a[href*="zowin"]', 'a[href*="6789x"]', 'a[href*="rikvip"]',
+  'a[href*="red88"]', 'a[href*="uk88"]', 'a[href*="yo88"]', 'a[href*="go88"]', 'a[href*="bom88"]', 'a[href*="haywin"]',
+  'a[href*="sunwin"]', 'a[href*="adqc.net"]', 'a[href*="789club"]', 'a[href*="b52club"]', 'a[href*="manclub"]', 'a[href*="iwin"]', 'a[href*="top88"]',
+  'div:has(> a[href*="win79"])', 'div:has(> a[href*="hitclub"])', 'div:has(> a[href*="gemwin"])', 'div:has(> a[href*="zowin"])',
+  'div:has(> a[href*="6789x"])', 'div:has(> a[href*="rikvip"])', 'div:has(> a[href*="red88"])', 'div:has(> a[href*="uk88"])',
+  'div:has(> a[href*="yo88"])', 'div:has(> a[href*="go88"])', 'div:has(> a[href*="bom88"])', 'div:has(> a[href*="haywin"])', 'div:has(> a[href*="sunwin"])',
+  '#ads-player', '.player-ads', '#top-banner', '.top-banner', '#box-ad-banner', 'div[id*="box-ad"]', 'div[class*="box-ad"]',
+
   // Explicit modal backdrop ads with Netflix-red close buttons or ad images
   'div[class*="fixed"][class*="inset-0"]:has(button[class*="bg-[#e50914]"])',
   'div[class*="fixed"][class*="inset-0"]:has(a[href*="bit.ly"])',
@@ -386,7 +401,10 @@ if (window.location.hostname.includes('youtube.com')) {
       'macau', 'lasvegas', 'bbin', '\\bag\\b', '\\bmg\\b', '\\bpt\\b', '\\bpg\\b', 'cq9', 'jdb', 'vr',
       '\\bbg\\b', '\\bky\\b', 'lebo', '\\bog\\b', 'ebet', 'allbet', 'kaiyuan', 'sbobet', '\\bsbo\\b',
       'cmd368', '\\bim\\b', '\\btf\\b', 'crown', 'shengli', 'bet365', 'vwin', 'dafabet', '12bet',
-      'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot'
+      'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot',
+      'win79', 'hitclub', 'gemwin', 'zowin', '6789x', 'rikvip', 'red88', 'uk88', 'yo88', 'go88',
+      'bom88', 'haywin', 'sunwin', '789club', 'b52club', 'iwin', 'manclub', 'top88', 'ku11', 'thabet',
+      'nohu', 'taixiu', 'banca', 'gamebaidoithuong', 'nhacaiuytin', 'dagathomo'
     ];
 
     const adUrlKeywords = [
@@ -404,7 +422,8 @@ if (window.location.hostname.includes('youtube.com')) {
       '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
       'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
       'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
-      'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn'
+      'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn',
+      'animevietsubapp', 'adqc.net', 'chinhhang', 'catfish', 'hide_catfix', 'preload-ads'
     ];
 
     function safeEscapeRegex(str) {

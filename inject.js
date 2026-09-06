@@ -1,4 +1,5 @@
 window.__cfRLUnblockHandlers = true;
+try { window.hide_catfix = function() { return false; }; } catch(e) {}
 (function() {
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
@@ -980,7 +981,10 @@ window.__cfRLUnblockHandlers = true;
     'macau', 'lasvegas', 'bbin', '\\bag\\b', '\\bmg\\b', '\\bpt\\b', '\\bpg\\b', 'cq9', 'jdb', 'vr',
     '\\bbg\\b', '\\bky\\b', 'lebo', '\\bog\\b', 'ebet', 'allbet', 'kaiyuan', 'sbobet', '\\bsbo\\b',
     'cmd368', '\\bim\\b', '\\btf\\b', 'crown', 'shengli', 'bet365', 'vwin', 'dafabet', '12bet',
-    'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot'
+    'wbet', 'bty', 'bovada', 'roulette', 'baccarat', 'poker', 'blackjack', 'jackpot',
+    'win79', 'hitclub', 'gemwin', 'zowin', '6789x', 'rikvip', 'red88', 'uk88', 'yo88', 'go88',
+    'bom88', 'haywin', 'sunwin', '789club', 'b52club', 'iwin', 'manclub', 'top88', 'ku11', 'thabet',
+    'nohu', 'taixiu', 'banca', 'gamebaidoithuong', 'nhacaiuytin', 'dagathomo'
   ];
 
   const adUrlKeywords = [
@@ -998,7 +1002,8 @@ window.__cfRLUnblockHandlers = true;
     '/cpm/', '/cpv/', '/cps/', '/pop/', '/aff/', '/track/', 'click.php', 'go.php', 'out.php', 'jump.php', 'redirect.php',
     'stripchat', 'stripchats', 'chaturbate', 'livejasmin', 'bongacams', 'cam4', 'camsoda',
     'smartpop', 'smartpopbucketid', 'modelid=', 'modelname=', 'magsrv', 'tsyndicate', 'etahub',
-    'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn', 'mayzaent', 'doppiocdn', 'videoslider', 'smartpopbucketid', 'mastersmartpopid', 'stripcash'
+    'trafficjunky', 'trafficstars', 'ero-advertising', 'plugrush', 'twinred', 'adxad', 'clickaine', 'adxporn', 'mayzaent', 'doppiocdn', 'videoslider', 'smartpopbucketid', 'mastersmartpopid', 'stripcash',
+    'animevietsubapp', 'adqc.net', 'chinhhang', 'catfish', 'hide_catfix', 'preload-ads'
   ];
 
   function safeEscapeRegex(str) {
