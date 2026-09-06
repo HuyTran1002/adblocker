@@ -434,8 +434,10 @@
         '.vjs-ad-overlay .close', '.jw-ad-overlay .close', '.ad-overlay-close',
         '.btn-close-ad', '.close-ad', '#close-ad', '.ad_close_btn', '.ad-close-btn',
         '[class*="close-ad"]', '[class*="ad-close"]', '[id*="close-ad"]', '[id*="ad-close"]',
-        'button[aria-label*="close" i]', 'button[aria-label*="đóng" i]', 'button[aria-label="Đóng"]',
-        'button[aria-label*="tắt" i]', 'button[class*="rounded-full"]', 'button[class*="bg-[#e50914]"]',
+        'button[class*="bg-[#e50914]"]',
+        'div[class*="fixed"][class*="inset-0"] button[aria-label="Đóng"]',
+        'div[class*="fixed"][class*="inset-0"] button[aria-label*="đóng" i]',
+        'div[class*="fixed"][class*="inset-0"] button[aria-label*="close" i]',
         '[class*="layoutWrapper"]', '[class*="root--wuzSh"]', '[qa-element="live-badge-plain-upper"]',
         '.sc-widget-icon', '[class*="model-name--"]'
       ];
@@ -448,12 +450,13 @@
             if (node) {
               var btnText = (node.innerText || node.textContent || '').trim();
               var aria = (node.getAttribute('aria-label') || '').toLowerCase();
-              var isAdBtn = (btnText === '✕' || btnText === '×' || btnText === 'X' || aria.includes('đóng') || aria.includes('close') || aria.includes('tắt') || node.classList.contains('close') || node.className.includes('close'));
+              var isAdBtn = (btnText === '✕' || btnText === '×' || btnText === 'X' || aria.includes('đóng') || aria.includes('close') || aria.includes('tắt') || node.classList.contains('close') || (typeof node.className === 'string' && node.className.includes('close')));
               
-              var parentAd = node.closest('[class*="fixed"][class*="inset-0"], [class*="fixed"], [class*="ad"], [id*="ad"], [class*="popup"], [id*="popup"], [class*="catfish"], [id*="catfish"], [class*="layoutWrapper"], [class*="widget"], [class*="modal"], [class*="backdrop"]') || node;
+              var parentAd = node.closest('[class*="fixed"][class*="inset-0"], [class*="modal-backdrop"], [class*="ad-overlay"], [class*="layoutWrapper"], [class*="widget"]') || node;
               
-              // If node is a button but not matching ad pattern and has lots of text, do not treat as ad
-              if (!isAdBtn && btnText.length > 50) continue;
+              // NEVER touch elements containing movie posters or legitimate non-ad images
+              var nonAdImg = parentAd.querySelector('img:not([src*="ad"]):not([src*="popunder"]):not([src*="quangcao"])');
+              if (nonAdImg) continue;
 
               // Protect legitimate video players from being hidden
               if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer') && !parentAd.querySelector('video:not([src*="ad"]), form, input, textarea, select')) {
@@ -886,14 +889,23 @@
         return false;
       }
 
-      // If it contains legitimate input controls or movie video media, skip
+      // If it contains legitimate input controls, forms, or non-ad movie images, skip
       if (el.querySelector('video, audio, embed, object, input, select, textarea, form')) {
         return false;
       }
 
+      // Protect all elements containing legitimate movie images
+      const img = el.querySelector ? el.querySelector('img') : null;
+      if (img) {
+        const src = (img.src || '').toLowerCase();
+        if (!src.includes('ad') && !src.includes('popunder') && !src.includes('quangcao') && !src.includes('banner')) {
+          return false;
+        }
+      }
+
       // Check text length: clickjack overlays never have substantial readable content
       const text = (el.innerText || el.textContent || '').trim();
-      if (text.length > 100) return false;
+      if (text.length > 50) return false;
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
@@ -922,29 +934,34 @@
       const isFullScreen = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw')) || elClass.includes('inset-0');
       const isLargeArea = (width >= 200 && height >= 200) || isFullScreen;
 
+      // Check if it's an anchor tag: ONLY external links or ad redirect links can be clickjack overlays!
+      if (tagName === 'a') {
+        const href = el.getAttribute('href') || '';
+        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+          return false;
+        }
+        try {
+          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+          const currentHost = window.location.hostname.toLowerCase();
+          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+          if (!isExternal) {
+            return false; // Same-domain movie links are NEVER clickjack overlays
+          }
+          if (isPositioned && (isHighZ || isFullScreen) && isTransparent) {
+            return true;
+          }
+        } catch(e) {
+          return false;
+        }
+      }
+
+      // Check if it contains an explicit ad close button
+      if (isPositioned && (isHighZ || isFullScreen) && el.querySelector('button[class*="bg-[#e50914]"]')) {
+        return true;
+      }
+
       if (isPositioned && (isHighZ || isFullScreen) && isTransparent && isLargeArea) {
         return true;
-      }
-
-      // Check if it contains an ad close button
-      if (isPositioned && (isHighZ || isFullScreen) && el.querySelector('button[aria-label*="Đóng" i], button[aria-label*="close" i], button[class*="bg-[#e50914]"]')) {
-        return true;
-      }
-
-      if (tagName === 'a' && isPositioned && (isHighZ || isFullScreen) && isTransparent) {
-        return true;
-      }
-
-      if (tagName === 'a' && isPositioned && (isHighZ || isFullScreen) && isTransparent) {
-        const href = el.getAttribute('href') || '';
-        if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
-          try {
-            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-            const currentHost = window.location.hostname.toLowerCase();
-            const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
-            if (isExternal) return true;
-          } catch(e) {}
-        }
       }
 
       return false;
