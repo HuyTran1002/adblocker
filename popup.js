@@ -192,31 +192,83 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Custom Rules UI Manager
-  function updateCustomRulesUI(customBlockedSelectors) {
-    customRulesContainer.innerHTML = "";
-    const list = customBlockedSelectors || [];
-    customCountEl.textContent = list.length;
+  // Launch Element Picker on active tab
+  function launchElementPicker() {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0] && tabs[0].id) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: "START_ELEMENT_PICKER" }, (res) => {
+          window.close(); // Close popup so user can interact with webpage directly
+        });
+      }
+    });
+  }
 
-    if (list.length === 0) {
+  const startPickerBtn = document.getElementById("start-picker-btn");
+  if (startPickerBtn) startPickerBtn.addEventListener("click", launchElementPicker);
+
+  const tabStartPickerBtn = document.getElementById("tab-start-picker-btn");
+  if (tabStartPickerBtn) tabStartPickerBtn.addEventListener("click", launchElementPicker);
+
+  // Custom Rules UI Manager
+  function updateCustomRulesUI(manualFilters, customBlockedSelectors) {
+    customRulesContainer.innerHTML = "";
+    const filters = manualFilters || {};
+    const globalList = customBlockedSelectors || [];
+    
+    const domainRules = (currentDomain && filters[currentDomain]) ? filters[currentDomain] : [];
+    const totalCount = domainRules.length + globalList.length;
+    customCountEl.textContent = totalCount;
+
+    if (totalCount === 0) {
       emptyCustomMsg.style.display = "block";
     } else {
       emptyCustomMsg.style.display = "none";
-      list.forEach(rule => {
-        const tag = document.createElement("div");
-        tag.className = "rule-tag";
-        tag.innerHTML = `
-          <span>${rule}</span>
-          <button class="tag-remove-btn" title="Xóa quy tắc này" data-rule="${rule}">&times;</button>
+      
+      // 1. Render rules on current domain
+      domainRules.forEach(selector => {
+        const item = document.createElement("div");
+        item.className = "custom-rule-item";
+        item.innerHTML = `
+          <div>
+            <span class="custom-rule-code">${selector}</span>
+            <span class="custom-rule-domain">${currentDomain || "Trang hiện tại"}</span>
+          </div>
+          <button class="custom-rule-delete-btn" data-domain="${currentDomain}" data-selector="${selector}">🗑️ Gỡ chặn</button>
         `;
-        tag.querySelector(".tag-remove-btn").addEventListener("click", (e) => {
-          const ruleToRemove = e.currentTarget.getAttribute("data-rule");
+        item.querySelector(".custom-rule-delete-btn").addEventListener("click", (e) => {
+          const sel = e.currentTarget.getAttribute("data-selector");
+          const dom = e.currentTarget.getAttribute("data-domain");
+          chrome.storage.local.get(["manualFilters"], (res) => {
+            let curFilters = res.manualFilters || {};
+            if (curFilters[dom]) {
+              curFilters[dom] = curFilters[dom].filter(s => s !== sel);
+              if (curFilters[dom].length === 0) delete curFilters[dom];
+              chrome.storage.local.set({ manualFilters: curFilters });
+            }
+          });
+        });
+        customRulesContainer.appendChild(item);
+      });
+
+      // 2. Render global selectors
+      globalList.forEach(rule => {
+        const item = document.createElement("div");
+        item.className = "custom-rule-item";
+        item.innerHTML = `
+          <div>
+            <span class="custom-rule-code">${rule}</span>
+            <span class="custom-rule-domain">Quy tắc chung (Mọi trang)</span>
+          </div>
+          <button class="custom-rule-delete-btn" data-global="true" data-selector="${rule}">🗑️ Gỡ chặn</button>
+        `;
+        item.querySelector(".custom-rule-delete-btn").addEventListener("click", (e) => {
+          const ruleToRemove = e.currentTarget.getAttribute("data-selector");
           chrome.storage.local.get(["customBlockedSelectors"], (res) => {
             const updated = (res.customBlockedSelectors || []).filter(r => r !== ruleToRemove);
             chrome.storage.local.set({ customBlockedSelectors: updated });
           });
         });
-        customRulesContainer.appendChild(tag);
+        customRulesContainer.appendChild(item);
       });
     }
   }
@@ -254,22 +306,41 @@ document.addEventListener("DOMContentLoaded", () => {
     const cleanRule = ruleStr.trim();
     if (!cleanRule) return;
 
-    chrome.storage.local.get(["customBlockedSelectors"], (res) => {
-      const customRules = res.customBlockedSelectors || [];
-      if (!customRules.includes(cleanRule)) {
-        customRules.push(cleanRule);
-        chrome.storage.local.set({ customBlockedSelectors: customRules }, () => {
-          customRuleInput.value = "";
-        });
-      }
-    });
+    if (currentDomain) {
+      chrome.storage.local.get(["manualFilters"], (res) => {
+        let filters = res.manualFilters || {};
+        if (!filters[currentDomain]) filters[currentDomain] = [];
+        if (!filters[currentDomain].includes(cleanRule)) {
+          filters[currentDomain].push(cleanRule);
+          chrome.storage.local.set({ manualFilters: filters }, () => {
+            customRuleInput.value = "";
+          });
+        }
+      });
+    } else {
+      chrome.storage.local.get(["customBlockedSelectors"], (res) => {
+        const customRules = res.customBlockedSelectors || [];
+        if (!customRules.includes(cleanRule)) {
+          customRules.push(cleanRule);
+          chrome.storage.local.set({ customBlockedSelectors: customRules }, () => {
+            customRuleInput.value = "";
+          });
+        }
+      });
+    }
   }
 
   customRuleAddBtn.addEventListener("click", () => addCustomRule(customRuleInput.value));
   customRuleInput.addEventListener("keydown", (e) => { if (e.key === "Enter") addCustomRule(customRuleInput.value); });
 
   clearCustomRulesBtn.addEventListener("click", () => {
-    chrome.storage.local.set({ customBlockedSelectors: [] });
+    chrome.storage.local.get(["manualFilters"], (res) => {
+      let filters = res.manualFilters || {};
+      if (currentDomain && filters[currentDomain]) {
+        delete filters[currentDomain];
+      }
+      chrome.storage.local.set({ manualFilters: filters, customBlockedSelectors: [] });
+    });
   });
 
   // Filter Timestamps & Stats UI Formatter
@@ -321,16 +392,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Load Initial Storage State
-  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (result) => {
+  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (result) => {
     const enabled = result.enabled !== false;
     const count = result.blockedCount || 0;
     const history = result.blockedHistory || [];
     const disabledDomains = result.disabledDomains || [];
     const customBlockedSelectors = result.customBlockedSelectors || [];
+    const manualFilters = result.manualFilters || {};
 
     updateUI(enabled, count, history);
     updateWhitelistUI(disabledDomains);
-    updateCustomRulesUI(customBlockedSelectors);
+    updateCustomRulesUI(manualFilters, customBlockedSelectors);
     updateFilterTimestampsUI(result.lastFiltersUpdateTimestamp, result.onlineFilterStats);
   });
 
@@ -372,16 +444,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // Storage Change Observer (Realtime UI updates)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local") {
-      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors"], (result) => {
+      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters"], (result) => {
         const enabled = result.enabled !== false;
         const count = result.blockedCount || 0;
         const history = result.blockedHistory || [];
         const disabledDomains = result.disabledDomains || [];
         const customBlockedSelectors = result.customBlockedSelectors || [];
+        const manualFilters = result.manualFilters || {};
 
         updateUI(enabled, count, history);
         updateWhitelistUI(disabledDomains);
-        updateCustomRulesUI(customBlockedSelectors);
+        updateCustomRulesUI(manualFilters, customBlockedSelectors);
 
         if (currentDomain) {
           siteToggle.checked = !disabledDomains.includes(currentDomain);

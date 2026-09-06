@@ -735,3 +735,130 @@ input:not(:checked) ~ .pulse-indicator,
 .tag-remove-btn:hover {
   opacity: 0.8;
 }
+
+/* Picker Launcher Buttons */
+.picker-launch-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(244, 63, 94, 0.12));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: left;
+}
+
+.picker-launch-btn:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(244, 63, 94, 0.2));
+  border-color: rgba(99, 102, 241, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+
+.picker-launch-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.picker-launch-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.picker-launch-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.picker-launch-desc {
+  font-size: 10px;
+  color: var(--text-sub);
+}
+
+.picker-launch-arrow {
+  font-size: 14px;
+  color: #a5b4fc;
+  transition: transform 0.2s ease;
+}
+
+.picker-launch-btn:hover .picker-launch-arrow {
+  transform: translateX(3px);
+}
+
+.tab-picker-launch-btn {
+  width: 100%;
+  background: rgba(255, 71, 87, 0.15);
+  border: 1px dashed rgba(255, 71, 87, 0.4);
+  color: #ff6b81;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-picker-launch-btn:hover {
+  background: rgba(255, 71, 87, 0.25);
+  border-color: #ff4757;
+  color: #ffffff;
+}
+
+/* Custom Rule List Items */
+.custom-rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  gap: 8px;
+  transition: background 0.15s ease;
+}
+
+.custom-rule-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.custom-rule-code {
+  font-family: monospace;
+  font-size: 11px;
+  color: #a6e3a1;
+  word-break: break-all;
+  flex: 1;
+}
+
+.custom-rule-domain {
+  font-size: 9px;
+  color: var(--text-mute);
+  display: block;
+}
+
+.custom-rule-delete-btn {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #f43f5e;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.custom-rule-delete-btn:hover {
+  background: #f43f5e;
+  color: #ffffff;
+  border-color: #f43f5e;
+}

@@ -1069,116 +1069,394 @@ if (window.location.hostname.includes('youtube.com')) {
       } catch (err) {}
     }, true); // Use capture phase to intercept before page scripts
 
-    // --- MANUAL ELEMENT BLOCKER (Context Menu & Long Press) ---
+    // --- ADVANCED INTERACTIVE VISUAL ELEMENT PICKER & CONFIRMATION SYSTEM ---
     let lastRightClickedElement = null;
-  
+    let isPickerActive = false;
+    let pickerOverlay = null;
+    let pickerBadge = null;
+    let currentHoveredElement = null;
+    let confirmationBackdrop = null;
+
     document.addEventListener('contextmenu', (e) => {
       lastRightClickedElement = e.target;
     }, true);
-  
-    // Generate robust CSS selector
-    function getRobustSelector(el) {
+
+    // Build specific, resilient, safe selector
+    function getSafeRobustSelector(el) {
       if (!el || el === document.body || el === document.documentElement) return null;
-      if (el.id && !/^\d|-|_/.test(el.id)) return '#' + CSS.escape(el.id);
       
+      // 1. Explicit clean ID
+      if (el.id && typeof el.id === 'string' && el.id.trim().length > 0 && !/^\d|[^\w-]/.test(el.id)) {
+        return '#' + CSS.escape(el.id);
+      }
+
+      // 2. Data attributes
+      const dataAttrs = ['data-id', 'data-ad-id', 'data-slot', 'data-unit', 'data-name'];
+      for (const attr of dataAttrs) {
+        const val = el.getAttribute(attr);
+        if (val && val.length < 100) {
+          return `${el.tagName.toLowerCase()}[${attr}="${CSS.escape(val)}"]`;
+        }
+      }
+
+      // 3. Meaningful stable class name
+      if (el.classList && el.classList.length > 0) {
+        const stableClasses = Array.from(el.classList).filter(c => 
+          c.length > 2 && !/\b[a-f0-9]{8,}\b/i.test(c) && !/^\d/.test(c) && !c.includes('adblock-max')
+        );
+        if (stableClasses.length > 0) {
+          const classSelector = '.' + stableClasses.map(c => CSS.escape(c)).join('.');
+          try {
+            if (document.querySelectorAll(classSelector).length <= 5) {
+              return `${el.tagName.toLowerCase()}${classSelector}`;
+            }
+          } catch(e) {}
+        }
+      }
+
+      // 4. Source attribute for img/iframe/script/video
+      const src = el.getAttribute('src');
+      if (src && src.length < 200 && !src.startsWith('data:') && !src.startsWith('blob:')) {
+        return `${el.tagName.toLowerCase()}[src="${CSS.escape(src)}"]`;
+      }
+
+      // 5. Hierarchical path builder
       let path = [];
       let current = el;
-      while (current && current !== document.body && current !== document.documentElement) {
-        let selector = current.tagName.toLowerCase();
-        // Try to use robust attributes like data-id, name, src, href if present
-        const dataId = current.getAttribute('data-id');
-        const srcAttr = current.getAttribute('src');
-        const hrefAttr = current.getAttribute('href');
-        
-        if (dataId) {
-          selector += `[data-id="${CSS.escape(dataId)}"]`;
-          path.unshift(selector);
-          break; // Very specific
+      let depth = 0;
+
+      while (current && current !== document.body && current !== document.documentElement && depth < 4) {
+        let tag = current.tagName.toLowerCase();
+        let step = tag;
+
+        if (current.id && !/^\d|[^\w-]/.test(current.id)) {
+          path.unshift('#' + CSS.escape(current.id));
+          break; // Found unique ID ancestor
         }
-        if (srcAttr && srcAttr.length < 200 && !srcAttr.startsWith('data:') && !srcAttr.startsWith('blob:')) {
-          selector += `[src="${CSS.escape(srcAttr)}"]`;
-        } else if (hrefAttr && hrefAttr.length < 200 && current.tagName.toLowerCase() === 'a' && !hrefAttr.startsWith('javascript:')) {
-          selector += `[href="${CSS.escape(hrefAttr)}"]`;
+
+        const stableClasses = Array.from(current.classList || []).filter(c => 
+          c.length > 2 && !/\b[a-f0-9]{8,}\b/i.test(c) && !/^\d/.test(c) && !c.includes('adblock-max')
+        );
+        if (stableClasses.length > 0) {
+          step += '.' + CSS.escape(stableClasses[0]);
         } else {
-          // Use class name only if it looks stable (no random digits/hashes)
-          const classes = Array.from(current.classList).filter(c => !/\d/.test(c) && c.length > 2);
-          if (classes.length > 0) {
-            selector += '.' + CSS.escape(classes[0]);
-          } else {
-            // Fallback to nth-child
-            let sibling = current.previousElementSibling;
-            let nth = 1;
-            while (sibling) {
-              if (sibling.tagName === current.tagName) nth++;
-              sibling = sibling.previousElementSibling;
-            }
-            selector += `:nth-of-type(${nth})`;
+          let sibling = current.previousElementSibling;
+          let nth = 1;
+          while (sibling) {
+            if (sibling.tagName === current.tagName) nth++;
+            sibling = sibling.previousElementSibling;
           }
+          step += `:nth-of-type(${nth})`;
         }
-        path.unshift(selector);
+
+        path.unshift(step);
         current = current.parentElement;
+        depth++;
       }
-      return path.join(' > ');
-    }
-  
-    function blockElement(el) {
-      if (!el) return;
-      const selector = getRobustSelector(el);
-      if (!selector) return;
-  
-      el.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
+
+      const generated = path.join(' > ');
       
-      // Save to storage
+      // CRITICAL SAFETY CHECK: Never allow single generic tags
+      const dangerousTags = ['object', 'div', 'p', 'span', 'img', 'a', 'iframe', 'video', 'button', 'input', 'body', 'html', 'table', 'tr', 'td', 'ul', 'li', 'header', 'footer', 'section', 'article', 'main', 'aside'];
+      if (dangerousTags.includes(generated.trim().toLowerCase())) {
+        let nth = 1;
+        let s = el.previousElementSibling;
+        while (s) {
+          if (s.tagName === el.tagName) nth++;
+          s = s.previousElementSibling;
+        }
+        return `${el.tagName.toLowerCase()}:nth-of-type(${nth})`;
+      }
+
+      return generated || `${el.tagName.toLowerCase()}`;
+    }
+
+    // Initialize Picker Overlays
+    function createPickerOverlays() {
+      if (!pickerOverlay) {
+        pickerOverlay = document.createElement('div');
+        pickerOverlay.id = 'adblock-max-picker-highlight';
+        pickerOverlay.setAttribute('style', `
+          position: fixed !important;
+          pointer-events: none !important;
+          z-index: 2147483645 !important;
+          border: 2px dashed #ff4757 !important;
+          background: rgba(255, 71, 87, 0.22) !important;
+          box-shadow: 0 0 12px rgba(255, 71, 87, 0.4) !important;
+          display: none !important;
+          border-radius: 4px !important;
+          transition: all 0.05s ease !important;
+        `);
+        (document.body || document.documentElement).appendChild(pickerOverlay);
+      }
+
+      if (!pickerBadge) {
+        pickerBadge = document.createElement('div');
+        pickerBadge.id = 'adblock-max-picker-badge';
+        pickerBadge.setAttribute('style', `
+          position: fixed !important;
+          pointer-events: none !important;
+          z-index: 2147483646 !important;
+          background: #181825 !important;
+          color: #ffffff !important;
+          border: 1px solid #ff4757 !important;
+          border-radius: 6px !important;
+          padding: 4px 8px !important;
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+          display: none !important;
+        `);
+        (document.body || document.documentElement).appendChild(pickerBadge);
+      }
+    }
+
+    function startElementPicker() {
+      if (isPickerActive) return;
+      isPickerActive = true;
+      createPickerOverlays();
+
+      document.addEventListener('mousemove', onPickerMouseMove, true);
+      document.addEventListener('click', onPickerClick, true);
+      document.addEventListener('keydown', onPickerKeyDown, true);
+      document.documentElement.style.cursor = 'crosshair';
+    }
+
+    function stopElementPicker() {
+      isPickerActive = false;
+      if (pickerOverlay) pickerOverlay.style.display = 'none';
+      if (pickerBadge) pickerBadge.style.display = 'none';
+      document.removeEventListener('mousemove', onPickerMouseMove, true);
+      document.removeEventListener('click', onPickerClick, true);
+      document.removeEventListener('keydown', onPickerKeyDown, true);
+      document.documentElement.style.cursor = '';
+    }
+
+    function onPickerMouseMove(e) {
+      if (!isPickerActive || confirmationBackdrop) return;
+      const target = e.target;
+      if (!target || target === pickerOverlay || target === pickerBadge || target.id?.startsWith('adblock-max-picker')) return;
+
+      currentHoveredElement = target;
+      const rect = target.getBoundingClientRect();
+      
+      pickerOverlay.style.top = rect.top + 'px';
+      pickerOverlay.style.left = rect.left + 'px';
+      pickerOverlay.style.width = rect.width + 'px';
+      pickerOverlay.style.height = rect.height + 'px';
+      pickerOverlay.style.display = 'block';
+
+      const tag = target.tagName.toLowerCase();
+      const cls = target.className && typeof target.className === 'string' ? '.' + target.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+      pickerBadge.textContent = `<${tag}${cls}> (${Math.round(rect.width)}x${Math.round(rect.height)}) - Bấm chuột để chọn, ESC để hủy`;
+      
+      let badgeTop = rect.top - 30;
+      if (badgeTop < 10) badgeTop = rect.bottom + 10;
+      pickerBadge.style.top = Math.max(10, badgeTop) + 'px';
+      pickerBadge.style.left = Math.max(10, rect.left) + 'px';
+      pickerBadge.style.display = 'block';
+    }
+
+    function onPickerClick(e) {
+      if (!isPickerActive) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      const target = currentHoveredElement || e.target;
+      if (!target || target.id?.startsWith('adblock-max-picker')) return;
+
+      stopElementPicker();
+      showConfirmationDialog(target);
+    }
+
+    function onPickerKeyDown(e) {
+      if (e.key === 'Escape') {
+        stopElementPicker();
+        removeConfirmationDialog();
+      }
+    }
+
+    // Confirmation Preview Modal
+    function showConfirmationDialog(targetEl) {
+      removeConfirmationDialog();
+      if (!targetEl) return;
+
+      const selector = getSafeRobustSelector(targetEl);
+      if (!selector) return;
+
+      confirmationBackdrop = document.createElement('div');
+      confirmationBackdrop.id = 'adblock-max-picker-backdrop';
+      confirmationBackdrop.setAttribute('style', `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: rgba(0, 0, 0, 0.65) !important;
+        z-index: 2147483646 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        backdrop-filter: blur(4px) !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      `);
+
+      const rect = targetEl.getBoundingClientRect();
+      const tag = targetEl.tagName.toLowerCase();
+      const textPreview = (targetEl.innerText || targetEl.getAttribute('alt') || targetEl.getAttribute('title') || '').trim().slice(0, 60);
+
+      confirmationBackdrop.innerHTML = `
+        <div id="adblock-max-picker-dialog" style="
+          background: #181825 !important;
+          color: #cdd6f4 !important;
+          border: 1px solid #ff4757 !important;
+          border-radius: 14px !important;
+          padding: 22px !important;
+          width: 420px !important;
+          max-width: 90vw !important;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.6) !important;
+        ">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(255,71,87,0.15); display: flex; align-items: center; justify-content: center; font-size: 18px;">🚫</div>
+            <div>
+              <h3 style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 700;">Xác nhận chặn phần tử</h3>
+              <span style="font-size: 12px; color: #a6adc8;">Trang: <b>${window.location.hostname}</b></span>
+            </div>
+          </div>
+          
+          <p style="margin: 0 0 14px 0; font-size: 13px; color: #bac2de; line-height: 1.5;">
+            Bạn có chắc chắn muốn chặn vĩnh viễn phần tử này? Bạn có thể mở lại menu Adblock Max bất kỳ lúc nào để khôi phục.
+          </p>
+
+          <div style="background: #11111b; border: 1px solid #313244; border-radius: 8px; padding: 12px; margin-bottom: 18px; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #89b4fa;">
+              <span><strong>Thẻ HTML:</strong> &lt;${tag}&gt;</span>
+              <span><strong>Kích thước:</strong> ${Math.round(rect.width)} × ${Math.round(rect.height)} px</span>
+            </div>
+            <div style="color: #a6e3a1; font-family: monospace; word-break: break-all; background: rgba(0,0,0,0.3); padding: 6px 8px; border-radius: 4px; border: 1px solid #45475a;">
+              ${selector}
+            </div>
+            ${textPreview ? `<div style="margin-top: 6px; color: #6c7086; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">"${textPreview}"</div>` : ''}
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button id="adblock-btn-cancel" style="
+              background: #313244 !important;
+              color: #cdd6f4 !important;
+              border: none !important;
+              border-radius: 8px !important;
+              padding: 9px 16px !important;
+              font-size: 13px !important;
+              font-weight: 600 !important;
+              cursor: pointer !important;
+              transition: all 0.2s !important;
+            ">Hủy (ESC)</button>
+            <button id="adblock-btn-confirm" style="
+              background: #ff4757 !important;
+              color: #ffffff !important;
+              border: none !important;
+              border-radius: 8px !important;
+              padding: 9px 20px !important;
+              font-size: 13px !important;
+              font-weight: 700 !important;
+              cursor: pointer !important;
+              box-shadow: 0 4px 14px rgba(255,71,87,0.4) !important;
+              transition: all 0.2s !important;
+            ">✅ Xác nhận Chặn</button>
+          </div>
+        </div>
+      `;
+
+      (document.body || document.documentElement).appendChild(confirmationBackdrop);
+
+      // Bind events
+      document.getElementById('adblock-btn-cancel').addEventListener('click', removeConfirmationDialog);
+      document.getElementById('adblock-btn-confirm').addEventListener('click', () => {
+        saveAndApplyCustomRule(selector, targetEl);
+        removeConfirmationDialog();
+      });
+      confirmationBackdrop.addEventListener('click', (e) => {
+        if (e.target === confirmationBackdrop) removeConfirmationDialog();
+      });
+    }
+
+    function removeConfirmationDialog() {
+      if (confirmationBackdrop) {
+        confirmationBackdrop.remove();
+        confirmationBackdrop = null;
+      }
+    }
+
+    function saveAndApplyCustomRule(selector, targetEl) {
+      if (!selector) return;
+      if (targetEl) {
+        targetEl.style.setProperty('display', 'none', 'important');
+        targetEl.style.setProperty('visibility', 'hidden', 'important');
+      }
+
       const domain = window.location.hostname;
       chrome.storage.local.get(['manualFilters'], (res) => {
         let filters = res.manualFilters || {};
         if (!filters[domain]) filters[domain] = [];
         if (!filters[domain].includes(selector)) {
           filters[domain].push(selector);
-          chrome.storage.local.set({ manualFilters: filters });
-          
-          // Report
-          safeSendMessage({
-            type: 'AD_BLOCKED',
-            url: 'Phần tử chặn thủ công',
-            reason: 'Người dùng chặn qua Menu'
+          chrome.storage.local.set({ manualFilters: filters }, () => {
+            applyManualFilters(filters[domain]);
+            safeSendMessage({
+              type: 'AD_BLOCKED',
+              url: selector,
+              reason: 'Người dùng chặn thủ công'
+            });
           });
-          applyManualFilters(filters[domain]); // Re-apply to make sure
         }
       });
     }
-  
-    // Listen for background message
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.type === 'START_MANUAL_BLOCK' && lastRightClickedElement) {
-        // Find the outermost ad wrapper up to 3 levels to avoid blocking just an image instead of the banner container
-        let target = lastRightClickedElement;
-        let depth = 0;
-        while (target && target !== document.body && depth < 3) {
-          if (target.tagName === 'A' || target.tagName === 'IFRAME') break; // Good wrappers
-          const pos = window.getComputedStyle(target).position;
-          if (pos === 'fixed' || pos === 'absolute') break; // Floating wrappers
-          target = target.parentElement;
-          depth++;
-        }
-        blockElement(target || lastRightClickedElement);
-      }
-    });
-  
 
     function applyManualFilters(selectors) {
-      if (!selectors || selectors.length === 0) return;
       let styleEl = document.getElementById('adblock-max-manual-filters');
+      if (!selectors || selectors.length === 0) {
+        if (styleEl) styleEl.remove();
+        return;
+      }
       if (!styleEl) {
         styleEl = document.createElement('style');
         styleEl.id = 'adblock-max-manual-filters';
-        document.documentElement.appendChild(styleEl);
+        (document.head || document.documentElement).appendChild(styleEl);
       }
-      const css = selectors.map(s => s + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }').join('\n');
+      const css = selectors.map(s => `${s} { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }`).join('\n');
       styleEl.textContent = css;
     }
-  
-    // Load filters on start
+
+    // Storage change listener to update rules live across tabs
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.manualFilters) {
+        const domain = window.location.hostname;
+        const newFilters = changes.manualFilters.newValue || {};
+        applyManualFilters(newFilters[domain] || []);
+      }
+    });
+
+    // Listen for background / popup messages
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg.type === 'START_ELEMENT_PICKER') {
+        startElementPicker();
+        sendResponse({ success: true });
+        return true;
+      }
+      if (msg.type === 'START_MANUAL_BLOCK') {
+        if (lastRightClickedElement) {
+          showConfirmationDialog(lastRightClickedElement);
+        } else {
+          startElementPicker();
+        }
+        sendResponse({ success: true });
+        return true;
+      }
+    });
+
+    // Initial load
     chrome.storage.local.get(['manualFilters'], (res) => {
       const domain = window.location.hostname;
       if (res.manualFilters && res.manualFilters[domain]) {
