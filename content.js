@@ -782,25 +782,34 @@ if (window.location.hostname.includes('youtube.com')) {
       return false;
     }
 
-    // Cleans up orphaned backdrop overlays (darkened backgrounds left behind by blocked ads and floating close buttons)
+    // Cleans up orphaned backdrop overlays & full-screen transparent click traps
     function cleanOrphanedBackdrops() {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       try {
-        const overlays = document.querySelectorAll('div, section, dialog');
+        const vw = window.innerWidth || document.documentElement.clientWidth || 800;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 600;
+
+        const overlays = document.querySelectorAll('div, section, dialog, [class*="overlay"], [class*="backdrop"], [class*="modal"]');
         overlays.forEach(el => {
           if (el.hasAttribute('data-ad-blocked')) return;
 
-          // NEVER touch video players or control bars
-          if (isVideoPlayerOrControls(el)) return;
+          // NEVER touch video players, movie posters, or control bars
+          if (isVideoPlayerOrControls(el) || isMoviePosterOrContent(el)) return;
 
           const style = window.getComputedStyle(el);
           const isFloating = style.position === 'fixed' || style.position === 'absolute';
           if (!isFloating) return;
 
+          const rect = el.getBoundingClientRect();
+          const width = rect.width;
+          const height = rect.height;
+          const isLargeArea = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw'));
+          
           const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
           const elId = (el.id || '').toLowerCase();
 
-          const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
+          const isOverlayClass = isLargeArea ||
+                                 elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') || elClass.includes('layoutwrapper') ||
                                  elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish');
 
           if (!isOverlayClass) return;
@@ -814,7 +823,6 @@ if (window.location.hostname.includes('youtube.com')) {
           for (let i = 0; i < allChildren.length; i++) {
             const child = allChildren[i];
             if (child.hasAttribute('data-ad-blocked')) continue;
-
             if (isAdCloseButton(child)) continue;
 
             const childTag = child.tagName.toLowerCase();
@@ -824,42 +832,42 @@ if (window.location.hostname.includes('youtube.com')) {
             }
 
             const text = (child.innerText || child.textContent || '').trim();
-            if (text.length > 40) {
+            if (text.length > 100) {
               hasGenuineContent = true;
               break;
             }
 
-            if (childTag === 'img' || childTag === 'iframe' || childTag === 'video') {
-              if (!child.hasAttribute('data-ad-blocked')) {
-                hasGenuineContent = true;
-                break;
-              }
+            if (childTag === 'video' && !isAdVideo(child)) {
+              hasGenuineContent = true;
+              break;
             }
 
-            if (childTag === 'a') {
-              if (!child.hasAttribute('data-ad-blocked')) {
-                const href = child.href || '';
-                if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
-                  try {
-                    const host = new URL(href, window.location.href).hostname;
-                    if (host === window.location.hostname && text.length > 0) {
-                      hasGenuineContent = true;
-                      break;
-                    }
-                  } catch(e) {}
-                }
+            if (childTag === 'img') {
+              if (isMoviePosterOrContent(child)) {
+                hasGenuineContent = true;
+                break;
               }
             }
           }
 
           if (!hasGenuineContent) {
             el.setAttribute('data-ad-blocked', 'true');
-            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-            console.log('[Anti Pop-Under] Hide orphaned overlay backdrop & close button:', el);
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            try { el.remove(); } catch(e) {}
+            console.log('[Anti Pop-Under] Removed orphaned overlay backdrop & clickjack layer:', el);
 
             // Restore scroll locks if body/html was locked
-            if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
-            if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
+            if (document.body && (document.body.style.overflow === 'hidden' || document.body.style.position === 'fixed')) {
+              document.body.style.overflow = '';
+              document.body.style.position = '';
+            }
+            if (document.documentElement && (document.documentElement.style.overflow === 'hidden' || document.documentElement.style.position === 'fixed')) {
+              document.documentElement.style.overflow = '';
+              document.documentElement.style.position = '';
+            }
           }
         });
       } catch(e) {}

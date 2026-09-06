@@ -853,79 +853,29 @@
 
   // Helper to check if element is a clickjack overlay
   function isClickjackOverlay(el) {
-    if (!el || el === document || el === document.body || el === document.documentElement) {
-      return false;
-    }
-    
+    if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
+      if (isPlayerOrPlayButton(el)) return false;
+
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
-        return false;
-      }
+      if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return false;
+      if (el.getAttribute && el.getAttribute('role') === 'button') return false;
 
-      // Visible elements with text content are genuine UI elements (e.g. episode buttons "Tập 1", "Tập 2"), NOT clickjack overlays!
-      const text = (el.innerText || '').trim();
-      if (text.length > 0) {
-        return false;
-      }
-
-      // Protect video players, canvases, and player control bars from clickjack overlay detection
-      if (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(el)) {
-        return false;
-      }
-
-      // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') ||
-          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
+          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) {
         return false;
       }
 
-      // Never consider elements with interactive roles, submit/reset buttons, or form controls as overlays
-      if (el.getAttribute) {
-        const role = (el.getAttribute('role') || '').toLowerCase();
-        const type = (el.getAttribute('type') || '').toLowerCase();
-        if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox'].includes(role) ||
-            ['submit', 'reset', 'button'].includes(type)) {
-          return false;
-        }
-      }
-
-      // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
-      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
+      // If it contains legitimate input controls or movie video media, skip
+      if (el.querySelector('video, audio, embed, object, input, select, textarea, form')) {
         return false;
       }
 
-      // Protect video player controls, seekbars, progress bars, timelines, fullscreen buttons, volume sliders
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="stream"], [id*="stream"], [class*="halim"], [id*="halim"], [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"], [class*="timeline"], [id*="timeline"], [class*="fullscreen"], [id*="fullscreen"]')) {
-        if (tagName !== 'a') {
-          return false;
-        }
-      }
-
-      // If anchor tag has same-origin href or no external ad href, it is NEVER a clickjack overlay
-      if (tagName === 'a') {
-        const href = el.getAttribute('href') || '';
-        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
-          return false; // Episode link with id="no-link" or JS trigger
-        }
-        try {
-          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-          const currentHost = window.location.hostname.toLowerCase();
-          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
-          if (!isExternal) {
-            return false; // Same-domain links are never clickjack overlays
-          }
-        } catch (e) {
-          return false;
-        }
-      }
-
-      // If it contains genuine form controls, video media, or text-bearing children, skip
-      if (el.querySelector('video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
-        return false;
-      }
+      // Check text length: clickjack overlays never have substantial readable content
+      const text = (el.innerText || el.textContent || '').trim();
+      if (text.length > 100) return false;
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
@@ -947,16 +897,29 @@
          bgAlpha = 0;
       }
       
-      const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
-      if (!isTransparent) return false;
-
-      // Real overlay area check: covers large area OR is a transparent positioned external link OR cursor-following trap
-      const isLargeArea = (width >= 150 && height >= 150) || (width >= vw * 0.3 && height >= vh * 0.3);
+      const isTransparent = opacity < 0.6 || bgAlpha < 0.6;
       const zIndex = parseInt(style.zIndex, 10);
-      const isHighZ = !isNaN(zIndex) && zIndex >= 5;
-      const isFloatingTrap = isPositioned && isTransparent && (isHighZ || tagName === 'a' || isLargeArea);
-      
-      return isLargeArea || isFloatingTrap;
+      const isHighZ = !isNaN(zIndex) && zIndex >= 10;
+      const isFullScreen = (width >= vw * 0.7 && height >= vh * 0.7) || (style.top === '0px' && style.left === '0px' && (style.width === '100%' || style.width === '100vw'));
+      const isLargeArea = (width >= 200 && height >= 200);
+
+      if (isPositioned && (isHighZ || isFullScreen) && isTransparent && isLargeArea) {
+        return true;
+      }
+
+      if (tagName === 'a' && isPositioned && (isHighZ || isFullScreen) && isTransparent) {
+        const href = el.getAttribute('href') || '';
+        if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+          try {
+            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+            const currentHost = window.location.hostname.toLowerCase();
+            const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+            if (isExternal) return true;
+          } catch(e) {}
+        }
+      }
+
+      return false;
     } catch (e) {
       return false;
     }
