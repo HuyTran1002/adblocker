@@ -890,7 +890,6 @@ if (window.location.hostname.includes('youtube.com')) {
     // Cleans up orphaned backdrop overlays & full-screen transparent click traps
     function cleanOrphanedBackdrops() {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
-      if (window.top !== window.self) return; // Never touch video player embed iframes
       try {
         const vw = window.innerWidth || document.documentElement.clientWidth || 800;
         const vh = window.innerHeight || document.documentElement.clientHeight || 600;
@@ -1101,10 +1100,15 @@ if (window.location.hostname.includes('youtube.com')) {
     // --- GLOBAL CLICK INTERCEPTOR (ANTI-CLICKJACKING) ---
     document.addEventListener('click', function(e) {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
-      if (window.top !== window.self) return; // Allow all clicks inside embed video players
       try {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
+
+        if (window.top !== window.self) {
+          if (isVideoPlayerOrControls(target) || (target.closest && target.closest('button, input, select, video, canvas, .edge-custom-controls, .jw-controls, .plyr__controls, .vjs-control-bar, [class*="control"], [class*="seek"], [class*="slider"]'))) {
+            return; // Allow clicks on player controls and video freely inside iframes
+          }
+        }
 
         // 1. Detect if click is inside an anchor (<a>)
         let anchor = null;

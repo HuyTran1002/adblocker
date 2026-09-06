@@ -4,6 +4,31 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
+  // Defuse site-level popunder scripts (such as phimhdc / streamxemphimhd) by setting and spoofing popup cookies
+  try {
+    if (typeof document !== 'undefined') {
+      try { document.cookie = 'popupOpened=true; path=/; max-age=31536000'; } catch(e) {}
+      try { document.cookie = 'popcounter=9999; path=/; max-age=31536000'; } catch(e) {}
+      const origCookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
+                              Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+      if (origCookieDesc && origCookieDesc.get) {
+        Object.defineProperty(document, 'cookie', {
+          get() {
+            const val = origCookieDesc.get.call(this) || '';
+            let res = val;
+            if (!res.includes('popupOpened=true')) res = res ? (res + '; popupOpened=true') : 'popupOpened=true';
+            if (!res.includes('popcounter=')) res = res ? (res + '; popcounter=9999') : 'popcounter=9999';
+            return res;
+          },
+          set(val) {
+            return origCookieDesc.set.call(this, val);
+          },
+          configurable: true
+        });
+      }
+    }
+  } catch(e) {}
+
 
   // ================================================================
   // YOUTUBE AD ELIMINATOR v3.4.1 (AdGuard / uBlock Core Protocol)
@@ -780,12 +805,6 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
       
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
 
-      // In an embed/iframe player (e.g. tiktok.phimhdc.com), allow all mouse/touch interactions freely
-      // so seeking, volume sliders, fullscreen zoom, and settings work 100% without interference
-      if (window.top !== window.self) {
-        return;
-      }
-
       const target = e.target;
       if (!target) return;
 
@@ -1092,7 +1111,8 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
     'popmyads', 'adtrue', 'adflex', 'syndication', 'doubleclick', 'googlesyndication',
-    'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless',
+    'googleadservices', 'ad-delivery', 'adservice', 'astrology', 'backlight', 'inless', 'astrologybacklightsinless',
+    'hdc.html', 'firevideoplayer',
     'zoneid=', 'pubid=', 'subid=', 'placement=', 'direct_link',
     'playhubconnect', 'cm8806', 'linkroyal', 'abroadad', 'streamvl', 'xiazai', 'pan666',
     'jads.co', '9splt', 'yuelongyy', 'juicyads', 'getjuicy', 'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
@@ -1330,17 +1350,39 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     return false;
   }
 
+  // Helper to create safe dummy window that sinks popunder calls without navigating
+  function createDummyWindow() {
+    let _closed = false;
+    const dummyWindow = new Proxy({}, {
+      get(targetProp, prop) {
+        if (prop === 'closed') return _closed;
+        if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
+        if (prop === 'close') return () => { _closed = true; };
+        if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
+        if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
+        if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
+        return undefined;
+      },
+      set() { return true; }
+    });
+    return dummyWindow;
+  }
+
   // The custom window.open logic
   function customOpen(url, target, features) {
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
       return originalOpen.apply(this, arguments);
     }
 
+    const urlStr = String(url || '');
+    // 1. Immediately intercept any explicit ad / popunder / redirect URLs
+    if (urlStr && (gamblingRegex.test(urlStr) || adUrlRegex.test(urlStr) || urlStr.includes('hdc.html') || urlStr.includes('astrology') || urlStr.includes('firevideoplayer'))) {
+      reportBlocked(urlStr, 'Blocked explicit ad/popunder in window.open');
+      return createDummyWindow();
+    }
+
     const targetLower = String(target || '').toLowerCase();
     if (['_self', '_top', '_parent'].includes(targetLower)) {
-      if (gamblingRegex.test(url) || adUrlRegex.test(url)) {
-        return createDummyWindow();
-      }
       try {
         const targetHost = new URL(url, window.location.href).hostname.toLowerCase();
         const currentHost = window.location.hostname.toLowerCase();
@@ -1352,26 +1394,12 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
           return originalOpen.apply(this, arguments);
         }
       } catch (e) {
-        return originalOpen.apply(this, arguments);
-
+        return createDummyWindow();
       }
     }
 
     if (!checkNavigationOrPopup(url, 'window.open')) {
-      let _closed = false;
-      const dummyWindow = new Proxy({}, {
-        get(targetProp, prop) {
-          if (prop === 'closed') return _closed;
-          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
-          if (prop === 'close') return () => { _closed = true; };
-          if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
-          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
-          if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
-          return undefined;
-        },
-        set() { return true; }
-      });
-      return dummyWindow;
+      return createDummyWindow();
     }
 
     return originalOpen.apply(this, arguments);
@@ -1589,10 +1617,15 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     // Global Main World capture-phase click interceptor
     window.addEventListener('click', function(e) {
       if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
-      if (window.top !== window.self) return; // Allow all clicks freely inside embed player iframes
       try {
         const target = e.target;
         if (!target) return;
+
+        if (window.top !== window.self) {
+          if (isPlayerOrPlayButton(target) || isSeekBarOrControlButton(target) || isInteractiveElement(target)) {
+            return; // Allow clicks on player controls and video freely inside embed player iframes
+          }
+        }
 
         // Block clicks on any explicit ad widgets or blocked containers
         const blockedContainer = target.closest && target.closest('[data-ad-blocked="true"], [class*="layoutWrapper"], [class*="sc-widget"], [class*="root--wuzSh"], [qa-element="live-badge-plain-upper"]');
