@@ -123,8 +123,9 @@ async function fetchAndApplyOnlineFilters() {
           if (l.startsWith('||') && l.includes('^')) {
             l = l.substring(2, l.indexOf('^')).trim();
           }
+          const NEVER_BLOCK = ['phimhdc', 'phimhdcss', 'animevietsub', 'tramphim', 'ophim', 'kkphim', 'nguonc', 'vietsub', 'motphim', 'tvhay', 'phimmoi', 'bilutv', 'dongphym', 'streamxemphimhd', 'edgeplayer', 'cloudflarestorage', 'byteimg', 'ibyteimg', 'tiktokcdn', 'akamaized', 'coccoc', 'dailymotion', 'vimeo', 'ok.ru', 'fembed', 'streamtape', 'doodstream', 'voe.sx', 'streamwish', 'filelions', 'vidhide', 'google', 'youtube', 'facebook', 'github', 'microsoft', 'apple', 'twitter', 'x.com', 'cloudflare', 'cloudfront', 'fastly', 'akamai', 'jsdelivr', 'cdnjs'];
           if (l.length >= 4 && l.includes('.') && !l.includes('/') && !l.includes(':')) {
-            if (!l.includes('google') && !l.includes('youtube') && !l.includes('facebook') && !l.includes('github')) {
+            if (!NEVER_BLOCK.some(kw => l.includes(kw))) {
               domains.add(l);
               count++;
             }

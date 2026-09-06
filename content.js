@@ -210,10 +210,11 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Bảo vệ tuyệt đối iframe trình phát phim */
+  /* Bảo vệ tuyệt đối iframe trình phát phim và container phim */
+  #player, .box-player, .embed-responsive, div[id*="player"]:not([id*="ad"]),
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
   iframe[src*="phimhdc"], iframe[src*="streamxemphimhd"], iframe[src*="edgeplayer"],
-  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"], #player iframe, .box-player iframe {
+  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"], #player iframe, .box-player iframe, .embed-responsive iframe {
     display: block !important;
     visibility: visible !important;
     pointer-events: auto !important;
