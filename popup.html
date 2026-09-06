@@ -59,16 +59,6 @@
           </label>
         </div>
 
-        <!-- Quick Action: Interactive Element Picker -->
-        <button class="picker-launch-btn" id="start-picker-btn" title="Rê chuột và bấm chọn phần tử bất kỳ trên trang để chặn">
-          <span class="picker-launch-icon">🎯</span>
-          <div class="picker-launch-text">
-            <span class="picker-launch-title">Chọn phần tử để chặn</span>
-            <span class="picker-launch-desc">Rê chuột trên web & chọn quảng cáo cần xóa</span>
-          </div>
-          <span class="picker-launch-arrow">➔</span>
-        </button>
-
         <!-- Blocked History Section -->
         <section class="section">
           <div class="section-title">
@@ -266,18 +256,14 @@
             <button class="danger-btn-text" id="clear-custom-rules-btn" title="Xóa tất cả quy tắc trên trang này">Xóa tất cả</button>
           </div>
 
-          <button class="tab-picker-launch-btn" id="tab-start-picker-btn">
-            <span>🎯 Bật chế độ chọn phần tử trên trang</span>
-          </button>
-
-          <div class="input-row" style="margin-top: 10px;">
+          <div class="input-row">
             <input type="text" id="custom-rule-input" placeholder="CSS selector (vd: #banner-ad)" />
             <button class="action-btn" id="custom-rule-add-btn">Thêm</button>
           </div>
 
           <div class="custom-rules-box" id="custom-rules-box">
             <div class="empty-custom-msg" id="empty-custom-msg">
-              Chưa có phần tử nào bị chặn thủ công trên trang này. Bạn có thể bấm nút <b>"Chọn phần tử để chặn"</b> hoặc chuột phải vào quảng cáo chọn <b>"🚫 Chặn quảng cáo này"</b>.
+              Chưa có phần tử nào bị chặn thủ công trên trang này. Bạn chỉ cần nhấn chuột phải vào quảng cáo bất kỳ trên trang web và chọn <b>"🚫 Chặn quảng cáo này"</b> để chọn và xác nhận chặn.
             </div>
             <div class="custom-rules-container" id="custom-rules-container"></div>
           </div>

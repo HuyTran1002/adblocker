@@ -192,23 +192,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Launch Element Picker on active tab
-  function launchElementPicker() {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs && tabs[0] && tabs[0].id) {
-        chrome.tabs.sendMessage(tabs[0].id, { type: "START_ELEMENT_PICKER" }, (res) => {
-          window.close(); // Close popup so user can interact with webpage directly
-        });
-      }
-    });
-  }
-
-  const startPickerBtn = document.getElementById("start-picker-btn");
-  if (startPickerBtn) startPickerBtn.addEventListener("click", launchElementPicker);
-
-  const tabStartPickerBtn = document.getElementById("tab-start-picker-btn");
-  if (tabStartPickerBtn) tabStartPickerBtn.addEventListener("click", launchElementPicker);
-
   // Custom Rules UI Manager
   function updateCustomRulesUI(manualFilters, customBlockedSelectors) {
     customRulesContainer.innerHTML = "";
