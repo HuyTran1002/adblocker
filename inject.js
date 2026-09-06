@@ -25,6 +25,7 @@
       .ytp-ad-action-interstitial,
       .ytp-ad-message-container,
       .ytp-ad-persistent-progress-bar-container,
+      .ytp-ad-overlay-image,
       ytd-display-ad-renderer,
       ytd-promoted-sparkles-web-renderer,
       ytd-promoted-video-renderer,
@@ -47,20 +48,12 @@
     `;
     (document.head || document.documentElement).appendChild(adCSS);
 
-    // ===== LAYER 2: Advanced Ad data sanitizer =====
-    const AD_KEYS = [
-      'adPlacements', 'playerAds', 'adSlots',
-      'adBreakHeartbeatParams', 'adSlotLoggingData',
-      'instreamAdBreak', 'adBreakParams', 'adPlacementRenderer',
-      'playerAdParams', 'adTagUrl', 'vmap'
-    ];
-
     var lastYtReport = 0;
     function reportYtBlocked(reason) {
-      if (window.top !== window.self) return; // Only count on main page, ignore child iframes / widgets
-      if (!window.location.href.includes('watch?v=')) return; // Only count when actually watching a video!
+      if (window.top !== window.self) return;
+      if (!window.location.href.includes('watch?v=')) return;
       var now = Date.now();
-      if (now - lastYtReport > 10000) { // Max 1 count per 10s on video watch page
+      if (now - lastYtReport > 10000) {
         lastYtReport = now;
         try {
           window.postMessage({
@@ -72,254 +65,70 @@
       }
     }
 
-    function sanitize(obj, depth, seen) {
-      if (!depth) depth = 0;
-      if (!seen) seen = new WeakSet();
-      var removed = 0;
-      if (!obj || typeof obj !== 'object' || depth > 14) return removed;
-      if (seen.has(obj)) return removed;
-      seen.add(obj);
+    // ===== LAYER 2: Ultra-Fast Non-Destructive Ad Fast-Forwarder & Skipper =====
+    var wasAdShowing = false;
 
-      for (var i = 0; i < AD_KEYS.length; i++) {
-        var key = AD_KEYS[i];
-        if (key in obj) {
-          if (key === 'adPlacements' || key === 'playerAds' || key === 'adSlots' || key === 'instreamAdBreak' || key === 'adPlacementRenderer') {
-            reportYtBlocked('Quảng cáo Video YouTube');
-          }
-          delete obj[key];
-          removed++;
-        }
-      }
-
-      var keys = Object.keys(obj);
-      for (var k = 0; k < keys.length; k++) {
-        var val = obj[keys[k]];
-        if (val && typeof val === 'object') {
-          removed += sanitize(val, depth + 1, seen);
-        }
-      }
-      return removed;
-    }
-
-    // Helper to sanitize player response string or object
-    function sanitizePlayerResponse(resp) {
-      if (!resp) return resp;
-      try {
-        if (typeof resp === 'string') {
-          var parsed = JSON.parse(resp);
-          if (parsed && (parsed.adPlacements || parsed.playerAds || parsed.instreamAdBreak)) {
-            reportYtBlocked('Quảng cáo Video YouTube');
-          }
-          sanitize(parsed);
-          return JSON.stringify(parsed);
-        } else if (typeof resp === 'object') {
-          if (resp && (resp.adPlacements || resp.playerAds || resp.instreamAdBreak)) {
-            reportYtBlocked('Quảng cáo Video YouTube');
-          }
-          sanitize(resp);
-          return resp;
-        }
-      } catch(e) {}
-      return resp;
-    }
-
-    // ===== LAYER 3: Trap JSON.parse & Global page data (0-Wait Zero-Ad Engine) =====
-    try {
-      var _origJsonParse = JSON.parse;
-      JSON.parse = function(text, reviver) {
-        var res = _origJsonParse.apply(this, arguments);
-        if (res && typeof res === 'object') {
-          sanitize(res);
-        }
-        return res;
-      };
-    } catch(e) {}
-
-    function trapGlobal(name) {
-      var currentValue = window[name];
-      if (currentValue && typeof currentValue === 'object') {
-        sanitize(currentValue);
-      }
-      try {
-        Object.defineProperty(window, name, {
-          get: function() {
-            if (currentValue && typeof currentValue === 'object') {
-              sanitize(currentValue);
-            }
-            return currentValue;
-          },
-          set: function(v) {
-            if (v && typeof v === 'object') {
-              sanitize(v);
-              if (v.config && v.config.args) {
-                if (v.config.args.raw_player_response) {
-                  v.config.args.raw_player_response = sanitizePlayerResponse(v.config.args.raw_player_response);
-                }
-                if (v.config.args.player_response) {
-                  v.config.args.player_response = sanitizePlayerResponse(v.config.args.player_response);
-                }
-              }
-            }
-            currentValue = v;
-          },
-          configurable: true,
-          enumerable: true
-        });
-      } catch(e) {}
-    }
-    trapGlobal('ytInitialPlayerResponse');
-    trapGlobal('ytInitialData');
-    trapGlobal('ytplayer');
-    trapGlobal('yt');
-    trapGlobal('ytcfg');
-
-    // ===== LAYER 4: Intercept Fetch & XHR (SPA navigation 0-Wait) =====
-    try {
-      var _origFetch = window.fetch;
-      window.fetch = function(input, init) {
-        var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
-        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net/pagead') !== -1)) {
-          return Promise.resolve(new Response('{}', {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'Content-Type': 'application/json' }
-          }));
-        }
-        return _origFetch.apply(this, arguments).then(function(response) {
-          try {
-            if (response && response.status === 200 && url && (url.indexOf('/youtubei/v1/player') !== -1 || url.indexOf('/youtubei/v1/next') !== -1)) {
-              var contentType = response.headers ? response.headers.get('content-type') : '';
-              if (!contentType || contentType.indexOf('json') !== -1) {
-                return response.clone().json().then(function(data) {
-                  if (data && typeof data === 'object') {
-                    sanitize(data);
-                  }
-                  return new Response(JSON.stringify(data), {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers
-                  });
-                }).catch(function() { return response; });
-              }
-            }
-          } catch(e) {}
-          return response;
-        });
-      };
-    } catch(e) {}
-
-    try {
-      var origXhrOpen = XMLHttpRequest.prototype.open;
-      var origXhrSend = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open = function(method, url) {
-        this._ytUrl = url;
-        return origXhrOpen.apply(this, arguments);
-      };
-      XMLHttpRequest.prototype.send = function() {
-        var url = this._ytUrl || '';
-        if (url && (url.indexOf('pagead/viewthroughconversion') !== -1 || url.indexOf('doubleclick.net') !== -1 || url.indexOf('/pagead/') !== -1)) {
-          var self = this;
-          setTimeout(function() {
-            try {
-              Object.defineProperty(self, 'readyState', { value: 4, writable: true });
-              Object.defineProperty(self, 'status', { value: 200, writable: true });
-              Object.defineProperty(self, 'statusText', { value: 'OK', writable: true });
-              Object.defineProperty(self, 'responseText', { value: '{}', writable: true });
-              Object.defineProperty(self, 'response', { value: '{}', writable: true });
-              var evt = new Event('readystatechange');
-              self.dispatchEvent(evt);
-              if (typeof self.onload === 'function') self.onload();
-            } catch(e) {}
-          }, 10);
-          return;
-        }
-        this.addEventListener('readystatechange', function() {
-          if (this.readyState === 4) {
-            try {
-              var rType = this.responseType;
-              if (rType === 'json') {
-                if (this.response && typeof this.response === 'object') {
-                  sanitize(this.response);
-                }
-              } else if (!rType || rType === 'text') {
-                if (this.responseText) {
-                  var data = JSON.parse(this.responseText);
-                  if (data && typeof data === 'object') {
-                    sanitize(data);
-                    var sanitizedText = JSON.stringify(data);
-                    Object.defineProperty(this, 'responseText', { value: sanitizedText, writable: true, configurable: true });
-                    Object.defineProperty(this, 'response', { value: sanitizedText, writable: true, configurable: true });
-                  }
-                }
-              }
-            } catch(e) {}
-          }
-        });
-        return origXhrSend.apply(this, arguments);
-      };
-    } catch(e) {}
-
-    // ===== LAYER 5: DOM Safety Net (Non-destructive Ad Skipper) =====
-    var lastSkip = 0;
-    var lastReportTime = 0;
-    function skipAd() {
-      var now = Date.now();
-      if (now - lastSkip < 150) return;
-
+    function processYouTubeAd() {
       var player = document.querySelector('#movie_player');
       if (!player) return;
 
-      var isAdShowing = player.classList.contains('ad-showing');
-      var hasAdUI = !!player.querySelector(
-        '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, ' +
-        '.ytp-ad-skip-button-slot, .ytp-ad-player-overlay, .ytp-ad-text'
-      );
+      var video = player.querySelector('video');
+      var isAdShowing = player.classList.contains('ad-showing') || !!player.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay');
 
       if (isAdShowing) {
+        wasAdShowing = true;
+        
+        // 1. Fast-forward & mute ad video instantly
+        if (video) {
+          try {
+            video.muted = true;
+            if (isFinite(video.duration) && video.duration > 0) {
+              video.currentTime = video.duration;
+            } else {
+              video.currentTime = 9999;
+            }
+            video.playbackRate = 16;
+          } catch(e) {}
+        }
+
+        // 2. Click player skip button API or DOM button
         try {
-          player.classList.remove('ad-showing');
-          if (typeof player.playVideo === 'function') player.playVideo();
-          var v = player.querySelector('video');
-          if (v) {
-            if (v.playbackRate !== 1) v.playbackRate = 1;
-            if (v.paused) v.play();
-          }
+          if (typeof player.skipAd === 'function') player.skipAd();
         } catch(e) {}
-      }
 
-      if (!isAdShowing && !hasAdUI) return;
+        var skipBtns = document.querySelectorAll(
+          '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, ' +
+          '.ytp-ad-skip-button-slot button, .ytp-ad-overlay-close-button'
+        );
+        for (var i = 0; i < skipBtns.length; i++) {
+          try { skipBtns[i].click(); } catch(e) {}
+        }
 
-      lastSkip = now;
-
-      // 1. Try player.skipAd() API
-      try { if (typeof player.skipAd === 'function') player.skipAd(); } catch(e) {}
-
-      // 2. Click any skip button instantly
-      var skipBtns = document.querySelectorAll(
-        '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, ' +
-        '.ytp-ad-skip-button-slot button'
-      );
-      for (var i = 0; i < skipBtns.length; i++) {
-        try { skipBtns[i].click(); } catch(e) {}
-      }
-
-      // 3. Ensure normal video playback speed and un-mute
-      var video = player.querySelector('video');
-      if (video) {
-        if (video.playbackRate !== 1) video.playbackRate = 1;
-        if (video.paused) video.play();
-      }
-
-      // 4. Rate-limited report
-      if (now - lastReportTime > 15000) {
-        lastReportTime = now;
         reportYtBlocked('Quảng cáo Video YouTube');
+      } else if (wasAdShowing) {
+        wasAdShowing = false;
+        // Restore main video state when ad ends
+        if (video) {
+          try {
+            video.muted = false;
+            video.playbackRate = 1;
+            if (video.paused) video.play();
+          } catch(e) {}
+        }
       }
+
+      // Auto-dismiss anti-adblock dialogs if any appear
+      try {
+        var dismissBtn = document.querySelector('tp-yt-paper-dialog #dismiss-button, ytd-popup-container #dismiss-button');
+        if (dismissBtn) dismissBtn.click();
+      } catch(e) {}
     }
 
-    // MutationObserver for instant ad detection
+    // High frequency check (every 50ms) + MutationObserver for zero-delay response
+    setInterval(processYouTubeAd, 50);
+
     try {
-      var obs = new MutationObserver(function() { skipAd(); });
+      var obs = new MutationObserver(function() { processYouTubeAd(); });
       function startObserving() {
         var target = document.getElementById('movie_player') || document.body || document.documentElement;
         if (target) {
@@ -330,9 +139,7 @@
       else document.addEventListener('DOMContentLoaded', startObserving);
     } catch(e) {}
 
-    setInterval(skipAd, 250);
-
-    // ===== LAYER 6: Patch MediaSession =====
+    // Patch MediaSession to avoid NaN duration exceptions
     try {
       if (navigator && navigator.mediaSession && typeof navigator.mediaSession.setPositionState === 'function') {
         var _origSetPos = navigator.mediaSession.setPositionState;
