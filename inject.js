@@ -461,7 +461,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
               if (nonAdImg) continue;
 
               // Protect legitimate video players from being hidden
-              if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer') && !parentAd.querySelector('video:not([src*="ad"]), form, input, textarea, select')) {
+              if (parentAd && !parentAd.closest('.jwplayer, .plyr, .video-js, #movie_player, .artplayer, .dplayer, .edge-custom-controls, #edgeplayer-root, #player, .box-player, .cc-settings, .cc-overlay') && !parentAd.querySelector('video:not([src*="ad"]), form, input, textarea, select')) {
                 parentAd.style.setProperty('display', 'none', 'important');
                 parentAd.style.setProperty('visibility', 'hidden', 'important');
                 parentAd.style.setProperty('pointer-events', 'none', 'important');
@@ -1501,6 +1501,7 @@ try { window.hide_catfix = function() { return false; }; } catch(e) {}
     // Global Main World capture-phase click interceptor
     window.addEventListener('click', function(e) {
       if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
+      if (window.top !== window.self) return; // Allow all clicks freely inside embed player iframes
       try {
         const target = e.target;
         if (!target) return;

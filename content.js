@@ -210,21 +210,82 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Bảo vệ tuyệt đối iframe trình phát phim, container phim và thanh điều khiển (seekbar, volume, fullscreen) */
-  #player, .box-player, .embed-responsive, div[id*="player"]:not([id*="ad"]),
-  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"],
-  iframe[src*="phimhdc"], iframe[src*="streamxemphimhd"], iframe[src*="edgeplayer"],
-  iframe[class*="player"], iframe[id*="player"], iframe[class*="frame"],
+  /* 1. Video player containers and iframes on host page */
+  #player, .box-player, .embed-responsive,
   #player iframe, .box-player iframe, .embed-responsive iframe,
-  .plyr, .plyr__controls, .plyr__control, .plyr__progress, .plyr__time, .plyr__volume,
-  .jwplayer, .jw-controls, .jw-controlbar, .jw-slider-time,
-  .video-js, .vjs-control-bar, .vjs-progress-control,
-  .artplayer, .art-controls, .art-progress, .art-control,
-  video, audio, canvas {
+  iframe[src*="phimhdc"], iframe[src*="streamxemphimhd"], iframe[src*="edgeplayer"],
+  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
     display: block !important;
     visibility: visible !important;
     pointer-events: auto !important;
     opacity: 1 !important;
+  }
+
+  /* 2. Video elements */
+  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]) {
+    pointer-events: auto !important;
+  }
+
+  /* 3. Universal Player Controls: ensure interactive without destroying CSS layout (never force display: block) */
+  .plyr, .plyr__controls, .plyr__control, .plyr__progress, .plyr__time, .plyr__volume,
+  .jwplayer, .jw-controls, .jw-controlbar, .jw-slider-time, .jw-button, .jw-icon,
+  .video-js, .vjs-control-bar, .vjs-progress-control, .vjs-play-control,
+  .artplayer, .art-controls, .art-progress, .art-control {
+    visibility: visible !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+
+  /* 4. Edge Player Controls & Subtitles Protection */
+  .edge-custom-controls,
+  .edge-custom-controls.show,
+  .edge-custom-controls .bar,
+  .edge-custom-controls .seek-wrap,
+  .edge-custom-controls input.seek,
+  .edge-custom-controls .row,
+  .edge-custom-controls .icon-btn,
+  .edge-custom-controls input.vol,
+  .edge-custom-controls .time,
+  .edge-custom-controls .settings-menu,
+  .edge-custom-controls button {
+    pointer-events: auto !important;
+    visibility: visible !important;
+  }
+  .edge-custom-controls {
+    z-index: 2147483647 !important;
+  }
+  /* Ensure subtitle overlay container NEVER intercepts mouse clicks meant for controls */
+  .edge-sub-ui,
+  #edgeplayer-subtitle-ui {
+    pointer-events: none !important;
+  }
+  .edge-sub-ui button,
+  .edge-sub-ui input,
+  .edge-sub-ui select,
+  .edge-sub-ui a,
+  .edge-sub-open-btn {
+    pointer-events: auto !important;
+  }
+
+  /* 5. Streamxemphimhd / FirePlayer clickjack overlay eradication */
+  .pppx, div.pppx, [class*="pppx"],
+  .rek, [class*="rek_"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    z-index: -999999 !important;
+  }
+  .loader {
+    pointer-events: none !important;
+  }
+  #player.jwplayer, .jwplayer {
+    z-index: 100 !important;
+  }
+  .jw-controls, .jw-controlbar {
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
   }`;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -829,6 +890,7 @@ if (window.location.hostname.includes('youtube.com')) {
     // Cleans up orphaned backdrop overlays & full-screen transparent click traps
     function cleanOrphanedBackdrops() {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.top !== window.self) return; // Never touch video player embed iframes
       try {
         const vw = window.innerWidth || document.documentElement.clientWidth || 800;
         const vh = window.innerHeight || document.documentElement.clientHeight || 600;
@@ -1039,6 +1101,7 @@ if (window.location.hostname.includes('youtube.com')) {
     // --- GLOBAL CLICK INTERCEPTOR (ANTI-CLICKJACKING) ---
     document.addEventListener('click', function(e) {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.top !== window.self) return; // Allow all clicks inside embed video players
       try {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
