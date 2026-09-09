@@ -1,16 +1,16 @@
-(function() {
+(function () {
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
-  (function() {
-    if (window.location.hostname.includes('youtube.com') || 
-        window.location.hostname.includes('google') || 
-        window.location.hostname.includes('doubleclick')) return;
+  (function () {
+    if (window.location.hostname.includes('youtube.com') ||
+      window.location.hostname.includes('google') ||
+      window.location.hostname.includes('doubleclick')) return;
 
     const falsyProps = [
-      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker', 
+      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker',
       'isAdblock', 'isAdBlock', 'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled'
     ];
     falsyProps.forEach(prop => {
@@ -20,7 +20,7 @@
           set(val) { /* ignore */ },
           configurable: true
         });
-      } catch(e) {}
+      } catch (e) { }
     });
 
     const mockGlobals = {
@@ -29,39 +29,55 @@
       google_ad_slot: '1234567890',
       google_ad_width: 728,
       google_ad_height: 90,
-      google_analytics: { getTracker: () => ({ _trackPageview: () => {} }) },
-      ga: function() { if (arguments[0] && typeof arguments[arguments.length - 1] === 'function') { try { arguments[arguments.length - 1](); } catch(e){} } },
+      google_analytics: { getTracker: () => ({ _trackPageview: () => { } }) },
+      ga: function () { if (arguments[0] && typeof arguments[arguments.length - 1] === 'function') { try { arguments[arguments.length - 1](); } catch (e) { } } },
       gaClassic: {},
-      _gaq: { push: function(arr) { if (arr && arr[0] === '_setCallback' && typeof arr[1] === 'function') { try { arr[1](); } catch(e){} } } },
-      AdProvider: { push: function() {} },
-      VideoSlider: { init: function() {} },
-      univresalP: function() {},
-      pickDirect: function() { console.log('[Anti Pop-Under] Blocked pickDirect ad overlay'); }
+      _gaq: { push: function (arr) { if (arr && arr[0] === '_setCallback' && typeof arr[1] === 'function') { try { arr[1](); } catch (e) { } } } },
+      AdProvider: { push: function () { } },
+      VideoSlider: { init: function () { } },
+      univresalP: function () { },
+      pickDirect: function () { console.log('[Anti Pop-Under] Blocked pickDirect ad overlay'); },
+      google: {
+        ima: {
+          AdDisplayContainer: function () { return { initialize: function () { }, destroy: function () { } }; },
+          AdsLoader: function () {
+            return {
+              requestAds: function () { },
+              contentComplete: function () { },
+              addEventListener: function () { },
+              destroy: function () { }
+            };
+          },
+          AdsRequest: function () { return {}; },
+          AdsRenderingSettings: function () { return {}; },
+          ViewMode: { NORMAL: 'normal', FULLSCREEN: 'fullscreen' }
+        }
+      }
     };
-    
+
     Object.keys(mockGlobals).forEach(key => {
       try {
         if (!(key in window)) {
           window[key] = mockGlobals[key];
         }
-      } catch(e) {}
+      } catch (e) { }
     });
 
     try {
-      const dummyAdProvider = { push: function() {} };
+      const dummyAdProvider = { push: function () { } };
       Object.defineProperty(window, 'AdProvider', {
         get() { return dummyAdProvider; },
         set(val) { /* ignore */ },
         configurable: true
       });
-      const dummyVideoSlider = { init: function() {} };
+      const dummyVideoSlider = { init: function () { } };
       Object.defineProperty(window, 'VideoSlider', {
         get() { return dummyVideoSlider; },
         set(val) { /* ignore */ },
         configurable: true
       });
       Object.defineProperty(window, 'pickDirect', {
-        get() { return function() { console.log('[Anti Pop-Under] Neutralized pickDirect ad'); }; },
+        get() { return function () { console.log('[Anti Pop-Under] Neutralized pickDirect ad'); }; },
         set(val) { /* ignore */ },
         configurable: true
       });
@@ -71,7 +87,7 @@
       function patchJQuery(jq) {
         if (jq && jq.fn && jq.fn.position && !jq.fn.position._safePatched) {
           const origPos = jq.fn.position;
-          jq.fn.position = function() {
+          jq.fn.position = function () {
             if (!this[0]) {
               return { top: 0, left: 0 };
             }
@@ -105,23 +121,24 @@
         enumerable: true
       });
       // End mock globals
-    } catch(e) {}
+    } catch (e) { }
 
     function isAdUrl(urlStr) {
       if (!urlStr) return false;
       try {
         const lower = String(urlStr).toLowerCase();
         const keywords = [
-          'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads', 
-          'popcash', 'propellerads', 'exoclick', 'clktag', 'onclickads', 'exdynsrv', 
-          'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo', 
+          'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads',
+          'popcash', 'propellerads', 'exoclick', 'clktag', 'onclickads', 'exdynsrv',
+          'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo',
           'highperformancegate', 'highcpmgate', 'greatcpmgate', 'eclick.vn', 'novanet.vn',
           'magsrv.com', 'mnaspm.com', 'mayzaent.com', 'prplad.com', 'monetag.com', 'smartpop',
           'ev-player.js', '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
-          'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip'
+          'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip',
+          'ima3.js', 'vast.js', 'vpaid.js', 'trafficjunky', 'tsyndicate', 'a-ads.com'
         ];
         return keywords.some(kw => lower.includes(kw));
-      } catch(e) {
+      } catch (e) {
         return false;
       }
     }
@@ -131,7 +148,7 @@
       if (srcDescriptor && srcDescriptor.set) {
         Object.defineProperty(HTMLScriptElement.prototype, 'src', {
           get: srcDescriptor.get,
-          set: function(val) {
+          set: function (val) {
             if (typeof val === 'string' && isAdUrl(val)) {
               console.log('[Anti Pop-Under] Intercepted and mocked script src:', val);
               srcDescriptor.set.call(this, 'data:text/javascript;base64,console.log("Mocked ad script");');
@@ -143,11 +160,11 @@
           enumerable: true
         });
       }
-    } catch(e) {}
+    } catch (e) { }
 
     try {
       const originalSetAttribute = Element.prototype.setAttribute;
-      Element.prototype.setAttribute = function(name, value) {
+      Element.prototype.setAttribute = function (name, value) {
         if (this.tagName) {
           const tag = this.tagName.toLowerCase();
           if (tag === 'script' && typeof name === 'string' && name.toLowerCase() === 'src') {
@@ -160,7 +177,7 @@
         }
         originalSetAttribute.call(this, name, value);
       };
-    } catch(e) {}
+    } catch (e) { }
 
     function isAdBait(el) {
       if (!el || !el.tagName) return false;
@@ -176,7 +193,7 @@
 
         // Fast guard: skip elements that do not contain ad-related keyword substrings
         if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') &&
-            !className.includes('ad') && !className.includes('qc') && !className.includes('quang')) {
+          !className.includes('ad') && !className.includes('qc') && !className.includes('quang')) {
           return false;
         }
 
@@ -189,7 +206,7 @@
         if (id === 'ad' || id === 'ads' || className === 'ad' || className === 'ads') {
           return true;
         }
-      } catch(e) {}
+      } catch (e) { }
       return false;
     }
 
@@ -241,11 +258,11 @@
         },
         configurable: true
       });
-    } catch(e) {}
+    } catch (e) { }
 
     try {
       const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
-      Element.prototype.getBoundingClientRect = function() {
+      Element.prototype.getBoundingClientRect = function () {
         const rect = originalGetBoundingClientRect.call(this);
         if (rect.height === 0 && isAdBait(this)) {
           return {
@@ -257,16 +274,16 @@
             height: 250,
             x: rect.left,
             y: rect.top,
-            toJSON: () => {}
+            toJSON: () => { }
           };
         }
         return rect;
       };
-    } catch(e) {}
+    } catch (e) { }
 
     try {
       const originalGetComputedStyle = window.getComputedStyle;
-      window.getComputedStyle = function(el, pseudoElt) {
+      window.getComputedStyle = function (el, pseudoElt) {
         const style = originalGetComputedStyle.call(this, el, pseudoElt);
         if (el && (el.id || (el.className && typeof el.className === 'string' && el.className !== ''))) {
           if (isAdBait(el)) {
@@ -285,7 +302,7 @@
                   return val === '0' ? '1' : val;
                 }
                 if (prop === 'getPropertyValue') {
-                  return function(propertyName) {
+                  return function (propertyName) {
                     if (propertyName === 'display') {
                       const val = target.getPropertyValue('display');
                       return val === 'none' ? 'block' : val;
@@ -312,7 +329,7 @@
         }
         return style;
       };
-    } catch(e) {}
+    } catch (e) { }
   })();
 
   // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
@@ -367,13 +384,13 @@
   // Store original methods
   const originalOpen = window.open;
   const originalClick = HTMLAnchorElement.prototype.click;
-  
+
   // Track last interaction and intercept background clicks
   const interactionEvents = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchend'];
-  const isYouTube = window.location.hostname.includes('youtube.com') || 
-                    window.location.hostname.includes('google') || 
-                    window.location.hostname.includes('doubleclick');
-  
+  const isYouTube = window.location.hostname.includes('youtube.com') ||
+    window.location.hostname.includes('google') ||
+    window.location.hostname.includes('doubleclick');
+
   function isInteractiveElement(el) {
     if (!el) return false;
     try {
@@ -385,13 +402,13 @@
       if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"]')) return true;
       const style = window.getComputedStyle(el);
       if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
-      const ariaAttrs = ['aria-haspopup','aria-pressed','aria-expanded','aria-label','aria-controls'];
+      const ariaAttrs = ['aria-haspopup', 'aria-pressed', 'aria-expanded', 'aria-label', 'aria-controls'];
       for (let a of ariaAttrs) { if (el.hasAttribute && el.hasAttribute(a)) return true; }
       if (el.getAttribute && el.getAttribute('role')) {
         const r = (el.getAttribute('role') || '').toLowerCase();
         if (r === 'button' || r === 'link' || r === 'tab' || r === 'option') return true;
       }
-    } catch (err) {}
+    } catch (err) { }
     return false;
   }
 
@@ -411,7 +428,7 @@
     try {
       const textLen = (target.innerText || '').trim().length;
       if (textLen > 30) return;
-    } catch (err) {}
+    } catch (err) { }
 
     // If the user clicked the actual page background (body/html), block navigations
     const isBodyClick = (target === document.body || target === document.documentElement || target === document);
@@ -423,7 +440,7 @@
       console.log('[Anti Pop-Under] Blocked scripted redirect from background click', target);
     }
   }
-  
+
   function isSeekBarOrControlButton(el) {
     if (!el) return false;
     try {
@@ -436,7 +453,7 @@
       // Explicit seekbar, progress bar, volume, fullscreen, setting buttons only (do not include generic 'control')
       const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'vjs-control-bar', 'jw-controlbar', 'plyr__controls', 'vjs-play-control', 'jw-icon-play'];
       if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
-    } catch(e) {}
+    } catch (e) { }
     return false;
   }
 
@@ -482,19 +499,19 @@
       if (video) {
         if (video.paused) {
           const p = video.play();
-          if (p && p.catch) p.catch(() => {});
+          if (p && p.catch) p.catch(() => { });
         } else {
           video.pause();
         }
       }
-    } catch(e) {}
+    } catch (e) { }
   }
 
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
-      
+
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
@@ -535,14 +552,14 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        
+
         const adUrl = (anchor && anchor.href) || 'overlay';
         reportBlocked(adUrl, `Blocked ${e.type} on clickjack overlay`);
         console.log(`[Anti Pop-Under] Blocked ${e.type} on clickjack overlay & removed overlay:`, overlay);
-        
+
         try {
           overlay.remove();
-        } catch (err) {}
+        } catch (err) { }
 
         // After clearing the ad overlay, try to resume play/pause naturally
         if (e.type === 'click') {
@@ -561,24 +578,24 @@
           e.stopImmediatePropagation();
           reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
-          
+
           if (isPlayerOrPlayButton(anchor)) {
-             console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
-             try { anchor.remove(); } catch(e) {}
-             
-             let isInternal = false;
-             try {
-                const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-                isInternal = targetHost === window.location.hostname.toLowerCase();
-             } catch(e) {}
-             
-             if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
-                 console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
-                 window.location.assign(anchor.href);
-                 return;
-             }
-             
-             toggleVideoPlayPause(target);
+            console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor and resuming video...');
+            try { anchor.remove(); } catch (e) { }
+
+            let isInternal = false;
+            try {
+              const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
+              isInternal = targetHost === window.location.hostname.toLowerCase();
+            } catch (e) { }
+
+            if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
+              console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
+              window.location.assign(anchor.href);
+              return;
+            }
+
+            toggleVideoPlayPause(target);
           }
           return;
         }
@@ -599,12 +616,12 @@
   if (!isYouTube) {
     window.addEventListener('submit', (e) => {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
-      
+
       const form = e.target;
       if (form && form.tagName && form.tagName.toLowerCase() === 'form') {
         const action = form.getAttribute('action') || '';
         const isTargetBlank = (form.getAttribute('target') || '').toLowerCase() === '_blank';
-        
+
         if (!checkNavigationOrPopup(action, isTargetBlank ? 'form.submit._blank' : 'form.submit')) {
           e.preventDefault();
           e.stopPropagation();
@@ -658,7 +675,7 @@
       console.log(`[Anti Pop-Under] Queued block report to "${url}". Reason: ${reason}`);
       return;
     }
-    
+
     window.postMessage({
       type: 'ANTI_POPUP_BLOCKED_EVENT',
       url: url,
@@ -684,7 +701,7 @@
     if (!el || el === document || el === document.body || el === document.documentElement) {
       return false;
     }
-    
+
     try {
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
@@ -706,7 +723,7 @@
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') ||
-          elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
+        elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
         return false;
       }
 
@@ -715,7 +732,7 @@
         const role = (el.getAttribute('role') || '').toLowerCase();
         const type = (el.getAttribute('type') || '').toLowerCase();
         if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox'].includes(role) ||
-            ['submit', 'reset', 'button'].includes(type)) {
+          ['submit', 'reset', 'button'].includes(type)) {
           return false;
         }
       }
@@ -757,24 +774,24 @@
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
-      
+
       const width = rect.width;
       const height = rect.height;
       const vw = window.innerWidth || document.documentElement.clientWidth || 800;
       const vh = window.innerHeight || document.documentElement.clientHeight || 600;
-      
+
       const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
       if (!isPositioned) return false;
-      
+
       const opacity = parseFloat(style.opacity);
       let bgAlpha = 1;
       const bgMatch = style.backgroundColor.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
       if (bgMatch && bgMatch[1]) {
-         bgAlpha = parseFloat(bgMatch[1]);
+        bgAlpha = parseFloat(bgMatch[1]);
       } else if (style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)') {
-         bgAlpha = 0;
+        bgAlpha = 0;
       }
-      
+
       const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
       if (!isTransparent) return false;
 
@@ -782,7 +799,7 @@
       const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
       const zIndex = parseInt(style.zIndex, 10);
       const isHighZ = !isNaN(zIndex) && zIndex >= 10;
-      
+
       // Transparent absolute/fixed elements that are large and empty are ALWAYS clickjack overlays.
       // Ad networks deliberately omit z-index to bypass adblockers, so we no longer require high z-index.
       return isLargeArea;
@@ -792,15 +809,15 @@
   }
 
   const gamblingKeywords = [
-    '\\bbet\\b', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88', 
-    '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88', 
+    '\\bbet\\b', 'casino', 'gamebai', 'nhacai', 'w88', 'fun88', 'fb88', 'm88',
+    '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88',
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
     'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
     'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88'
   ];
 
   const adUrlKeywords = [
-    'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads', 
+    'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads',
     'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
@@ -854,7 +871,7 @@
         p = p.parentElement;
         depth++;
       }
-    } catch (e) {}
+    } catch (e) { }
     return false;
   }
 
@@ -869,13 +886,13 @@
     let isBlank = !url || url.startsWith('javascript:') || url.trim() === '' || url === 'about:blank' || url.startsWith('#');
     let isExternal = false;
     let targetHost = '';
-    
+
     if (!isBlank) {
       try {
         targetHost = new URL(url, window.location.href).hostname.toLowerCase();
         const currentHost = window.location.hostname.toLowerCase();
         isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
-      } catch(e) {
+      } catch (e) {
         isBlank = true;
       }
     }
@@ -922,7 +939,7 @@
           reportBlocked(url, `Blocked same-domain ad/duplicate window.open in ${context}`);
           return false;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const timeSinceLastInteraction = Date.now() - lastInteractionTime;
@@ -937,52 +954,52 @@
     // 7. Detailed checks for overlays or player clicks
     if (lastInteractionEvent && lastInteractionEvent.target) {
       const clickedEl = lastInteractionEvent.target;
-      
+
       let curr = clickedEl;
       let overlay = null;
       let isHiddenExternalLink = false;
-      
+
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
         if (isClickjackOverlay(curr)) {
           overlay = curr;
           break;
         }
-        
+
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
-           const href = curr.getAttribute('href') || '';
-           try {
-             const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-             const currentHost = window.location.hostname.toLowerCase();
-             const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
-             if (isExt) {
-               const text = curr.innerText || '';
-               if (text.trim().length === 0) {
-                 let hasVisibleMedia = false;
-                 const media = curr.querySelectorAll('img, svg, canvas, video, iframe, i, span[class*="icon"], div[class*="icon"]');
-                 for (let i = 0; i < media.length; i++) {
-                   const style = window.getComputedStyle(media[i]);
-                   if (style.display !== 'none' && style.opacity !== '0' && style.visibility !== 'hidden' && style.width !== '0px') {
-                     hasVisibleMedia = true;
-                     break;
-                   }
-                 }
-                 // If there's no visible content inside this external anchor, it's a click trap!
-                 if (!hasVisibleMedia) {
-                   isHiddenExternalLink = true;
-                   break;
-                 }
-               }
-             }
-           } catch(e) {}
+          const href = curr.getAttribute('href') || '';
+          try {
+            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+            const currentHost = window.location.hostname.toLowerCase();
+            const isExt = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+            if (isExt) {
+              const text = curr.innerText || '';
+              if (text.trim().length === 0) {
+                let hasVisibleMedia = false;
+                const media = curr.querySelectorAll('img, svg, canvas, video, iframe, i, span[class*="icon"], div[class*="icon"]');
+                for (let i = 0; i < media.length; i++) {
+                  const style = window.getComputedStyle(media[i]);
+                  if (style.display !== 'none' && style.opacity !== '0' && style.visibility !== 'hidden' && style.width !== '0px') {
+                    hasVisibleMedia = true;
+                    break;
+                  }
+                }
+                // If there's no visible content inside this external anchor, it's a click trap!
+                if (!hasVisibleMedia) {
+                  isHiddenExternalLink = true;
+                  break;
+                }
+              }
+            }
+          } catch (e) { }
         }
-        
+
         curr = curr.parentElement;
       }
 
       // If clicked on an overlay, block it
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
-        try { overlay.remove(); } catch(e) {}
+        try { overlay.remove(); } catch (e) { }
         return false;
       }
       if (isHiddenExternalLink) {
@@ -992,7 +1009,7 @@
 
 
       const isPlayerClick = isPlayerOrPlayButton(clickedEl);
-      
+
       // A play button/player click should NEVER open a new tab/window OR navigate to an external domain
       if (isPlayerClick && (isWindowOpen || context.includes('_blank') || isExternal) && !isWhitelisted(url)) {
         reportBlocked(url || 'blank', `Blocked new tab/window popup from player click (${context})`);
@@ -1017,7 +1034,7 @@
         }
         curr = curr.parentElement;
       }
-    } catch (e) {}
+    } catch (e) { }
     return false;
   }
 
@@ -1053,10 +1070,10 @@
       const dummyWindow = new Proxy({}, {
         get(targetProp, prop) {
           if (prop === 'closed') return _closed;
-          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => {};
+          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => { };
           if (prop === 'close') return () => { _closed = true; };
           if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
-          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => {}; } });
+          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => { }; } });
           if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
           return undefined;
         },
@@ -1082,7 +1099,7 @@
     } catch (e) {
       try {
         win.open = customOpen;
-      } catch (err) {}
+      } catch (err) { }
     }
 
     try {
@@ -1093,7 +1110,7 @@
           configurable: false
         });
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (!isYouTube) {
@@ -1126,14 +1143,14 @@
               }
               ifr.removeAttribute('allowfullscreen');
             }
-          } catch(e) {}
+          } catch (e) { }
         };
         if (node.tagName === 'IFRAME') {
           clean(node);
         } else if (node.childElementCount > 0 && node.querySelectorAll) {
           node.querySelectorAll('iframe').forEach(clean);
         }
-      } catch(e) {}
+      } catch (e) { }
     }
 
     // Synchronously patch iframe window when created or appended to DOM
@@ -1151,16 +1168,16 @@
             try {
               if (ifr.contentWindow) overrideWindowOpen(ifr.contentWindow);
               if (ifr.contentDocument && ifr.contentDocument.defaultView) overrideWindowOpen(ifr.contentDocument.defaultView);
-            } catch(e) {}
+            } catch (e) { }
           });
         }
-      } catch(e) {}
+      } catch (e) { }
     }
 
     // Hook Document.prototype.createElement to catch newly created iframes immediately
     try {
       const origCreateElement = Document.prototype.createElement;
-      Document.prototype.createElement = function(tagName, options) {
+      Document.prototype.createElement = function (tagName, options) {
         const el = origCreateElement.call(this, tagName, options);
         if (el && typeof tagName === 'string' && tagName.toLowerCase() === 'iframe') {
           try {
@@ -1170,44 +1187,44 @@
             };
             el.addEventListener('load', hookIframe);
             setTimeout(hookIframe, 0);
-          } catch(e) {}
+          } catch (e) { }
         }
         return el;
       };
-    } catch(e) {}
+    } catch (e) { }
 
     // Hook Node DOM insertion methods to patch iframe contentWindow immediately upon append
     ['appendChild', 'insertBefore'].forEach(method => {
       try {
         const orig = Node.prototype[method];
-        Node.prototype[method] = function() {
-          try { sanitizeIframeNode(arguments[0]); } catch(e) {}
+        Node.prototype[method] = function () {
+          try { sanitizeIframeNode(arguments[0]); } catch (e) { }
           let result;
           try {
             result = orig.apply(this, arguments);
-          } catch(domErr) {
+          } catch (domErr) {
             // Page script called insertBefore/appendChild with an invalid reference node.
             // The page already didn't catch this — swallow silently so the stack trace
             // doesn't falsely point to inject.js. Behavior is identical (undefined return).
             return undefined;
           }
-          try { patchIframeNode(arguments[0]); } catch(e) {}
+          try { patchIframeNode(arguments[0]); } catch (e) { }
           return result;
         };
-      } catch(e) {}
+      } catch (e) { }
     });
 
     ['append', 'insertAdjacentElement'].forEach(method => {
       try {
         const orig = Element.prototype[method];
-        Element.prototype[method] = function() {
-          try { sanitizeIframeNode(arguments[0]); } catch(e) {}
+        Element.prototype[method] = function () {
+          try { sanitizeIframeNode(arguments[0]); } catch (e) { }
           let result;
-          try { result = orig.apply(this, arguments); } catch(e) { return undefined; }
-          try { patchIframeNode(arguments[0]); } catch(e) {}
+          try { result = orig.apply(this, arguments); } catch (e) { return undefined; }
+          try { patchIframeNode(arguments[0]); } catch (e) { }
           return result;
         };
-      } catch(e) {}
+      } catch (e) { }
     });
 
     // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
@@ -1215,7 +1232,7 @@
       const cwDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
       if (cwDescriptor && cwDescriptor.get) {
         Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-          get: function() {
+          get: function () {
             const win = cwDescriptor.get.apply(this);
             if (win) {
               overrideWindowOpen(win);
@@ -1229,7 +1246,7 @@
       const cdDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
       if (cdDescriptor && cdDescriptor.get) {
         Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
-          get: function() {
+          get: function () {
             const doc = cdDescriptor.get.apply(this);
             if (doc && doc.defaultView) {
               overrideWindowOpen(doc.defaultView);
@@ -1239,7 +1256,7 @@
           configurable: true
         });
       }
-    } catch (err) {}
+    } catch (err) { }
 
     // Fast interval check for iframe windows
     setInterval(() => {
@@ -1248,9 +1265,9 @@
         for (let i = 0; i < window.frames.length; i++) {
           try {
             if (window.frames[i]) overrideWindowOpen(window.frames[i]);
-          } catch(e) {}
+          } catch (e) { }
         }
-      } catch(e) {}
+      } catch (e) { }
     }, 1000);
   }
 
@@ -1258,32 +1275,32 @@
   if (!isYouTube) {
     try {
       Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
-        value: function() {
+        value: function () {
           if (!isEnabled() || isCurrentPageWhitelisted()) {
             return originalClick.apply(this, arguments);
           }
-          
+
           const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
           if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
             return; // block
           }
-          
+
           return originalClick.apply(this, arguments);
         },
         writable: false,
         configurable: false
       });
     } catch (err) {
-      HTMLAnchorElement.prototype.click = function() {
+      HTMLAnchorElement.prototype.click = function () {
         if (!isEnabled() || isCurrentPageWhitelisted()) {
           return originalClick.apply(this, arguments);
         }
-        
+
         const isTargetBlank = (this.getAttribute('target') || '').toLowerCase() === '_blank';
         if (!checkNavigationOrPopup(this.href, isTargetBlank ? 'anchor.click._blank' : 'anchor.click')) {
           return; // block
         }
-        
+
         return originalClick.apply(this, arguments);
       };
     }
@@ -1294,11 +1311,11 @@
   if (!isYouTube) {
     try {
       Object.defineProperty(HTMLFormElement.prototype, 'submit', {
-        value: function() {
+        value: function () {
           if (!isEnabled() || isCurrentPageWhitelisted()) {
             return originalSubmit.apply(this, arguments);
           }
-          
+
           const action = this.getAttribute('action') || '';
           if (!checkNavigationOrPopup(action, 'form.submit')) {
             return; // block
@@ -1309,7 +1326,7 @@
         configurable: false
       });
     } catch (err) {
-      HTMLFormElement.prototype.submit = function() {
+      HTMLFormElement.prototype.submit = function () {
         if (!isEnabled() || isCurrentPageWhitelisted()) {
           return originalSubmit.apply(this, arguments);
         }
@@ -1322,56 +1339,90 @@
     }
   }
 
-  // --- ADGUARD / UBLOCK ORIGIN NATIVE YOUTUBE AD ENGINE ---
+  // --- ADGUARD / UBLOCK ORIGIN NATIVE YOUTUBE AD ENGINE & DETECTION IMMUNITY ---
   function runYouTubeAdGuardEngine() {
     if (!window.location.hostname.includes('youtube.com')) return;
 
-    console.log('[Anti Pop-Under] AdGuard-grade Native YouTube Ad Engine active!');
+    console.log('[WebShield] AdGuard Native YouTube Engine Active (Zero-Ad Architecture & Anti-Detection)');
 
-    // 1. Core payload cleaner: eliminates ad definitions before YouTube player initializes them
-    function cleanPlayerPayload(obj) {
-      if (!obj || typeof obj !== 'object') return obj;
+    // 1. Recursive ad properties purger (AdGuard / uBlock Origin Standard)
+    const AD_KEYS = new Set([
+      'adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams', 'masthead',
+      'adPlacementRenderer', 'adBreakService', 'adBreakServiceRenderer', 'playbackTracking',
+      'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
+    ]);
+
+    function deepPurgeAdProperties(obj, depth = 0) {
+      if (!obj || typeof obj !== 'object' || depth > 10) return obj;
       try {
-        // Handle nested player response if present
-        if (obj.playerResponse && typeof obj.playerResponse === 'object') {
-          cleanPlayerPayload(obj.playerResponse);
-        } else if (typeof obj.playerResponse === 'string') {
-          try {
-            const parsed = JSON.parse(obj.playerResponse);
-            cleanPlayerPayload(parsed);
-            obj.playerResponse = JSON.stringify(parsed);
-          } catch (e) {}
+        // Auto-heal player error / detection warning in playerResponse
+        if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
+          const status = obj.playabilityStatus.status;
+          // If YouTube flagged user as UNPLAYABLE or LOGIN_REQUIRED due to adblock detection,
+          // but streamingData exists, restore playability to OK!
+          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+            if (obj.streamingData) {
+              obj.playabilityStatus.status = 'OK';
+              delete obj.playabilityStatus.reason;
+              delete obj.playabilityStatus.errorScreen;
+              delete obj.playabilityStatus.messages;
+            }
+          }
         }
 
-        // Delete ad placements and slots so YouTube never schedules ads
-        if (obj.adPlacements) delete obj.adPlacements;
-        if (obj.adSlots) delete obj.adSlots;
-        if (obj.playerAds) delete obj.playerAds;
-        if (obj.adBreakHeartbeatParams) delete obj.adBreakHeartbeatParams;
-        if (obj.masthead) delete obj.masthead;
+        if (Array.isArray(obj)) {
+          for (let i = obj.length - 1; i >= 0; i--) {
+            const item = obj[i];
+            if (item && typeof item === 'object') {
+              const renderer = item.adSlotRenderer ||
+                item.adPlacementRenderer ||
+                item.inFeedAdLayoutRenderer ||
+                item.adBreakServiceRenderer;
+              const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
+              if (renderer || targetId.includes('ads') || targetId.includes('engagement-panel-ads')) {
+                obj.splice(i, 1);
+              } else {
+                deepPurgeAdProperties(item, depth + 1);
+              }
+            }
+          }
+          return obj;
+        }
 
-        // Clean anti-adblock enforcement dialogs & prompts
+        // Handle stringified JSON responses (YouTube often nests playerResponse as string)
+        if (typeof obj.playerResponse === 'string') {
+          try {
+            const parsed = JSON.parse(obj.playerResponse);
+            deepPurgeAdProperties(parsed, depth + 1);
+            obj.playerResponse = JSON.stringify(parsed);
+          } catch (e) { }
+        }
+
+        for (const key of Object.keys(obj)) {
+          if (AD_KEYS.has(key)) {
+            delete obj[key];
+          } else if (obj[key] && typeof obj[key] === 'object') {
+            deepPurgeAdProperties(obj[key], depth + 1);
+          }
+        }
+
+        // Clean anti-adblock enforcement dialogs & prompts from payload
         if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
           const mr = obj.auxiliaryUi.messageRenderers;
           if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
           if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
         }
-
-        // Clean engagement panels containing ads
-        if (Array.isArray(obj.engagementPanels)) {
-          obj.engagementPanels = obj.engagementPanels.filter(panel => {
-            const panelId = panel?.engagementPanelSectionListRenderer?.targetId || '';
-            return !panelId.includes('ads') && !panelId.includes('engagement-panel-ads');
-          });
+        if (obj.messages) {
+          delete obj.messages;
         }
-      } catch (e) {}
+      } catch (e) { }
       return obj;
     }
 
-    // 2. Intercept window.ytInitialPlayerResponse (initial video load)
+    // 2. Intercept window.ytInitialPlayerResponse
     let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
     if (_ytInitialPlayerResponse) {
-      cleanPlayerPayload(_ytInitialPlayerResponse);
+      deepPurgeAdProperties(_ytInitialPlayerResponse);
     }
     try {
       Object.defineProperty(window, 'ytInitialPlayerResponse', {
@@ -1379,26 +1430,17 @@
           return _ytInitialPlayerResponse;
         },
         set(val) {
-          _ytInitialPlayerResponse = cleanPlayerPayload(val);
+          _ytInitialPlayerResponse = deepPurgeAdProperties(val);
         },
         configurable: true,
         enumerable: true
       });
-    } catch (e) {}
+    } catch (e) { }
 
-    // 3. Intercept window.ytInitialData (browse, home, search ads)
-    function cleanInitialData(obj) {
-      if (!obj || typeof obj !== 'object') return obj;
-      try {
-        if (obj.overlay && obj.overlay.adSlotRenderer) delete obj.overlay.adSlotRenderer;
-        if (obj.masthead) delete obj.masthead;
-      } catch (e) {}
-      return obj;
-    }
-
+    // 3. Intercept window.ytInitialData
     let _ytInitialData = window.ytInitialData;
     if (_ytInitialData) {
-      cleanInitialData(_ytInitialData);
+      deepPurgeAdProperties(_ytInitialData);
     }
     try {
       Object.defineProperty(window, 'ytInitialData', {
@@ -1406,35 +1448,92 @@
           return _ytInitialData;
         },
         set(val) {
-          _ytInitialData = cleanInitialData(val);
+          _ytInitialData = deepPurgeAdProperties(val);
         },
         configurable: true,
         enumerable: true
       });
-    } catch (e) {}
+    } catch (e) { }
 
-    // 4. Intercept window.fetch (SPA navigation: /youtubei/v1/player, /youtubei/v1/next, /reel_item_watch)
+    // 4. Intercept ytcfg (YouTube Configuration Object - disable ads experiment flags)
+    function sanitizeYtcfg(cfg) {
+      if (!cfg || typeof cfg !== 'object') return;
+      try {
+        if (cfg.EXPERIMENT_FLAGS && typeof cfg.EXPERIMENT_FLAGS === 'object') {
+          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement = false;
+          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
+          cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
+          cfg.EXPERIMENT_FLAGS.enable_server_stitched_dai = false;
+          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 0;
+          cfg.EXPERIMENT_FLAGS.web_disable_defer_ad = true;
+          cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
+        }
+      } catch (e) { }
+    }
+
+    function hookYtcfg(ytcfgObj) {
+      if (!ytcfgObj || ytcfgObj._webshield_hooked) return;
+      try {
+        ytcfgObj._webshield_hooked = true;
+        const origSet = ytcfgObj.set;
+        if (typeof origSet === 'function') {
+          ytcfgObj.set = function (arg) {
+            sanitizeYtcfg(arg);
+            return origSet.apply(this, arguments);
+          };
+        }
+        if (typeof ytcfgObj.get === 'function') {
+          const currentExp = ytcfgObj.get('EXPERIMENT_FLAGS');
+          if (currentExp) sanitizeYtcfg({ EXPERIMENT_FLAGS: currentExp });
+        }
+      } catch (e) { }
+    }
+
+    if (window.ytcfg) {
+      hookYtcfg(window.ytcfg);
+    }
+    let _ytcfg = window.ytcfg;
+    try {
+      Object.defineProperty(window, 'ytcfg', {
+        get() {
+          return _ytcfg;
+        },
+        set(val) {
+          _ytcfg = val;
+          hookYtcfg(_ytcfg);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) { }
+
+    // 5. Intercept window.fetch for YouTube API endpoints
     try {
       const originalFetch = window.fetch;
-      window.fetch = async function(...args) {
+      window.fetch = async function (...args) {
         const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
         if (typeof url === 'string') {
-          const isPlayerApi = url.includes('/youtubei/v1/player') || 
-                              url.includes('/youtubei/v1/next') || 
-                              url.includes('/youtubei/v1/reel/reel_item_watch');
+          // Block tracking pings to YouTube Ad servers directly with 200 OK so player does not error
+          if (url.includes('/api/stats/ads') ||
+              url.includes('/api/stats/atr') ||
+              url.includes('/pagead/') ||
+              url.includes('doubleclick.net') ||
+              url.includes('/ptracking') ||
+              url.includes('/api/stats/qoe') && url.includes('adformat')) {
+            return new Response('', { status: 200, statusText: 'OK' });
+          }
+
+          const isPlayerApi = url.includes('/youtubei/v1/player') ||
+            url.includes('/youtubei/v1/next') ||
+            url.includes('/youtubei/v1/reel/reel_item_watch') ||
+            url.includes('/youtubei/v1/browse');
 
           if (isPlayerApi) {
-            let response;
-            try {
-              response = await originalFetch.apply(this, args);
-            } catch (fetchErr) {
-              throw fetchErr;
-            }
-
+            const response = await originalFetch.apply(this, args);
             try {
               const clone = response.clone();
               const data = await clone.json();
-              cleanPlayerPayload(data);
+              deepPurgeAdProperties(data);
 
               const modifiedBody = JSON.stringify(data);
               const newHeaders = new Headers(response.headers);
@@ -1447,7 +1546,7 @@
               });
               try {
                 Object.defineProperty(modifiedResponse, 'url', { value: response.url });
-              } catch (e) {}
+              } catch (e) { }
               return modifiedResponse;
             } catch (parseErr) {
               return response;
@@ -1456,25 +1555,30 @@
         }
         return originalFetch.apply(this, args);
       };
-    } catch (e) {}
+    } catch (e) { }
 
-    // 5. Intercept XMLHttpRequest
+    // 6. Intercept XMLHttpRequest
     try {
       const originalOpen = XMLHttpRequest.prototype.open;
       const originalSend = XMLHttpRequest.prototype.send;
 
-      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
         this._ytUrl = (typeof url === 'string') ? url : '';
         return originalOpen.apply(this, [method, url, ...rest]);
       };
 
-      XMLHttpRequest.prototype.send = function(...args) {
-        if (this._ytUrl && (this._ytUrl.includes('/youtubei/v1/player') || this._ytUrl.includes('/youtubei/v1/next') || this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch'))) {
-          this.addEventListener('readystatechange', function() {
+      XMLHttpRequest.prototype.send = function (...args) {
+        if (this._ytUrl && (
+          this._ytUrl.includes('/youtubei/v1/player') ||
+          this._ytUrl.includes('/youtubei/v1/next') ||
+          this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch') ||
+          this._ytUrl.includes('/youtubei/v1/browse')
+        )) {
+          this.addEventListener('readystatechange', function () {
             if (this.readyState === 4 && this.status === 200) {
               try {
                 const data = JSON.parse(this.responseText);
-                cleanPlayerPayload(data);
+                deepPurgeAdProperties(data);
                 const cleanJson = JSON.stringify(data);
                 if (this.responseType === 'json') {
                   Object.defineProperty(this, 'response', { value: data, configurable: true });
@@ -1482,29 +1586,29 @@
                   Object.defineProperty(this, 'responseText', { value: cleanJson, configurable: true });
                   Object.defineProperty(this, 'response', { value: cleanJson, configurable: true });
                 }
-              } catch (e) {}
+              } catch (e) { }
             }
           });
         }
         return originalSend.apply(this, args);
       };
-    } catch (e) {}
+    } catch (e) { }
 
-    // 6. Global JSON.parse hook: automatically sanitizes adPlacements from any internal parse
+    // 7. Global JSON.parse hook: automatically sanitizes adPlacements from any internal parse
     try {
       const originalJSONParse = JSON.parse;
-      JSON.parse = function(text, reviver) {
+      JSON.parse = function (text, reviver) {
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
-          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse) {
-            cleanPlayerPayload(result);
+          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse || result.playabilityStatus) {
+            deepPurgeAdProperties(result);
           }
         }
         return result;
       };
-    } catch (e) {}
+    } catch (e) { }
 
-    // 7. Neutralize Anti-Adblock Warning Modals & Preserve Smooth Playback
+    // 8. Neutralize Anti-Adblock Warning Modals & Auto-Unpause Video
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
@@ -1513,7 +1617,8 @@
           'ytd-enforcement-message-renderer',
           'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
           'tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)',
-          'tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)'
+          'tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)',
+          'ytd-popup-container:has(ytd-enforcement-message-view-model)'
         ];
 
         let removed = false;
@@ -1524,6 +1629,13 @@
             removed = true;
           });
         });
+
+        // Also check if YouTube disabled the player or added error screen
+        const errorScreen = document.querySelector('#error-screen.ytd-watch-flexy');
+        if (errorScreen && errorScreen.style.display !== 'none') {
+          errorScreen.style.setProperty('display', 'none', 'important');
+          removed = true;
+        }
 
         if (removed) {
           const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
@@ -1540,10 +1652,10 @@
 
           const video = document.querySelector('video');
           if (video && video.paused) {
-            video.play().catch(() => {});
+            video.play().catch(() => { });
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     try {
@@ -1554,27 +1666,28 @@
         childList: true,
         subtree: true
       });
-    } catch (e) {}
+    } catch (e) { }
 
     setInterval(clearYouTubeEnforcementDialogs, 1000);
   }
 
-  // Bulletproof override of Location.prototype navigation to prevent scripted location changes
+  // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
   if (!isYouTube) {
     try {
       const locationProto = Location.prototype;
       const originalAssign = locationProto.assign;
       const originalReplace = locationProto.replace;
+      const originalReload = locationProto.reload;
       const hrefDescriptor = Object.getOwnPropertyDescriptor(locationProto, 'href');
-      
+
       function checkLocationRedirect(url) {
         return checkNavigationOrPopup(url, 'location change');
       }
-      
+
       if (hrefDescriptor && hrefDescriptor.set) {
         Object.defineProperty(locationProto, 'href', {
           get: hrefDescriptor.get,
-          set: function(val) {
+          set: function (val) {
             if (checkLocationRedirect(val)) {
               hrefDescriptor.set.call(this, val);
             }
@@ -1582,19 +1695,50 @@
           configurable: true
         });
       }
-      
-      locationProto.assign = function(val) {
+
+      locationProto.assign = function (val) {
         if (checkLocationRedirect(val)) {
           originalAssign.call(this, val);
         }
       };
-      
-      locationProto.replace = function(val) {
+
+      locationProto.replace = function (val) {
         if (checkLocationRedirect(val)) {
           originalReplace.call(this, val);
         }
       };
-    } catch (e) {}
+
+      // Anti-Reload Abuse: Prevent malicious ad scripts or adblock-detection scripts from reload loops
+      let lastReloadTime = 0;
+      locationProto.reload = function (forcedReload) {
+        const now = Date.now();
+        const timeSinceLastInteraction = now - lastInteractionTime;
+        // If reload called within 4 seconds of previous reload or without real user interaction, block it!
+        if (now - lastReloadTime < 4000 || timeSinceLastInteraction > 1500) {
+          console.log('[WebShield] Blocked scripted page reload attempt (ad/anti-adblock bypass)');
+          reportBlocked(window.location.href, 'Blocked scripted location.reload() loop');
+          return;
+        }
+        lastReloadTime = now;
+        if (typeof originalReload === 'function') {
+          return originalReload.call(this, forcedReload);
+        }
+      };
+
+      // Also protect history.go(0) or history.replaceState abuse
+      const originalHistoryGo = History.prototype.go;
+      History.prototype.go = function (delta) {
+        if (delta === 0) {
+          const now = Date.now();
+          const timeSinceLastInteraction = now - lastInteractionTime;
+          if (timeSinceLastInteraction > 1500) {
+            console.log('[WebShield] Blocked scripted history.go(0) reload attempt');
+            return;
+          }
+        }
+        return originalHistoryGo.apply(this, arguments);
+      };
+    } catch (e) { }
   }
 
   function runGenericAntiAdblockBypass() {
@@ -1619,10 +1763,10 @@
           if (matchesAdblockText) {
             el.remove();
             console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
-            
+
             const html = document.documentElement;
             const body = document.body;
-            
+
             if (html) {
               if (html.style.overflow === 'hidden') html.style.overflow = '';
               if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
@@ -1633,7 +1777,7 @@
             }
           }
         });
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let throttleTimer = null;
@@ -1655,7 +1799,7 @@
         childList: true,
         subtree: true
       });
-    } catch (e) {}
+    } catch (e) { }
 
     // Fallback scan every 5 seconds for silent background changes
     setInterval(() => {

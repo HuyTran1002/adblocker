@@ -130,9 +130,12 @@ function injectAdBlockCSS() {
   iframe[src*="linkroyal"], iframe[src*="abroadad"],
   iframe[src*="getjuicy"], iframe[src*="magsrv"],
   iframe[src*="mnaspm"], iframe[src*="mayzaent"], iframe[src*="prplad"], iframe[src*="smartpop"],
+  iframe[src*="vast"], iframe[src*="vpaid"], iframe[src*="adformat"], iframe[src*="trafficjunky"],
+  iframe[src*="tsyndicate"], iframe[src*="adxadserv"], iframe[src*="a-ads.com"],
   ins[data-zoneid], ins[class*="eas"], div[class*="video-slider"], #adbd, .overdiv,
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
-  .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper {
+  .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
+  .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -143,7 +146,8 @@ function injectAdBlockCSS() {
   img[src*="playhubconnect"], img[src*="juicyads"], img[src*="jads.co"],
   img[src*="adsterra"], img[src*="exoclick"], img[src*="adserver"],
   img[src*="abroadad.cache.wpscdn"], img[src*="streamvl.top/file/"],
-  img[src*="cm8806.com"], img[src*="9splt.com"], img[src*="yuelongyy"] {
+  img[src*="cm8806.com"], img[src*="9splt.com"], img[src*="yuelongyy"],
+  img[src*="/ads/"], img[src*="_ad_"], img[src*="-ad-"], img[src*="banner"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -152,7 +156,9 @@ function injectAdBlockCSS() {
 
   /* Ad network video elements - prevent pre-roll/overlay flash */
   video[src*="playhubconnect"], video[src*="adserver"], video[src*="popunder"],
-  video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"] {
+  video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"],
+  video[src*="vast"], video[src*="vpaid"], video[src*="/ads/"], video[src*="preroll"],
+  video[src*="midroll"], video[src*="postroll"], video[src*="streamux.top"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -164,7 +170,7 @@ function injectAdBlockCSS() {
   a[href*="exoclick"], a[href*="adsterra"], a[href*="popads"],
   a[href*="popcash"], a[href*="propellerads"], a[href*="onclickads"],
   a[href*="adserver"], a[href*="doubleclick"], a[href*="cpmgate"],
-  a[href*="profitablecpm"], a[href*="clktag"] {
+  a[href*="profitablecpm"], a[href*="clktag"], a[href*="monetag"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -386,7 +392,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'abroadad.cache.wpscdn.com', 'propellerads',
       'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
       'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
-      '/static/video/bn/'
+      '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
+      '/preroll', '/midroll', '/postroll', 'streamux.top'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -643,6 +650,17 @@ if (window.location.hostname.includes('youtube.com')) {
         if (video.hasAttribute('data-ad-blocked')) return;
         try {
           if (isAdVideo(video)) {
+            // Immediately neutralize the ad video stream playback
+            try {
+              video.muted = true;
+              video.volume = 0;
+              if (isFinite(video.duration) && video.duration > 0) {
+                video.currentTime = video.duration;
+              }
+              video.pause();
+              video.dispatchEvent(new Event('ended'));
+            } catch (err) { }
+
             let elementToHide = video;
             let curr = video.parentElement;
             let depth = 0;
@@ -1306,28 +1324,28 @@ if (window.location.hostname.includes('youtube.com')) {
         pickerBadge.id = 'adblock-max-target-badge';
         pickerBadge.style.cssText = `
           position: fixed !important;
-          bottom: 24px !important;
+          bottom: 16px !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 2147483647 !important;
-          background: rgba(15, 23, 42, 0.96) !important;
-          backdrop-filter: blur(12px) !important;
-          -webkit-backdrop-filter: blur(12px) !important;
-          border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
-          border-radius: 12px !important;
-          box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75), 0 0 24px rgba(99, 102, 241, 0.3) !important;
-          padding: 8px 16px !important;
+          background: rgba(15, 23, 42, 0.94) !important;
+          backdrop-filter: blur(10px) !important;
+          -webkit-backdrop-filter: blur(10px) !important;
+          border: 1px solid rgba(255, 255, 255, 0.22) !important;
+          border-radius: 20px !important;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(99, 102, 241, 0.25) !important;
+          padding: 6px 12px !important;
           display: flex !important;
           align-items: center !important;
-          gap: 10px !important;
+          gap: 6px !important;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-          font-size: 12px !important;
+          font-size: 11px !important;
           color: #f3f4f6 !important;
           user-select: none !important;
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
-          max-width: 92vw !important;
+          max-width: 95vw !important;
           white-space: nowrap !important;
         `;
         mount.appendChild(pickerBadge);
@@ -1348,11 +1366,11 @@ if (window.location.hostname.includes('youtube.com')) {
       function renderInstructionBadge() {
         if (!pickerBadge) return;
         pickerBadge.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 15px;">🎯</span>
-            <span style="font-weight: 700; color: #ffffff;">Chế độ Target</span>: <span style="color: #cbd5e1;">Click vào quảng cáo để chọn</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 13px;">🎯</span>
+            <span style="font-weight: 600; color: #cbd5e1;">Click phần tử để chọn</span>
           </div>
-          <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #e2e8f0; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">✕ Thoát (ESC)</button>
+          <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 3px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;">✕ Thoát</button>
         `;
         const cncBtn = document.getElementById('abm-cancel-btn');
         if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
@@ -1375,20 +1393,18 @@ if (window.location.hostname.includes('youtube.com')) {
         }
 
         const selector = getRobustSelector(el);
-        const selDisplay = selector ? (selector.length > 26 ? selector.substring(0, 26) + '...' : selector) : 'phần tử';
+        const selDisplay = selector ? (selector.length > 20 ? selector.substring(0, 20) + '...' : selector) : 'phần tử';
 
         if (!pickerBadge) return;
 
         // When NOT locked (just hovering over elements before clicking):
         if (!isLocked) {
           pickerBadge.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 14px;">🎯</span>
-              <span style="font-weight: 700; color: #ffffff;">Rê chuột:</span>
-              <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;">${selDisplay}</code>
-              <span style="color: #cbd5e1; font-size: 11px;">(Click để chọn phần tử này)</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 13px;">🎯</span>
+              <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 10.5px;">${selDisplay}</code>
             </div>
-            <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #e2e8f0; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">✕ Thoát (ESC)</button>
+            <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 3px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;">✕ Thoát</button>
           `;
           const cncBtn = document.getElementById('abm-cancel-btn');
           if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
@@ -1398,16 +1414,15 @@ if (window.location.hostname.includes('youtube.com')) {
         // When LOCKED (user has clicked to select):
         const canShrink = historyIndex > 0;
         pickerBadge.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 14px;">🎯</span>
-            <span style="font-weight: 700; color: #ffffff;">Target:</span>
-            <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px;" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 13px;">🎯</span>
+            <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 10.5px;" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
           </div>
-          <button id="abm-expand-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #e2e8f0; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;" title="Mở rộng vùng chọn ra khung bao quanh quảng cáo">Mở rộng 🔼</button>
-          ${canShrink ? `<button id="abm-shrink-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #e2e8f0; padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;" title="Thu nhỏ vùng chọn lại 1 cấp">Thu nhỏ 🔽</button>` : ''}
-          <button id="abm-reselect-btn" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); color: #cbd5e1; padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer;" title="Chọn lại phần tử khác trên trang">🎯 Đổi phần tử</button>
-          <button id="abm-block-btn" style="background: linear-gradient(135deg, #f43f5e, #e11d48); border: none; color: #ffffff; padding: 5px 14px; border-radius: 6px; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(244,63,94,0.45);" title="Chặn và ẩn vĩnh viễn">🚫 Chặn ngay</button>
-          <button id="abm-cancel-btn" style="background: none; border: none; color: #94a3b8; font-size: 11px; cursor: pointer; padding: 4px 6px;">✕ Hủy (ESC)</button>
+          <button id="abm-expand-btn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 600; cursor: pointer;" title="Mở rộng ra thẻ cha">🔼</button>
+          ${canShrink ? `<button id="abm-shrink-btn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 600; cursor: pointer;" title="Thu nhỏ lại">🔽</button>` : ''}
+          <button id="abm-reselect-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;" title="Đổi phần tử khác">Đổi</button>
+          <button id="abm-block-btn" style="background: linear-gradient(135deg, #f43f5e, #e11d48); border: none; color: #ffffff; padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(244,63,94,0.4);" title="Chặn và ẩn">🚫 Chặn</button>
+          <button id="abm-cancel-btn" style="background: none; border: none; color: #94a3b8; font-size: 11px; cursor: pointer; padding: 3px 5px;" title="Thoát">✕</button>
         `;
 
         // Mở rộng vùng chọn 🔼
@@ -1486,21 +1501,36 @@ if (window.location.hostname.includes('youtube.com')) {
         }
       }
 
-      function onClick(e) {
-        if (!isTargetPickerActive) return;
-        // If clicking inside badge, let badge buttons handle it
-        if (pickerBadge && (pickerBadge.contains(e.target) || e.target === pickerBadge)) return;
-        
-        e.preventDefault();
-        e.stopPropagation();
-
-        const target = document.elementFromPoint(e.clientX, e.clientY);
+      function handleSelectionAtPoint(clientX, clientY) {
+        const target = document.elementFromPoint(clientX, clientY);
         if (target && target !== pickerOverlay && (!pickerBadge || !pickerBadge.contains(target))) {
-          // Lock on clicked element so user can review & expand before blocking!
           targetHistory = [target];
           historyIndex = 0;
           isLocked = true;
           updateOverlay(target);
+        }
+      }
+
+      function onClick(e) {
+        if (!isTargetPickerActive) return;
+        if (pickerBadge && (pickerBadge.contains(e.target) || e.target === pickerBadge)) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        handleSelectionAtPoint(e.clientX, e.clientY);
+      }
+
+      function onTouchStartPicker(e) {
+        if (!isTargetPickerActive) return;
+        if (pickerBadge && (pickerBadge.contains(e.target) || e.target === pickerBadge)) return;
+        if (e.touches && e.touches[0]) {
+          const t = e.touches[0];
+          const target = document.elementFromPoint(t.clientX, t.clientY);
+          if (target && target !== pickerOverlay && (!pickerBadge || !pickerBadge.contains(target))) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSelectionAtPoint(t.clientX, t.clientY);
+          }
         }
       }
 
@@ -1529,11 +1559,13 @@ if (window.location.hostname.includes('youtube.com')) {
 
       window.addEventListener('mousemove', onMouseMove, true);
       window.addEventListener('click', onClick, true);
+      window.addEventListener('touchstart', onTouchStartPicker, { capture: true, passive: false });
       window.addEventListener('keydown', onKeyDown, true);
 
       pickerCleanup = () => {
         window.removeEventListener('mousemove', onMouseMove, true);
         window.removeEventListener('click', onClick, true);
+        window.removeEventListener('touchstart', onTouchStartPicker, true);
         window.removeEventListener('keydown', onKeyDown, true);
         const cStyle = document.getElementById('adblock-max-cursor-override');
         if (cStyle && cStyle.parentNode) cStyle.remove();
@@ -1549,14 +1581,12 @@ if (window.location.hostname.includes('youtube.com')) {
       };
 
       // Do NOT automatically target or lock onto anything on entry!
-      // Start in clean neutral mode so user can hover and click whatever they choose:
       isLocked = false;
       targetHistory = [];
       historyIndex = 0;
       currentHoveredTarget = null;
       if (pickerOverlay) pickerOverlay.style.display = 'none';
       renderInstructionBadge();
-      showToast('🎯 Đã bật chế độ Target: Rê chuột & click vào quảng cáo để chọn!', true);
     }
 
     function stopTargetPicker() {
@@ -1566,7 +1596,7 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     }
 
-    // Listen for background message (Right-Click Context Menu)
+    // Listen for background message (Right-Click Context Menu / Popup Target Button)
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (msg.type === 'START_MANUAL_BLOCK' || msg.type === 'START_TARGET_PICKER') {
@@ -1582,39 +1612,16 @@ if (window.location.hostname.includes('youtube.com')) {
       startTargetPicker(lastRightClickedElement, null);
     });
   
-    // Mobile Long Press Logic
-    let touchStartTime = 0;
-    let touchStartElement = null;
-    let longPressTimer = null;
-  
+    // Mobile Gesture: 3-Finger Tap quickly toggles Target Mode on/off
     document.addEventListener('touchstart', (e) => {
       if (!currentEnabledState) return;
-      if (e.touches.length > 1) return;
-      touchStartTime = Date.now();
-      touchStartElement = e.target;
-      longPressTimer = setTimeout(() => {
-        // Show confirmation popup
-        if (confirm('🚫 Adblock Max:\nBạn có muốn chặn và ẩn vĩnh viễn quảng cáo/phần tử này không?')) {
-          let target = touchStartElement;
-          let depth = 0;
-          while (target && target !== document.body && depth < 3) {
-            if (target.tagName === 'A' || target.tagName === 'IFRAME') break;
-            const pos = window.getComputedStyle(target).position;
-            if (pos === 'fixed' || pos === 'absolute') break;
-            target = target.parentElement;
-            depth++;
-          }
-          blockElement(target || touchStartElement);
+      if (e.touches && e.touches.length === 3) {
+        if (isTargetPickerActive) {
+          stopTargetPicker();
+        } else {
+          startTargetPicker(null, null);
         }
-      }, 800);
-    }, { passive: true });
-  
-    document.addEventListener('touchend', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-    
-    document.addEventListener('touchmove', () => {
-      clearTimeout(longPressTimer);
+      }
     }, { passive: true });
   
     function applyManualFilters(domainSelectors, globalSelectors) {

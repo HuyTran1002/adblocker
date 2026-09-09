@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Adblock Max</title>
+  <title>WebShield</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 
@@ -15,16 +15,16 @@
       <!-- Header -->
       <header class="header">
         <div class="brand">
-          <img class="logo-icon" src="icon128.png" width="30" height="30" alt="Adblock Max">
+          <img class="logo-icon" src="icon128.png" width="30" height="30" alt="WebShield">
           <div class="brand-text">
-            <h1>Adblock Max</h1>
-            <span class="version">v3.5.0</span>
+            <h1>WebShield</h1>
+            <span class="version">v3.5.4</span>
           </div>
         </div>
 
         <div class="header-controls">
           <!-- Sleek Power Toggle Switch -->
-          <label class="switch-container" title="Bật/Tắt Adblock Max">
+          <label class="switch-container" title="Bật/Tắt WebShield">
             <input type="checkbox" id="power-toggle" checked>
             <span class="slider"></span>
           </label>
@@ -58,6 +58,18 @@
             <span class="slider"></span>
           </label>
         </div>
+
+        <!-- Mobile & Desktop Target Picker Action Button -->
+        <button class="target-picker-btn" id="start-target-picker-btn" title="Bật chế độ ngắm và chọn phần tử để ẩn trên trang này">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="22" y1="12" x2="18" y2="12"></line>
+            <line x1="6" y1="12" x2="2" y2="12"></line>
+            <line x1="12" y1="6" x2="12" y2="2"></line>
+            <line x1="12" y1="22" x2="12" y2="18"></line>
+          </svg>
+          <span>Chọn phần tử để chặn (Target Mode)</span>
+        </button>
 
         <!-- Blocked History Section -->
         <section class="section">
@@ -124,10 +136,10 @@
 
       <!-- Tab Content Panels -->
       <div class="tab-content">
-        <!-- TAB 1: FILTERS LIST (like uBlock) -->
+        <!-- TAB 1: FILTERS LIST -->
         <div class="tab-pane active" id="tab-filters">
           <div class="tab-pane-header">
-            <span class="pane-subtitle">Bộ lọc uBlock & AdGuard đang hoạt động</span>
+            <span class="pane-subtitle">Quy tắc bộ lọc đang hoạt động</span>
             <button class="update-all-btn" id="update-filters-btn" title="Cập nhật bộ lọc mới nhất">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
               <span id="update-btn-text">Cập nhật</span>
@@ -135,11 +147,11 @@
           </div>
 
           <div class="filter-list">
-            <div class="filter-item" data-url="https://github.com/uBlockOrigin/uAssets" title="Bấm để mở kho quy tắc uBlock Filters">
+            <div class="filter-item" title="Quy tắc bộ lọc tiêu chuẩn">
               <div class="filter-info">
                 <span class="filter-icon">🛡️</span>
                 <div class="filter-names">
-                  <span class="filter-name">uBlock Filters <span class="external-link-icon">↗</span></span>
+                  <span class="filter-name">Standard Filter Rules</span>
                   <span class="filter-rules-count">116,000+ quy tắc</span>
                 </div>
               </div>
@@ -150,11 +162,11 @@
               </div>
             </div>
 
-            <div class="filter-item" data-url="https://easylist.to/" title="Bấm để mở kho quy tắc EasyList">
+            <div class="filter-item" title="Quy tắc mở rộng">
               <div class="filter-info">
                 <span class="filter-icon">🛡️</span>
                 <div class="filter-names">
-                  <span class="filter-name">EasyList Ads <span class="external-link-icon">↗</span></span>
+                  <span class="filter-name">Extended Filter Rules</span>
                   <span class="filter-rules-count">137,800+ quy tắc</span>
                 </div>
               </div>
@@ -165,11 +177,11 @@
               </div>
             </div>
 
-            <div class="filter-item" data-url="https://github.com/AdguardTeam/AdguardFilters" title="Bấm để mở kho quy tắc AdGuard Base">
+            <div class="filter-item" title="Quy tắc nâng cao">
               <div class="filter-info">
                 <span class="filter-icon">🛡️</span>
                 <div class="filter-names">
-                  <span class="filter-name">AdGuard Base <span class="external-link-icon">↗</span></span>
+                  <span class="filter-name">Advanced Network Rules</span>
                   <span class="filter-rules-count">652,000+ quy tắc</span>
                 </div>
               </div>
@@ -180,12 +192,12 @@
               </div>
             </div>
 
-            <div class="filter-item highlight" data-url="https://abpvn.com/" title="Bấm để mở kho quy tắc ABPVN Việt Nam">
+            <div class="filter-item highlight" title="Quy tắc khu vực">
               <div class="filter-info">
                 <span class="filter-icon">🇻🇳</span>
                 <div class="filter-names">
-                  <span class="filter-name">ABPVN Việt Nam <span class="external-link-icon">↗</span></span>
-                  <span class="filter-rules-count">1,076 quy tắc VN</span>
+                  <span class="filter-name">Regional Web Rules</span>
+                  <span class="filter-rules-count">1,076 quy tắc khu vực</span>
                 </div>
               </div>
               <div class="filter-status">
@@ -195,12 +207,12 @@
               </div>
             </div>
 
-            <div class="filter-item highlight" title="YouTube Zero-Ad tích hợp sẵn">
+            <div class="filter-item highlight" title="Bộ lọc video & đa phương tiện">
               <div class="filter-info">
                 <span class="filter-icon">🎬</span>
                 <div class="filter-names">
-                  <span class="filter-name">YouTube Zero-Ad</span>
-                  <span class="filter-rules-count">v3.5.0 Deep Engine</span>
+                  <span class="filter-name">Media Stream Filter</span>
+                  <span class="filter-rules-count">v3.5.4 Filter Engine</span>
                 </div>
               </div>
               <div class="filter-status">
@@ -210,12 +222,12 @@
               </div>
             </div>
 
-            <div class="filter-item" data-url="https://pgl.yoyo.org/adservers/" title="Bấm để mở danh sách Peter Lowe List">
+            <div class="filter-item" title="Quy tắc bảo mật máy chủ quảng cáo">
               <div class="filter-info">
                 <span class="filter-icon">🚫</span>
                 <div class="filter-names">
-                  <span class="filter-name">Peter Lowe List <span class="external-link-icon">↗</span></span>
-                  <span class="filter-rules-count">3,541 adservers</span>
+                  <span class="filter-name">Adserver Host Rules</span>
+                  <span class="filter-rules-count">3,541 máy chủ</span>
                 </div>
               </div>
               <div class="filter-status">
@@ -238,14 +250,14 @@
         <!-- TAB 2: WHITELIST (Trang bỏ qua) -->
         <div class="tab-pane" id="tab-whitelist">
           <div class="tab-pane-header">
-            <span class="pane-subtitle">Trang web không chặn quảng cáo</span>
+            <span class="pane-subtitle">Danh sách trang web loại trừ (Whitelist)</span>
             <button class="add-current-site-btn" id="add-current-whitelist-btn">
               + Trang hiện tại
             </button>
           </div>
 
           <div class="input-row">
-            <input type="text" id="whitelist-input" placeholder="nhapdomain.com (vd: google.com)" />
+            <input type="text" id="whitelist-input" placeholder="domain.com (vd: example.com)" />
             <button class="action-btn" id="whitelist-add-btn">Thêm</button>
           </div>
 
@@ -271,7 +283,7 @@
 
           <div class="custom-rules-box" id="custom-rules-box">
             <div class="empty-custom-msg" id="empty-custom-msg">
-              Chưa có phần tử nào bị chặn thủ công trên trang này. Bạn chỉ cần nhấn chuột phải trên trang web và chọn <b>"🎯 Chọn & Chặn phần tử này... (Adblock Max)"</b> để bật chế độ Target (F12) rê chuột chọn chính xác object cần chặn.
+              Chưa có phần tử nào bị chặn thủ công trên trang này. Bạn có thể nhấn chuột phải trên trang web và chọn <b>"🎯 Chặn phần tử này... (WebShield)"</b> để chọn phần tử muốn ẩn.
             </div>
             <div class="custom-rules-container" id="custom-rules-container"></div>
           </div>

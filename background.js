@@ -489,7 +489,7 @@ function setupContextMenu() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "block_element",
-      title: "🎯 Chọn & Chặn phần tử này... (Adblock Max)",
+      title: "🎯 Chặn phần tử này... (WebShield)",
       contexts: ["all"]
     }, () => {
       if (chrome.runtime.lastError) {}

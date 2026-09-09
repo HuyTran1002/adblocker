@@ -40,7 +40,7 @@ function buildPackage(platform) {
 
   fs.writeFileSync(path.join(tmpDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-  const zipName = `adblock-max-v${manifest.version}-${platform}.zip`;
+  const zipName = `webshield-v${manifest.version}-${platform}.zip`;
   const zipPath = path.join(OUT, zipName);
   const zipPathInRoot = path.join(SRC, zipName);
 
@@ -58,7 +58,8 @@ function buildPackage(platform) {
   return zipPath;
 }
 
-console.log('Building Adblock Max v3.5.0 packages for Chrome and Firefox...\n');
+const rootManifest = JSON.parse(fs.readFileSync(path.join(SRC, 'manifest.json'), 'utf8'));
+console.log(`Building WebShield v${rootManifest.version} packages for Chrome and Firefox...\n`);
 buildPackage('chrome');
 buildPackage('firefox');
 console.log('\nPackaging complete!');

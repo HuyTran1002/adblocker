@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.5.0" }),
+      getManifest: () => ({ version: "3.5.4" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -398,20 +398,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (countEls[0] && stats.counts.ublock) countEls[0].textContent = `${stats.counts.ublock.toLocaleString()} quy tắc trực tuyến`;
       if (countEls[1] && stats.counts.easylist) countEls[1].textContent = `${stats.counts.easylist.toLocaleString()} quy tắc trực tuyến`;
       if (countEls[2] && stats.counts.adguard) countEls[2].textContent = `${stats.counts.adguard.toLocaleString()} quy tắc trực tuyến`;
-      if (countEls[3] && stats.counts.abpvn) countEls[3].textContent = `${stats.counts.abpvn.toLocaleString()} quy tắc ABPVN trực tuyến`;
-      if (countEls[5] && stats.counts.peterlowe) countEls[5].textContent = `${stats.counts.peterlowe.toLocaleString()} adservers trực tuyến`;
+      if (countEls[3] && stats.counts.abpvn) countEls[3].textContent = `${stats.counts.abpvn.toLocaleString()} quy tắc khu vực`;
+      if (countEls[5] && stats.counts.peterlowe) countEls[5].textContent = `${stats.counts.peterlowe.toLocaleString()} máy chủ lọc`;
     }
   }
-
-  // Click handler to open filter library URLs in a new tab
-  document.querySelectorAll(".filter-item[data-url]").forEach(item => {
-    item.addEventListener("click", () => {
-      const url = item.getAttribute("data-url");
-      if (url && chrome && chrome.tabs) {
-        chrome.tabs.create({ url });
-      }
-    });
-  });
 
   // Real Online Filter Update Action (Fetches uBlock, EasyList, AdGuard, ABPVN, Peter Lowe online via HTTP)
   updateFiltersBtn.addEventListener("click", () => {
@@ -518,4 +508,50 @@ document.addEventListener("DOMContentLoaded", () => {
   clearHistoryBtn.addEventListener("click", () => {
     chrome.storage.local.set({ blockedCount: 0, blockedHistory: [] });
   });
+
+  // Start Target Picker Mode on Active Tab
+  const startTargetPickerBtn = document.getElementById("start-target-picker-btn");
+  if (startTargetPickerBtn) {
+    startTargetPickerBtn.addEventListener("click", () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs && tabs[0];
+        if (!activeTab || !activeTab.id || !activeTab.url) return;
+
+        // Check if tab is a restricted browser internal page
+        const isRestricted = activeTab.url.startsWith("chrome://") ||
+                             activeTab.url.startsWith("edge://") ||
+                             activeTab.url.startsWith("about:") ||
+                             activeTab.url.startsWith("chrome-extension://") ||
+                             activeTab.url.startsWith("view-source:");
+
+        if (isRestricted) {
+          alert("Không thể chọn phần tử trên trang hệ thống của trình duyệt!");
+          return;
+        }
+
+        chrome.tabs.sendMessage(activeTab.id, { type: "START_TARGET_PICKER" }, () => {
+          // Consume runtime.lastError if content script isn't injected yet (e.g. newly loaded tab)
+          if (chrome.runtime.lastError) {
+            // Fallback: Programmatically inject content.js and retry
+            if (chrome.scripting && chrome.scripting.executeScript) {
+              chrome.scripting.executeScript({
+                target: { tabId: activeTab.id },
+                files: ["content.js"]
+              }, () => {
+                if (chrome.runtime.lastError) {}
+                setTimeout(() => {
+                  chrome.tabs.sendMessage(activeTab.id, { type: "START_TARGET_PICKER" }, () => {
+                    if (chrome.runtime.lastError) {}
+                    window.close();
+                  });
+                }, 100);
+              });
+              return;
+            }
+          }
+          window.close(); // Close popup so user immediately sees web page in target mode
+        });
+      });
+    });
+  }
 });
