@@ -1406,11 +1406,13 @@
           }
         }
 
-        // Clean anti-adblock enforcement dialogs & prompts from payload
+        // Clean anti-adblock enforcement dialogs & interruption prompts from payload
         if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
           const mr = obj.auxiliaryUi.messageRenderers;
           if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
           if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
+          if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
+          if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
         }
         if (obj.messages) {
           delete obj.messages;
@@ -1608,7 +1610,36 @@
       };
     } catch (e) { }
 
-    // 8. Neutralize Anti-Adblock Warning Modals & Auto-Unpause Video
+    // 8. Inject YouTube Zero-Ad Shield CSS (Hide enforcement modals, banners, and interruption toasts)
+    try {
+      if (!document.getElementById('webshield-yt-engine-css')) {
+        const style = document.createElement('style');
+        style.id = 'webshield-yt-engine-css';
+        style.textContent = `
+          ytd-enforcement-message-view-model,
+          ytd-enforcement-message-renderer,
+          #error-screen.ytd-watch-flexy,
+          ytd-mealbar-promo-renderer,
+          tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
+          tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
+          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
+          tp-yt-paper-toast:has(a[href*="answer"]),
+          tp-yt-paper-toast:has(a[href*="support.google.com"]),
+          ytd-notification-action-renderer:has(a[href*="answer"]),
+          ytd-notification-action-renderer:has(a[href*="support.google.com"]),
+          .ytp-error-content {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            height: 0 !important;
+          }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+      }
+    } catch (e) { }
+
+    // 9. Neutralize Anti-Adblock Warning Modals, Interruption Toasts & Auto-Unpause Video
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
@@ -1618,7 +1649,8 @@
           'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
           'tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)',
           'tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)',
-          'ytd-popup-container:has(ytd-enforcement-message-view-model)'
+          'ytd-popup-container:has(ytd-enforcement-message-view-model)',
+          'ytd-mealbar-promo-renderer'
         ];
 
         let removed = false;
@@ -1628,6 +1660,25 @@
             el.remove();
             removed = true;
           });
+        });
+
+        // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
+        const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
+        toasts.forEach(toast => {
+          const text = (toast.textContent || '').toLowerCase();
+          if (
+            text.includes('sự cố') ||
+            text.includes('interruption') ||
+            text.includes('tìm hiểu lý do') ||
+            text.includes('find out why') ||
+            text.includes('chặn quảng cáo') ||
+            text.includes('ad blocker') ||
+            toast.querySelector('a[href*="answer"]') ||
+            toast.querySelector('a[href*="support.google.com"]')
+          ) {
+            toast.remove();
+            removed = true;
+          }
         });
 
         // Also check if YouTube disabled the player or added error screen
