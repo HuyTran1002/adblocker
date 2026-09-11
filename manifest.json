@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "WebShield - Smart Content Filter",
+  "name": "WebShield",
   "short_name": "WebShield",
-  "version": "3.5.4",
+  "version": "3.5.5",
   "author": "HuyTran1002",
-  "description": "Bộ lọc nội dung và kiểm soát yêu cầu mạng giúp ngăn chặn cửa sổ bật lên, tăng tốc độ duyệt web và bảo vệ sự riêng tư.",
+  "description": "Công cụ hỗ trợ chặn cửa sổ bật lên tự động và quản lý quy tắc lọc mạng cục bộ.",
   "icons": {
     "16": "icon128.png",
     "32": "icon128.png",
