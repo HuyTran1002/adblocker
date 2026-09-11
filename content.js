@@ -208,13 +208,18 @@ function injectYouTubeAdBlockCSS() {
   const style = document.createElement('style');
   style.id = 'anti-popunder-youtube-css';
   style.textContent = `
-    /* 1. Hide anti-adblock enforcement dialogs & backdrops */
+    /* 1. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts */
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
     tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
     tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
     tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
-    #error-screen.ytd-watch-flexy {
+    #error-screen.ytd-watch-flexy,
+    ytd-mealbar-promo-renderer,
+    tp-yt-paper-toast:has(a[href*="answer"]),
+    tp-yt-paper-toast:has(a[href*="support.google.com"]),
+    ytd-notification-action-renderer:has(a[href*="answer"]),
+    ytd-notification-action-renderer:has(a[href*="support.google.com"]) {
       display: none !important;
     }
 

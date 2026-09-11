@@ -1639,27 +1639,28 @@
       }
     } catch (e) { }
 
-    // 9. Neutralize Anti-Adblock Warning Modals, Interruption Toasts & Auto-Unpause Video
+    // 9. Neutralize Anti-Adblock Warning Modals, Interruption Toasts & Auto-Unpause Video (Ultra-Smooth Debounced)
+    let clearScheduled = false;
+    function scheduleClear() {
+      if (clearScheduled) return;
+      clearScheduled = true;
+      requestAnimationFrame(() => {
+        clearScheduled = false;
+        clearYouTubeEnforcementDialogs();
+      });
+    }
+
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
-        const dialogSelectors = [
-          'ytd-enforcement-message-view-model',
-          'ytd-enforcement-message-renderer',
-          'tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)',
-          'tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)',
-          'tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model)',
-          'ytd-popup-container:has(ytd-enforcement-message-view-model)',
-          'ytd-mealbar-promo-renderer'
-        ];
-
+        const targetSelectors = 'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, ytd-mealbar-promo-renderer, #feedback.ytd-enforcement-message-view-model';
+        const targets = document.querySelectorAll(targetSelectors);
         let removed = false;
-        dialogSelectors.forEach(sel => {
-          const els = document.querySelectorAll(sel);
-          els.forEach(el => {
-            el.remove();
-            removed = true;
-          });
+
+        targets.forEach(el => {
+          const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
+          dialog.remove();
+          removed = true;
         });
 
         // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
@@ -1710,16 +1711,14 @@
     }
 
     try {
-      const observer = new MutationObserver(() => {
-        clearYouTubeEnforcementDialogs();
-      });
+      const observer = new MutationObserver(scheduleClear);
       observer.observe(document.documentElement || document.body, {
         childList: true,
         subtree: true
       });
     } catch (e) { }
 
-    setInterval(clearYouTubeEnforcementDialogs, 1000);
+    setInterval(scheduleClear, 2000);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
