@@ -330,23 +330,114 @@
         const className = (typeof rawClass === 'string') ? rawClass.toLowerCase() : '';
 
         // Fast guard: skip elements that do not contain ad-related keyword substrings
-        if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') &&
-          !className.includes('ad') && !className.includes('qc') && !className.includes('quang')) {
+        if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') && !id.includes('preload') &&
+          !className.includes('ad') && !className.includes('qc') && !className.includes('quang') && !className.includes('adv')) {
           return false;
         }
 
         const name = (el.getAttribute && el.getAttribute('name') || '').toLowerCase();
 
-        const keywords = ['adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box', 'sponsored', 'ad-holder', 'qc-holder', 'ad-container'];
+        // Exact ID matches for bait patterns used by anti-adblock detectors
+        const exactBaitIds = [
+          'ad', 'ads', 'ad1', 'ad2', 'ad_box', 'ad-box', 'ads-box', 'adsbox',
+          '_preload-ads-1', '_preload-ads-2', 'preload-ads', 'ads-preload',
+          'googlead', 'google-ads', 'google_ads', 'google-ad-banner'
+        ];
+        if (exactBaitIds.includes(id)) return true;
+
+        const keywords = [
+          'adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box',
+          'sponsored', 'ad-holder', 'qc-holder', 'ad-container', 'preload-ads', '_preload-ads',
+          'ad-center', 'ad-detect', 'adblock-detect', 'ads-detect'
+        ];
         if (keywords.some(kw => id.includes(kw) || className.includes(kw) || name.includes(kw))) {
           return true;
         }
+
+        // Class-specific bait patterns (Adv, adv, ad-center-header)
+        const classTokens = className.split(/\s+/);
+        const baitClasses = ['adv', 'ad-center-header', 'ads-banner', 'ad-banner', 'adbanner', 'adsense'];
+        if (baitClasses.some(bc => classTokens.includes(bc))) return true;
+
         if (id === 'ad' || id === 'ads' || className === 'ad' || className === 'ads') {
           return true;
         }
       } catch (e) { }
       return false;
     }
+
+    // Intercept fetch() to fake successful responses for ad network check URLs
+    // (Defeats network-based adblock detection used by sites like animevietsub.li)
+    try {
+      const _origFetch = window.fetch;
+      window.fetch = function (resource, init) {
+        let urlStr = '';
+        try {
+          urlStr = (typeof resource === 'string') ? resource : (resource && resource.url) || '';
+        } catch (e) { }
+        if (urlStr && isAdUrl(urlStr)) {
+          console.log('[Anti Pop-Under] Faking fetch success for ad URL:', urlStr);
+          return Promise.resolve(new Response('', { status: 200, statusText: 'OK' }));
+        }
+        return _origFetch.apply(this, arguments);
+      };
+    } catch (e) { }
+
+    // Intercept XMLHttpRequest to fake successful responses for ad network check URLs
+    try {
+      const _origXhrOpen = XMLHttpRequest.prototype.open;
+      const _origXhrSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this._interceptedAdUrl = (typeof url === 'string' && isAdUrl(url)) ? url : null;
+        return _origXhrOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function () {
+        if (this._interceptedAdUrl) {
+          console.log('[Anti Pop-Under] Faking XHR success for ad URL:', this._interceptedAdUrl);
+          Object.defineProperty(this, 'status', { get() { return 200; }, configurable: true });
+          Object.defineProperty(this, 'readyState', { get() { return 4; }, configurable: true });
+          Object.defineProperty(this, 'responseText', { get() { return ''; }, configurable: true });
+          Object.defineProperty(this, 'response', { get() { return ''; }, configurable: true });
+          setTimeout(() => {
+            try {
+              if (typeof this.onreadystatechange === 'function') this.onreadystatechange();
+              if (typeof this.onload === 'function') this.onload();
+            } catch (e) { }
+          }, 0);
+          return;
+        }
+        return _origXhrSend.apply(this, arguments);
+      };
+    } catch (e) { }
+
+    // Auto-inject stub bait elements that anti-adblock scripts expect to find in DOM
+    // This defeats checkers that use document.getElementById('_preload-ads-1') etc.
+    try {
+      const baitElementSpecs = [
+        { id: '_preload-ads-1', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
+        { id: '_preload-ads-2', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
+        { id: 'ads-banner', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
+        { id: 'google-ads', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' }
+      ];
+      const injectBaitStubs = () => {
+        if (!document.body) return;
+        baitElementSpecs.forEach(spec => {
+          if (!document.getElementById(spec.id)) {
+            const stub = document.createElement('div');
+            stub.id = spec.id;
+            stub.setAttribute('style', spec.style);
+            stub.className = 'Adv ad-center-header adsbox';
+            stub.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(stub);
+          }
+        });
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', injectBaitStubs, { once: true });
+      } else {
+        injectBaitStubs();
+      }
+    } catch (e) { }
 
     try {
       const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight').get;
