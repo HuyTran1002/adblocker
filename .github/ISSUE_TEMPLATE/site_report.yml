@@ -1,0 +1,72 @@
+name: 🚨 Báo cáo lỗi trang web (Site Report)
+description: Báo cáo quảng cáo lọt lưới, vỡ giao diện hoặc lỗi phát video
+title: "[Báo cáo]: "
+labels: ["bug", "site-report"]
+assignees:
+  - HuyTran1002
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Cảm ơn bạn đã gửi báo cáo sự cố!
+        Vui lòng điền hoặc kiểm tra các thông tin bên dưới để giúp tác giả khắc phục sự cố nhanh nhất.
+
+  - type: input
+    id: domain
+    attributes:
+      label: 🌐 Tên miền trang web
+      description: Tên miền của trang web gặp sự cố
+      placeholder: "Ví dụ: mflix.store, animevietsub.by"
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: 🔗 URL đầy đủ
+      description: Đường dẫn chính xác bạn đang xem khi gặp lỗi
+      placeholder: "https://example.com/movie-watch/..."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 🛡️ Phiên bản WebShield & Hệ thống
+      description: Phiên bản extension, trình duyệt và hệ điều hành
+      placeholder: "v3.5.8 | Chrome 150 (Windows 10)"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: issue_type
+    attributes:
+      label: ⚠️ Loại vấn đề gặp phải
+      description: Bạn có thể nhấp chuột trực tiếp vào các ô bên dưới để đánh dấu chọn
+      options:
+        - label: "🚨 Quảng cáo lọt lưới: Quảng cáo, banner hoặc pop-up nhảy tab vẫn xuất hiện trên trang này"
+        - label: "💥 Vỡ giao diện / Chặn nhầm: Trang web bị mất hình ảnh, video, poster phim hoặc nội dung chính"
+        - label: "🛑 Phát hiện chặn quảng cáo: Trang web hiện thông báo hoặc popup yêu cầu tắt AdBlock"
+        - label: "🔄 Lỗi tính năng / Trình phát: Nút bấm hoặc trình phát video không hoạt động (Access denied, màn hình đen...)"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📝 Mô tả chi tiết vấn đề
+      description: Vui lòng mô tả cụ thể vị trí lỗi, cách tái hiện lỗi hoặc server video bạn đang chọn.
+      placeholder: "Ví dụ: Trình phát video báo 'Access denied. You can only view the video on our site..' khi chọn server 1..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 📷 Ảnh chụp màn hình lỗi (Khuyến khích)
+      description: |
+        👉 **Cách dán ảnh chụp màn hình cực nhanh:**
+        1. Chụp ảnh màn hình (phím `PrintScreen` hoặc `Win + Shift + S`).
+        2. Nhấp chuột vào khung bên dưới.
+        3. Nhấn tổ hợp phím **Ctrl + V** (hoặc kéo thả file ảnh vào khung) để GitHub tự động tải ảnh lên.
+      placeholder: "Nhấp chuột vào đây và nhấn Ctrl+V để dán ảnh chụp màn hình..."
+    validations:
+      required: false

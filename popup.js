@@ -643,8 +643,14 @@ document.addEventListener("DOMContentLoaded", () => {
 ### 📷 Ảnh chụp màn hình (Khuyến khích)
 *(Kéo thả hoặc dán ảnh chụp màn hình lỗi vào đây để tác giả sửa nhanh nhất)*
 `;
-        const body = encodeURIComponent(bodyContent);
-        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?title=${title}&body=${body}`;
+        const titleParam = encodeURIComponent(`[Báo cáo]: ${currentDomain}`);
+        const domainParam = encodeURIComponent(currentDomain);
+        const urlParam = encodeURIComponent(currentUrl);
+        const versionParam = encodeURIComponent(`v${version} | ${browserInfo} | ${now}`);
+        const bodyParam = encodeURIComponent(bodyContent);
+
+        // GitHub Issue Form: template=site_report.yml provides interactive checkboxes & screenshot upload zone
+        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&body=${bodyParam}`;
 
         chrome.tabs.create({ url: githubUrl });
         window.close();
