@@ -595,4 +595,69 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
+
+  // Report Issue on Active Tab to GitHub Issues
+  const reportIssueBtn = document.getElementById("report-issue-btn");
+  if (reportIssueBtn) {
+    reportIssueBtn.addEventListener("click", () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs && tabs[0];
+        let currentUrl = "Không xác định";
+        let currentDomain = "Chưa rõ";
+
+        if (activeTab && activeTab.url) {
+          currentUrl = activeTab.url;
+          try {
+            currentDomain = new URL(activeTab.url).hostname;
+          } catch(e) {}
+        }
+
+        const manifest = chrome.runtime.getManifest();
+        const version = manifest.version || "3.5.7";
+        const browserInfo = navigator.userAgent;
+        const now = new Date().toLocaleString("vi-VN");
+
+        const title = encodeURIComponent(`[Báo cáo trang]: ${currentDomain}`);
+        const bodyContent = `### 🌐 Thông tin trang web
+- **Tên miền:** \`${currentDomain}\`
+- **URL đầy đủ:** ${currentUrl}
+- **Phiên bản WebShield:** v${version}
+- **Trình duyệt & HĐH:** \`${browserInfo}\`
+- **Thời gian báo cáo:** ${now}
+
+---
+
+### ⚠️ Loại vấn đề gặp phải (Đánh dấu [x] vào ô phù hợp)
+- [ ] 🚨 **Quảng cáo lọt lưới:** Quảng cáo vẫn xuất hiện trên trang này
+- [ ] 💥 **Vỡ giao diện / Chặn nhầm:** Trang web bị mất hình ảnh, video, banner phim hoặc nội dung chính
+- [ ] 🛑 **Phát hiện chặn quảng cáo:** Website hiện thông báo yêu cầu tắt AdBlock
+- [ ] 🔄 **Lỗi tính năng:** Nút bấm hoặc trình phát video không hoạt động bình thường
+
+---
+
+### 📝 Mô tả chi tiết vấn đề
+*(Vui lòng mô tả vị trí quảng cáo xuất hiện hoặc phần nội dung bị ẩn nhầm trên trang...)*
+
+---
+
+### 📷 Ảnh chụp màn hình (Khuyến khích)
+*(Kéo thả hoặc dán ảnh chụp màn hình lỗi vào đây để tác giả sửa nhanh nhất)*
+`;
+        const body = encodeURIComponent(bodyContent);
+        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?title=${title}&body=${body}`;
+
+        chrome.tabs.create({ url: githubUrl });
+        window.close();
+      });
+    });
+  }
+
+  // Click author tag to open GitHub Repository
+  const githubRepoLink = document.getElementById("github-repo-link");
+  if (githubRepoLink) {
+    githubRepoLink.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://github.com/HuyTran1002/adblocker" });
+      window.close();
+    });
+  }
 });
