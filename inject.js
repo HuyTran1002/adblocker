@@ -269,9 +269,52 @@
               return;
             }
           }
+
+          // Gracefully resolve Chromium warning: "Allow attribute will take precedence over 'allowfullscreen'."
+          if (tag === 'iframe' && typeof name === 'string') {
+            const attrName = name.toLowerCase();
+            if (attrName === 'allowfullscreen') {
+              if (this.hasAttribute('allow')) {
+                const curAllow = this.getAttribute('allow') || '';
+                if (!curAllow.includes('fullscreen')) {
+                  originalSetAttribute.call(this, 'allow', curAllow ? `${curAllow}; fullscreen` : 'fullscreen');
+                }
+                return; // Suppress duplicate allowfullscreen to prevent Chromium console warning
+              }
+            } else if (attrName === 'allow') {
+              if (this.hasAttribute('allowfullscreen')) {
+                if (typeof value === 'string' && !value.includes('fullscreen')) {
+                  value = value ? `${value}; fullscreen` : 'fullscreen';
+                }
+                this.removeAttribute('allowfullscreen');
+              }
+            }
+          }
         }
         originalSetAttribute.call(this, name, value);
       };
+
+      if (typeof HTMLIFrameElement !== 'undefined' && HTMLIFrameElement.prototype) {
+        const iframeProto = HTMLIFrameElement.prototype;
+        const origAllowFullscreenDesc = Object.getOwnPropertyDescriptor(iframeProto, 'allowFullscreen');
+        if (origAllowFullscreenDesc && origAllowFullscreenDesc.set) {
+          Object.defineProperty(iframeProto, 'allowFullscreen', {
+            configurable: true,
+            enumerable: true,
+            get: origAllowFullscreenDesc.get,
+            set(val) {
+              if (val && this.hasAttribute('allow')) {
+                const curAllow = this.getAttribute('allow') || '';
+                if (!curAllow.includes('fullscreen')) {
+                  this.setAttribute('allow', curAllow ? `${curAllow}; fullscreen` : 'fullscreen');
+                }
+                return;
+              }
+              origAllowFullscreenDesc.set.call(this, val);
+            }
+          });
+        }
+      }
     } catch (e) { }
 
     function isAdBait(el) {
