@@ -27,11 +27,20 @@
       "requestDomains": [
         "animevietsub.li",
         "animevietsub.by",
+        "animevietsub.tv",
+        "animevietsub.net",
+        "animevietsub.org",
+        "animevietsub.cc",
         "media.animevietsub.li",
         "media.animevietsub.by",
         "static.animevietsub.li",
         "cdn.animevietsub.li",
-        "api.animevietsub.li"
+        "api.animevietsub.li",
+        "play.animevietsub.li",
+        "s1.animevietsub.li",
+        "s2.animevietsub.li",
+        "s3.animevietsub.li",
+        "rt.animevietsub.li"
       ],
       "resourceTypes": [
         "main_frame",
@@ -40,6 +49,8 @@
         "xmlhttprequest",
         "image",
         "media",
+        "websocket",
+        "font",
         "other"
       ]
     }
@@ -81,7 +92,19 @@
         "cdn.jsdelivr.net",
         "cdnjs.cloudflare.com",
         "unpkg.com",
-        "ajax.googleapis.com"
+        "ajax.googleapis.com",
+        "vidspeed.cc",
+        "streamhub.ink",
+        "streamtape.com",
+        "doodstream.com",
+        "filemoon.sx",
+        "streamwish.to",
+        "streamruby.com",
+        "faststream.in",
+        "playstream.xyz",
+        "superstream.tv",
+        "2embed.to",
+        "2embed.cc"
       ],
       "resourceTypes": [
         "script",
@@ -106,15 +129,23 @@
         "animevietsub.li",
         "animevietsub.by",
         "animevietsub.tv",
+        "animevietsub.net",
         "motphimc.app",
         "motphim.to",
-        "tramphim.net"
+        "tramphim.net",
+        "vidspeed.cc",
+        "streamhub.ink"
       ],
       "resourceTypes": [
-        "media",
+        "main_frame",
+        "sub_frame",
+        "script",
+        "image",
         "xmlhttprequest",
+        "media",
         "websocket",
-        "font"
+        "font",
+        "other"
       ]
     }
   },

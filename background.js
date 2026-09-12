@@ -323,8 +323,50 @@ async function updateOnlineFilters() {
   }
 }
 
+// Immediately sanitize existing dynamic DNR rules in browser storage to ensure no safe/media domain is blocked
+async function sanitizeExistingDynamicRules() {
+  if (!chrome.declarativeNetRequest) return;
+  try {
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    const dynamicBlockRules = existing.filter(r => r.id >= 20000 && r.id < 30000);
+    const rulesToRemove = [];
+    const rulesToUpdate = [];
+    for (const rule of dynamicBlockRules) {
+      if (rule.condition && rule.condition.requestDomains) {
+        const hasSafeDomain = rule.condition.requestDomains.some(d => SAFE_EXCLUDED.some(kw => d.includes(kw)));
+        if (hasSafeDomain) {
+          const cleanedDomains = rule.condition.requestDomains.filter(d => !SAFE_EXCLUDED.some(kw => d.includes(kw)));
+          rulesToRemove.push(rule.id);
+          if (cleanedDomains.length > 0) {
+            rulesToUpdate.push({
+              ...rule,
+              condition: {
+                ...rule.condition,
+                requestDomains: cleanedDomains
+              }
+            });
+          }
+        }
+      }
+    }
+    if (rulesToRemove.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: rulesToRemove,
+        addRules: rulesToUpdate
+      });
+      console.log(`[Anti Pop-Under] Sanitized ${rulesToRemove.length} dynamic DNR rules containing media/player domains!`);
+    }
+  } catch (err) {
+    console.warn('[Anti Pop-Under] Sanitize dynamic rules error:', err);
+  }
+}
+
+// Sanitize dynamic rules immediately on background service worker start
+sanitizeExistingDynamicRules();
+
 // Initialize storage on install
 chrome.runtime.onInstalled.addListener(() => {
+  sanitizeExistingDynamicRules();
   chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "sessionStartTime", "disabledDomains", "manualFilters", "customBlockedSelectors", "onlineFilterStats"], (result) => {
     const res = result || {};
     if (res.enabled === undefined) {
