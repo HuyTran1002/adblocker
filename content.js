@@ -1059,6 +1059,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
     // --- GLOBAL CLICK INTERCEPTOR (ANTI-CLICKJACKING) ---
     document.addEventListener('click', function(e) {
+      if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       try {
         let target = e.target;
@@ -1579,19 +1580,26 @@ if (window.location.hostname.includes('youtube.com')) {
         mount.appendChild(cursorStyle);
       }
 
+      // Focus page immediately so Esc key works without needing a prior click
+      try {
+        window.focus();
+        if (document.body) document.body.focus();
+        else if (document.documentElement) document.documentElement.focus();
+      } catch (err) { }
+
       function renderInstructionBadge() {
         if (!pickerBadge) return;
         pickerBadge.innerHTML = `
           <div class="abm-badge-row abm-badge-row-header" style="justify-content: space-between; width: 100%;">
             <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
               <span style="font-size: 13px;">🎯</span>
-              <span style="font-weight: 600; color: #cbd5e1; font-size: 11px; white-space: nowrap;">Chạm phần tử để chọn</span>
+              <span style="font-weight: 600; color: #cbd5e1; font-size: 11px; white-space: nowrap;">Di chuột hoặc bấm phần tử để chặn</span>
             </div>
-            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: #e2e8f0; padding: 3px 8px; font-size: 10.5px;">✕ Thoát</button>
+            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22); border-radius: 12px; color: #e2e8f0; padding: 3px 10px; font-size: 11px; font-weight: 600;">✕ Thoát (Esc)</button>
           </div>
         `;
         const cncBtn = document.getElementById('abm-cancel-btn');
-        if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
+        if (cncBtn) cncBtn.onclick = (e) => { e.stopPropagation(); stopTargetPicker(); };
       }
 
       function updateOverlay(el) {
@@ -1615,23 +1623,47 @@ if (window.location.hostname.includes('youtube.com')) {
 
         if (!pickerBadge) return;
 
-        // When NOT locked (just hovering over elements before clicking):
+        // When NOT locked (hovering over element): Show element selector + instant Block button + Escape
         if (!isLocked) {
           pickerBadge.innerHTML = `
-            <div class="abm-badge-row abm-badge-row-header" style="justify-content: space-between; width: 100%;">
-              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
-                <span style="font-size: 13px;">🎯</span>
-                <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
-              </div>
-              <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: #e2e8f0; padding: 3px 8px; font-size: 10.5px;">✕ Thoát</button>
+            <div class="abm-badge-row abm-badge-row-header">
+              <span style="font-size: 13px;">🎯</span>
+              <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+            </div>
+            <div class="abm-badge-row abm-badge-row-actions">
+              <button id="abm-lock-btn" class="abm-btn abm-btn-reselect" title="Bấm vào để khóa và tinh chỉnh phần tử này">🔒 Chọn</button>
+              <button id="abm-block-btn" class="abm-btn abm-btn-block" title="Chặn và ẩn phần tử này ngay (Enter)">🚫 Chặn</button>
+              <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" title="Thoát chế độ chọn (Esc)">✕ Thoát</button>
             </div>
           `;
+
+          const lockBtn = document.getElementById('abm-lock-btn');
+          if (lockBtn) {
+            lockBtn.onclick = (e) => {
+              e.stopPropagation();
+              lockElement(el);
+            };
+          }
+
+          const blkBtn = document.getElementById('abm-block-btn');
+          if (blkBtn) {
+            blkBtn.onclick = (e) => {
+              e.stopPropagation();
+              confirmAndBlockElement(el);
+            };
+          }
+
           const cncBtn = document.getElementById('abm-cancel-btn');
-          if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
+          if (cncBtn) {
+            cncBtn.onclick = (e) => {
+              e.stopPropagation();
+              stopTargetPicker();
+            };
+          }
           return;
         }
 
-        // When LOCKED (user has clicked to select):
+        // When LOCKED (user has selected/locked element):
         const canShrink = historyIndex > 0;
         pickerBadge.innerHTML = `
           <div class="abm-badge-row abm-badge-row-header">
@@ -1639,11 +1671,11 @@ if (window.location.hostname.includes('youtube.com')) {
             <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
           </div>
           <div class="abm-badge-row abm-badge-row-actions">
-            <button id="abm-expand-btn" class="abm-btn" title="Mở rộng ra thẻ cha">🔼</button>
-            ${canShrink ? `<button id="abm-shrink-btn" class="abm-btn" title="Thu nhỏ lại">🔽</button>` : ''}
-            <button id="abm-reselect-btn" class="abm-btn abm-btn-reselect" title="Đổi phần tử khác">Đổi</button>
-            <button id="abm-block-btn" class="abm-btn abm-btn-block" title="Chặn và ẩn phần tử này">🚫 Chặn</button>
-            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" title="Thoát">✕</button>
+            <button id="abm-expand-btn" class="abm-btn" title="Mở rộng vùng chọn ra thẻ cha">🔼</button>
+            ${canShrink ? `<button id="abm-shrink-btn" class="abm-btn" title="Thu nhỏ lại phần tử con">🔽</button>` : ''}
+            <button id="abm-reselect-btn" class="abm-btn abm-btn-reselect" title="Đổi chọn phần tử khác">Đổi</button>
+            <button id="abm-block-btn" class="abm-btn abm-btn-block" title="Xác nhận chặn phần tử này (Enter)">🚫 Chặn</button>
+            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" title="Thoát (Esc)">✕</button>
           </div>
         `;
 
@@ -1717,20 +1749,25 @@ if (window.location.hostname.includes('youtube.com')) {
 
       function onMouseMove(e) {
         if (!isTargetPickerActive || isLocked) return;
-        const target = document.elementFromPoint(e.clientX, e.clientY);
+        let target = e.target;
+        if (!target || target === pickerOverlay) {
+          if (pickerOverlay) pickerOverlay.style.display = 'none';
+          target = document.elementFromPoint(e.clientX, e.clientY);
+          if (pickerOverlay) pickerOverlay.style.display = 'block';
+        }
         if (target && pickerBadge && !pickerBadge.contains(target) && target !== pickerOverlay) {
           updateOverlay(target);
         }
       }
 
-      function handleSelectionAtPoint(clientX, clientY) {
-        const target = document.elementFromPoint(clientX, clientY);
-        if (target && target !== pickerOverlay && (!pickerBadge || !pickerBadge.contains(target))) {
-          targetHistory = [target];
-          historyIndex = 0;
-          isLocked = true;
-          updateOverlay(target);
-        }
+      function lockElement(target) {
+        if (!target || target === pickerOverlay || target === pickerBadge || (pickerBadge && pickerBadge.contains(target))) return;
+        if (target === document.body || target === document.documentElement) return;
+        targetHistory = [target];
+        historyIndex = 0;
+        isLocked = true;
+        currentHoveredTarget = target;
+        updateOverlay(target);
       }
 
       function onClick(e) {
@@ -1739,7 +1776,18 @@ if (window.location.hostname.includes('youtube.com')) {
         
         e.preventDefault();
         e.stopPropagation();
-        handleSelectionAtPoint(e.clientX, e.clientY);
+        e.stopImmediatePropagation();
+
+        let target = e.target;
+        if (!target || target === pickerOverlay || target === document.body || target === document.documentElement) {
+          if (pickerOverlay) pickerOverlay.style.display = 'none';
+          target = document.elementFromPoint(e.clientX, e.clientY);
+          if (pickerOverlay) pickerOverlay.style.display = 'block';
+        }
+
+        if (target) {
+          lockElement(target);
+        }
       }
 
       function onTouchStartPicker(e) {
@@ -1747,24 +1795,40 @@ if (window.location.hostname.includes('youtube.com')) {
         if (pickerBadge && (pickerBadge.contains(e.target) || e.target === pickerBadge)) return;
         if (e.touches && e.touches[0]) {
           const t = e.touches[0];
-          const target = document.elementFromPoint(t.clientX, t.clientY);
-          if (target && target !== pickerOverlay && (!pickerBadge || !pickerBadge.contains(target))) {
+          let target = e.target;
+          if (!target || target === pickerOverlay || target === document.body || target === document.documentElement) {
+            if (pickerOverlay) pickerOverlay.style.display = 'none';
+            target = document.elementFromPoint(t.clientX, t.clientY);
+            if (pickerOverlay) pickerOverlay.style.display = 'block';
+          }
+          if (target) {
             e.preventDefault();
             e.stopPropagation();
-            handleSelectionAtPoint(t.clientX, t.clientY);
+            lockElement(target);
           }
         }
       }
 
       function onKeyDown(e) {
         if (!isTargetPickerActive) return;
-        if (e.key === 'Escape') {
+        const key = e.key || '';
+        const code = e.keyCode || e.which;
+        if (key === 'Escape' || key === 'Esc' || code === 27) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           stopTargetPicker();
-        } else if (e.key === 'Enter') {
+          return;
+        }
+        if (key === 'Enter' || code === 13) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           const toBlock = targetHistory[historyIndex] || currentHoveredTarget;
           if (toBlock) {
             confirmAndBlockElement(toBlock);
           }
+          return;
         }
       }
 
@@ -1783,12 +1847,18 @@ if (window.location.hostname.includes('youtube.com')) {
       window.addEventListener('click', onClick, true);
       window.addEventListener('touchstart', onTouchStartPicker, { capture: true, passive: false });
       window.addEventListener('keydown', onKeyDown, true);
+      document.addEventListener('keydown', onKeyDown, true);
+      window.addEventListener('keyup', onKeyDown, true);
+      document.addEventListener('keyup', onKeyDown, true);
 
       pickerCleanup = () => {
         window.removeEventListener('mousemove', onMouseMove, true);
         window.removeEventListener('click', onClick, true);
         window.removeEventListener('touchstart', onTouchStartPicker, true);
         window.removeEventListener('keydown', onKeyDown, true);
+        document.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('keyup', onKeyDown, true);
+        document.removeEventListener('keyup', onKeyDown, true);
         const cStyle = document.getElementById('adblock-max-cursor-override');
         if (cStyle && cStyle.parentNode) cStyle.remove();
         const pStyle = document.getElementById('adblock-max-picker-style');

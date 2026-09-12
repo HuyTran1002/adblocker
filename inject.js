@@ -513,6 +513,8 @@
       lastInteractionEvent = e;
 
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      // Never block interactions when Target Picker mode is active on page
+      if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
       const target = e.target;
       if (!target) return;
 
