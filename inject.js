@@ -1856,46 +1856,6 @@
     } catch (e) { }
 
     setInterval(scheduleClear, 2000);
-
-    // 10. Instant YouTube Ad Fast-Forward & Zero-Delay Auto-Skipper
-    function setupYouTubeInstantPlayback() {
-      function accelerateAndSkipAds() {
-        const player = document.querySelector('.html5-video-player, #movie_player');
-        if (!player) return;
-
-        const isAdActive = player.classList.contains('ad-showing') ||
-                           player.classList.contains('ad-interrupting') ||
-                           document.querySelector('.ytp-ad-player-overlay, .ytp-ad-showing, .ytp-ad-text');
-
-        if (isAdActive) {
-          const video = player.querySelector('video');
-          if (video) {
-            video.muted = true;
-            video.playbackRate = 16;
-            if (isFinite(video.duration) && video.duration > 0) {
-              video.currentTime = video.duration;
-            }
-          }
-
-          const skipSelectors = [
-            '.ytp-skip-ad-button', '.ytp-ad-skip-button', '.ytp-ad-skip-button-modern',
-            '.ytp-ad-skip-button-slot button', '.ytp-ad-preview-container', 'button.ytp-ad-skip-button'
-          ];
-          for (const sel of skipSelectors) {
-            const btn = document.querySelector(sel);
-            if (btn) {
-              if (typeof simulateNativeClick === 'function') simulateNativeClick(btn);
-              else btn.click();
-              break;
-            }
-          }
-        }
-      }
-
-      setInterval(accelerateAndSkipAds, 50);
-      window.addEventListener('timeupdate', accelerateAndSkipAds, true);
-    }
-    setupYouTubeInstantPlayback();
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
