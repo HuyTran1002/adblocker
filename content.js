@@ -234,10 +234,27 @@ function injectAdBlockCSS() {
   div:has(> a[href*="net88"]),
   div:has(> a[href*="uk88"]),
   div:has(> a[href*="rikvip"]),
+  div:has(> a[href*="rikvipchinhhang"]),
   div:has(> a[href*="bom88"]),
   div:has(> a[href*="cm88"]),
   div:has(> a[href*="vsbet"]),
-  div:has(> a[href*="musicskins"]) {
+  div:has(> a[href*="musicskins"]),
+  /* motphimc.app PopupAd - Radix UI Dialog overlay (z-[9998]) and modal (z-[9999]) */
+  [data-state="open"][class*="z-[9998]"],
+  [data-state="open"][class*="z-[9999]"],
+  [data-radix-popper-content-wrapper],
+  /* Popup dialog containing gambling/ad links */
+  [role="dialog"]:has(a[href*="rikvip"]),
+  [role="dialog"]:has(a[href*="rikvipchinhhang"]),
+  [role="dialog"]:has(a[href*="adcenter"]),
+  [role="dialog"]:has(a[href*="78win"]),
+  [role="dialog"]:has(img[src*="adcenter"]),
+  [aria-modal="true"]:has(a[href*="rikvip"]),
+  [aria-modal="true"]:has(a[href*="rikvipchinhhang"]),
+  /* Block adcenter.cx iframes */
+  iframe[src*="adcenter.cx"],
+  img[src*="adcenter.cx"],
+  a[href*="adcenter.cx"] {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -2193,3 +2210,82 @@ if (window.location.hostname.includes('youtube.com')) {
     }
     // --- END MANUAL ELEMENT BLOCKER ---
 
+    // === motphimc.app PopupAd Guardian ===
+    // Radix UI Dialog popup overlay renders after 1500ms delay;
+    // CSS alone can't catch it reliably, so we use a MutationObserver.
+    (function motphimPopupGuard() {
+      if (!window.location.hostname.includes('motphimc')) return;
+
+      const GAMBLING_HREFS = [
+        'rikvip', 'rikvipchinhhang', '78win', 'adcenter', 'bom88', 'gem88',
+        'net88', 'uk88', 'vsbet', 'musicskins', '789bet', 'fun88', 'kubet'
+      ];
+
+      function isPopupOrOverlay(el) {
+        if (!el || !el.classList) return false;
+        const cls = el.className || '';
+        // Radix Dialog overlay uses z-[9998], modal uses z-[9999]
+        if (cls.includes('z-[9998]') || cls.includes('z-[9999]')) return true;
+        // dialog role with gambling link inside
+        if (el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true') {
+          const links = el.querySelectorAll('a[href]');
+          for (const a of links) {
+            if (GAMBLING_HREFS.some(kw => (a.href || '').toLowerCase().includes(kw))) return true;
+          }
+          const imgs = el.querySelectorAll('img[src]');
+          for (const img of imgs) {
+            if (GAMBLING_HREFS.some(kw => (img.src || '').toLowerCase().includes(kw))) return true;
+          }
+        }
+        return false;
+      }
+
+      function scanAndRemovePopups(root) {
+        const candidates = (root || document).querySelectorAll(
+          '[class*="z-[9998]"], [class*="z-[9999]"], [role="dialog"], [aria-modal="true"]'
+        );
+        candidates.forEach(el => {
+          if (isPopupOrOverlay(el)) {
+            el.remove();
+            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
+          }
+        });
+        // Also reset body overflow if it was locked by the popup
+        if (document.body && document.body.style.overflow === 'hidden') {
+          document.body.style.overflow = '';
+        }
+      }
+
+      const popupObserver = new MutationObserver((mutations) => {
+        for (const mut of mutations) {
+          for (const node of mut.addedNodes) {
+            if (node.nodeType === 1) {
+              if (isPopupOrOverlay(node)) {
+                node.remove();
+                if (document.body && document.body.style.overflow === 'hidden') {
+                  document.body.style.overflow = '';
+                }
+              } else {
+                // Check children of added node
+                scanAndRemovePopups(node);
+              }
+            }
+          }
+        }
+      });
+
+      const startObserver = () => {
+        if (document.body) {
+          popupObserver.observe(document.body, { childList: true, subtree: true });
+          // Also scan immediately in case popup already exists
+          scanAndRemovePopups(document);
+        }
+      };
+
+      if (document.body) {
+        startObserver();
+      } else {
+        document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+      }
+    })();
+    // === END motphimc.app PopupAd Guardian ===

@@ -1694,5 +1694,28 @@
         "cm8806.com"
       ]
     }
+  },
+  {
+    "id": 312,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "adcenter.cx",
+        "78win.com",
+        "78win.net"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
   }
 ]
