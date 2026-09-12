@@ -974,7 +974,8 @@
     'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin',
     'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88',
     'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai',
-    'qq88', 'xx88', 'bet789'
+    'qq88', 'xx88', 'bet789',
+    'bom88', 'gem88', 'uk88', 'net88', 'vsbet', '6789x', 'adqc', 'musicskins', 'rikvipchinhhang', 'uk88chinhhang'
   ];
 
   const adUrlKeywords = [
@@ -993,7 +994,8 @@
     '/preroll', '/midroll', '/postroll', 'streamux.top',
     'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
     'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
-    'yqxtm.com', 'kwai.net/bs2/ad-'
+    'yqxtm.com', 'kwai.net/bs2/ad-',
+    'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim', 'no-ads-under'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');

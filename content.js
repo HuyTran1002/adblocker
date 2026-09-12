@@ -107,7 +107,15 @@ const adSelectors = [
 
   // Xemcliphot & Cliphotnew floating gambling banners
   '.telegram2', '.telegram2-close', '#telegram2', 'div.telegram2',
-  'a[href*="bboocclink015"]', 'a[href*="linkroyal.workers.dev"]', 'a[href*="shortlink.linkroyal"]'
+  'a[href*="bboocclink015"]', 'a[href*="linkroyal.workers.dev"]', 'a[href*="shortlink.linkroyal"]',
+
+  // Motphim & MusicSkins network ads, catfishes, popups and topfish banners
+  '.no-ads-under', '[class*="no-ads-under"]', '.ads-banner', '[class*="ads-banner"]',
+  'button[aria-label*="hide ads" i]', 'button[aria-label*="hide all ads" i]',
+  'button[aria-label*="topfish" i]', 'button[aria-label*="catfish" i]',
+  'a[href*="adqc.net"]', 'a[href*="6789x"]', 'a[href*="cm8806"]',
+  'a[href*="gem88"]', 'a[href*="rikvip"]', 'a[href*="net88"]', 'a[href*="uk88"]',
+  'a[href*="musicskins"]', 'a[href*="bom88"]', 'a[href*="vsbet"]'
 ];
 
 function injectAdBlockCSS() {
@@ -214,7 +222,22 @@ function injectAdBlockCSS() {
   div:has(> a[href*="bit.ly/"][rel*="sponsored"]),
   div:has(> a[href*="shbet"]),
   div:has(> a[href*="f8bet"]),
-  div:has(> a[href*="789bet"]) {
+  div:has(> a[href*="789bet"]),
+  div:has(> a.no-ads-under),
+  div:has(> button[aria-label*="hide ads" i]),
+  div:has(> button[aria-label*="hide all ads" i]),
+  div:has(> button[aria-label*="topfish" i]),
+  div:has(> button[aria-label*="catfish" i]),
+  div:has(> a[href*="adqc"]),
+  div:has(> a[href*="6789x"]),
+  div:has(> a[href*="gem88"]),
+  div:has(> a[href*="net88"]),
+  div:has(> a[href*="uk88"]),
+  div:has(> a[href*="rikvip"]),
+  div:has(> a[href*="bom88"]),
+  div:has(> a[href*="cm88"]),
+  div:has(> a[href*="vsbet"]),
+  div:has(> a[href*="musicskins"]) {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -463,7 +486,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin', 
       'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88',
       'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai',
-      'qq88', 'xx88', 'bet789'
+      'qq88', 'xx88', 'bet789',
+      'bom88', 'gem88', 'uk88', 'net88', 'vsbet', '6789x', 'adqc', 'musicskins', 'rikvipchinhhang', 'uk88chinhhang'
     ];
 
     const adUrlKeywords = [
@@ -481,7 +505,8 @@ if (window.location.hostname.includes('youtube.com')) {
       '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
       '/preroll', '/midroll', '/postroll', 'streamux.top',
       'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
-      'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com'
+      'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
+      'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -640,7 +665,8 @@ if (window.location.hostname.includes('youtube.com')) {
 
           const hrefLower = href.toLowerCase();
           const matchesGambling = gamblingRegex.test(hrefLower) ||
-                                  (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99') || targetDomain.includes('789') || /club|bet/i.test(targetDomain)));
+                                  (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99') || targetDomain.includes('789') || /club|bet/i.test(targetDomain))) ||
+                                  targetDomain.includes('adqc') || targetDomain.includes('6789x') || targetDomain.includes('musicskins') || hrefLower.includes('no-ads-under');
 
           const matchesAdServer = adUrlRegex.test(hrefLower);
           const img = anchor.querySelector('img');

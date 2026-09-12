@@ -1668,5 +1668,23 @@
         "linkroyal.workers.dev"
       ]
     }
+  },
+  {
+    "id": 311,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "adqc.net",
+        "6789x.site",
+        "gem88.gift",
+        "rikvipchinhhang.com",
+        "net88.blue",
+        "uk88chinhhang.com",
+        "cm8806.com"
+      ]
+    }
   }
 ]
