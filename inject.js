@@ -2,6 +2,16 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
+  // Diagnostic listener to log exact URLs of any failed script/resource loads
+  window.addEventListener('error', function (e) {
+    if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK' || e.target.tagName === 'IFRAME')) {
+      const srcUrl = e.target.src || e.target.href || '';
+      if (srcUrl) {
+        console.warn('[Anti Pop-Under Diagnostic] Resource failed to load:', e.target.tagName, srcUrl);
+      }
+    }
+  }, true);
+
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function () {
