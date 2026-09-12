@@ -254,7 +254,9 @@ function injectAdBlockCSS() {
     .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"],
     [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
     [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
-    [class*="hero-anim"], [class*="backdrop"]
+    [class*="hero-anim"], [class*="backdrop"],
+    .thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, .vjs-sublime-skin, [class*="vjs-"],
+    .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"]
   ) {
     visibility: visible !important;
     pointer-events: auto !important;
@@ -266,7 +268,7 @@ function injectAdBlockCSS() {
 
   img:is(
     [src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"],
-    [src*="poster"], [src*="thumb"], [src*="cover"],
+    [src*="poster"], [src*="thumb"], [src*="cover"], [src*="cdn77"],
     [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"],
     [src*="ophim"], [src*="vsmov"], [src*="themoviedb"],
     [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]
@@ -557,7 +559,9 @@ if (window.location.hostname.includes('youtube.com')) {
           '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
           '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
           '[class*="hero-anim"], [class*="backdrop"], ' +
-          '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"]'
+          '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"], ' +
+          '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+          '[id*="player_one"], .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"]'
         )) return true;
 
         const tag = el.tagName ? el.tagName.toUpperCase() : '';
@@ -565,14 +569,14 @@ if (window.location.hostname.includes('youtube.com')) {
           const src = (el.src || '').toLowerCase();
           const alt = (el.getAttribute('alt') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
-          if (src.includes('animevietsub') || src.includes('phim') || src.includes('film') || src.includes('movie') || src.includes('poster') || src.includes('thumb') || src.includes('cover')) return true;
+          if (src.includes('animevietsub') || src.includes('phim') || src.includes('film') || src.includes('movie') || src.includes('poster') || src.includes('thumb') || src.includes('cover') || src.includes('cdn77')) return true;
           if (src.includes('tmdb.org') || src.includes('wsrv.nl') || src.includes('nguonc.com') || src.includes('phimimg.com') || src.includes('ophim') || src.includes('vsmov') || src.includes('themoviedb')) return true;
           if (alt.includes('phim') || alt.includes('tập') || alt.includes('season') || alt.includes('episode')) return true;
           if (title.includes('phim') || title.includes('tập') || title.includes('season') || title.includes('episode')) return true;
         }
 
         if (el.querySelector && el.querySelector(
-          'img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"], ' +
+          'img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"], img[src*="cdn77"], ' +
           'img[src*="tmdb.org"], img[src*="wsrv.nl"], img[src*="nguonc.com"], img[src*="phimimg.com"], img[src*="ophim"], img[src*="vsmov"], img[src*="themoviedb"]'
         )) {
           return true;
@@ -683,16 +687,19 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
                 break;
               }
+
+              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
+              if (isMediaOrThumb) break;
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -757,16 +764,19 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
                 break;
               }
+
+              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
+              if (isMediaOrThumb) break;
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -816,16 +826,19 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
                 break;
               }
+
+              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
+              if (isMediaOrThumb) break;
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -875,16 +888,19 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
                 break;
               }
+
+              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
+              if (isMediaOrThumb) break;
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;

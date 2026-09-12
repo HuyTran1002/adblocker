@@ -55,7 +55,7 @@ const SAFE_EXCLUDED = [
   'facebook', 'github', 'microsoft', 'apple', 'cloudflare',
   'cdnjs', 'jsdelivr', 'animevietsub', 'phim', 'embed', 'm3u8',
   'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
-  'mflix', 'hotp', 'playerstream', 'hotphim'
+  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn'
 ];
 
 function isSafeAdDomain(dom) {
