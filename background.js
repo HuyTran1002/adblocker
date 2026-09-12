@@ -51,7 +51,7 @@ const FILTER_SOURCES = {
 };
 
 const SAFE_EXCLUDED = [
-  'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1',
+  'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1', 'gstatic',
   'facebook', 'github', 'microsoft', 'apple', 'cloudflare',
   'cdnjs', 'jsdelivr', 'animevietsub', 'phim', 'embed', 'm3u8',
   'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',

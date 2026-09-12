@@ -9,11 +9,16 @@
       "requestDomains": [
         "googlevideo.com",
         "ytimg.com",
-        "ggpht.com"
+        "ggpht.com",
+        "gstatic.com",
+        "www.gstatic.com"
       ],
       "resourceTypes": [
         "media",
-        "image"
+        "image",
+        "script",
+        "other",
+        "font"
       ]
     }
   },

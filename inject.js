@@ -2,12 +2,13 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
-  // Diagnostic listener to log exact URLs of any failed script/resource loads
+  // Diagnostic listener to log unexpected player/media resource load failures
   window.addEventListener('error', function (e) {
     if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK' || e.target.tagName === 'IFRAME')) {
-      const srcUrl = e.target.src || e.target.href || '';
-      if (srcUrl) {
-        console.warn('[Anti Pop-Under Diagnostic] Resource failed to load:', e.target.tagName, srcUrl);
+      const srcUrl = (e.target.src || e.target.href || '').toLowerCase();
+      // Skip expected blocked ad trackers to keep console clean
+      if (srcUrl && !srcUrl.includes('doubleclick') && !srcUrl.includes('googlesyndication') && !srcUrl.includes('googleadservices') && !srcUrl.includes('adqc') && !srcUrl.includes('adsterra') && !srcUrl.includes('popads')) {
+        console.warn('[Anti Pop-Under Diagnostic] Resource failed to load:', e.target.tagName, e.target.src || e.target.href);
       }
     }
   }, true);
