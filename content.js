@@ -92,7 +92,13 @@ const adSelectors = [
   '#popBannerAds', '#topBannerContainer', '#bottomBannerContainer', '#underPlayerAdsContainer',
   '.under-player-banner', '.top-banner-wrapper', '.bottom-banner-wrapper', '.top-banner-item',
   '.bottom-banner-item', '.pop-banner-close-btn', '.top-banner-close-btn', '.bottom-banner-close-btn',
-  'img[src*="adspro.name"]'
+  'img[src*="adspro.name"]',
+
+  // VLXX & Adxcontent network banners, catfishes and hidden clickjack links
+  '#vl-top-adx', '#vl-native-adx', '[id*="vl-"][id*="-adx"]',
+  '.banner-preload-container', '[class*="banner-preload"]',
+  '.catfish-top-container', '.catfish-bottom-container', '[class*="catfish-top"]', '[class*="catfish-bottom"]',
+  'a[id^="bb"][style*="opacity:0"]', 'a[id^="bb"][style*="1px"]', 'a[id^="bb"][target="_blank"]'
 ];
 
 function injectAdBlockCSS() {
@@ -132,7 +138,11 @@ function injectAdBlockCSS() {
   iframe[src*="mnaspm"], iframe[src*="mayzaent"], iframe[src*="prplad"], iframe[src*="smartpop"],
   iframe[src*="vast"], iframe[src*="vpaid"], iframe[src*="adformat"], iframe[src*="trafficjunky"],
   iframe[src*="tsyndicate"], iframe[src*="adxadserv"], iframe[src*="a-ads.com"],
+  iframe[src*="adxcontent"],
   ins[data-zoneid], ins[class*="eas"], #adbd, .overdiv,
+  #vl-top-adx, #vl-native-adx, .banner-preload-container,
+  .catfish-top-container, .catfish-bottom-container,
+  a[id^="bb"][style*="opacity:0"], a[id^="bb"][style*="1px"],
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
   .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper {
@@ -409,7 +419,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
       'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88',
       'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin', 
-      'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88'
+      'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88',
+      'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai'
     ];
 
     const adUrlKeywords = [
@@ -425,7 +436,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'jads.co', '9splt.com', 'yuelongyy.com', 'juicyads', 'getjuicy',
       'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
       '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
-      '/preroll', '/midroll', '/postroll', 'streamux.top'
+      '/preroll', '/midroll', '/postroll', 'streamux.top',
+      'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -560,9 +572,17 @@ if (window.location.hostname.includes('youtube.com')) {
           const isExternal = targetDomain && cleanDom(targetDomain) !== cleanDom(currentDomain);
           if (!isExternal) return;
 
+          // Check if anchor is a dummy click trap (e.g. #bb0, #bb1 with 1px / opacity 0)
+          const anchorId = (anchor.id || '').toLowerCase();
+          const anchorStyle = anchor.getAttribute('style') || '';
+          if (anchorId.startsWith('bb') || anchorStyle.includes('opacity:0') || anchorStyle.includes('opacity: 0') || (anchorStyle.includes('1px') && anchorStyle.includes('height'))) {
+            try { anchor.remove(); } catch (e) {}
+            return;
+          }
+
           const hrefLower = href.toLowerCase();
           const matchesGambling = gamblingRegex.test(hrefLower) ||
-                                  (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99')));
+                                  (/\d{2,}/.test(targetDomain) && (targetDomain.includes('88') || targetDomain.includes('99') || targetDomain.includes('789') || /club|bet/i.test(targetDomain)));
 
           const matchesAdServer = adUrlRegex.test(hrefLower);
           const img = anchor.querySelector('img');
