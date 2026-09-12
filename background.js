@@ -52,10 +52,13 @@ const FILTER_SOURCES = {
 
 const SAFE_EXCLUDED = [
   'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1', 'gstatic',
-  'facebook', 'github', 'microsoft', 'apple', 'cloudflare',
-  'cdnjs', 'jsdelivr', 'animevietsub', 'phim', 'embed', 'm3u8',
-  'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
-  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn',
+  'facebook', 'fbcdn', 'instagram', 'cdninstagram', 'tiktok', 'tiktokcdn', 'byteoversea', 'ibytedtos',
+  'github', 'microsoft', 'apple', 'cloudflare', 'cdnjs', 'jsdelivr', 'unpkg',
+  'vimeo', 'vimeocdn', 'twitch', 'ttvnw', 'jtvnw', 'dailymotion', 'dmcdn', 'bilibili', 'bilivideo', 'hdslb',
+  'netflix', 'nflxvideo', 'nflxext', 'nflximg', 'disneyplus', 'dssott', 'spotify', 'scdn', 'soundcloud', 'sndcdn',
+  'fptplay', 'vieon', 'tv360', 'vtv', 'vtvgo', 'kplus',
+  'animevietsub', 'phim', 'embed', 'm3u8', 'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
+  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn', 'vuighe', 'anime47', 'kkphim', 'subnhanh',
   // Video Player Engines, CDNs & Media Infrastructure
   'jwplayer', 'jwplatform', 'jwpcdn', 'jwpsrv', 'videojs', 'zencdn', 'plyr',
   'artplayer', 'dplayer', 'clappr', 'flowplayer', 'hls', 'dashjs',
@@ -63,7 +66,7 @@ const SAFE_EXCLUDED = [
   'iamcdn', 'streamhub', 'vidspeed', 'streamtape', 'doodstream', 'filemoon', 'streamwish',
   'streamruby', 'hydrax', 'faststream', 'playstream', '2embed', 'superstream',
   'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
-  'centrifuge', 'websocket', 'unpkg'
+  'centrifuge', 'websocket'
 ];
 
 function isSafeAdDomain(dom) {
