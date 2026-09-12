@@ -60,7 +60,7 @@ const SAFE_EXCLUDED = [
   'jwplayer', 'jwplatform', 'jwpcdn', 'jwpsrv', 'videojs', 'zencdn', 'plyr',
   'artplayer', 'dplayer', 'clappr', 'flowplayer', 'hls', 'dashjs',
   // Streaming CDNs & Hosts
-  'streamhub', 'vidspeed', 'streamtape', 'doodstream', 'filemoon', 'streamwish',
+  'iamcdn', 'streamhub', 'vidspeed', 'streamtape', 'doodstream', 'filemoon', 'streamwish',
   'streamruby', 'hydrax', 'faststream', 'playstream', '2embed', 'superstream',
   'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
   'centrifuge', 'websocket', 'unpkg'

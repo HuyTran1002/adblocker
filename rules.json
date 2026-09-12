@@ -80,6 +80,7 @@
     },
     "condition": {
       "requestDomains": [
+        "iamcdn.net",
         "jwplayer.com",
         "jwpcdn.com",
         "ssl.p.jwpcdn.com",
@@ -130,6 +131,7 @@
         "animevietsub.by",
         "animevietsub.tv",
         "animevietsub.net",
+        "iamcdn.net",
         "motphimc.app",
         "motphim.to",
         "tramphim.net",
