@@ -9,21 +9,69 @@
       window.location.hostname.includes('google') ||
       window.location.hostname.includes('doubleclick')) return;
 
+    // 1. Truthy & Falsy Anti-Adblock flags (Scriptlet set-constant emulation)
     const falsyProps = [
-      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'adblocker', 'adBlocker',
-      'isAdblock', 'isAdBlock', 'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled'
+      'adblock', 'adBlock', 'hasAdblock', 'hasAdBlock', 'hasAdBlocker', 'hasAdblocker',
+      'adblocker', 'adBlocker', 'isAdblock', 'isAdBlock', 'isAdblocker', 'isAdBlocker',
+      'adBlockDetected', 'adblockDetected', 'adBlockEnabled', 'adblockEnabled',
+      'adsBlocked', 'isAdBlockActive', 'abp', '_adblocker', '_adblock', 'blockedAds'
     ];
     falsyProps.forEach(prop => {
       try {
         Object.defineProperty(window, prop, {
           get() { return false; },
+          set(val) { /* ignore overwrite attempts by anti-adblockers */ },
+          configurable: true
+        });
+      } catch (e) { }
+    });
+
+    const truthyProps = [
+      'canRunAds', 'canRunAdsFast', 'adsAllowed', 'adAllowed', 'google_ad_status'
+    ];
+    truthyProps.forEach(prop => {
+      try {
+        Object.defineProperty(window, prop, {
+          get() { return prop === 'google_ad_status' ? 1 : true; },
           set(val) { /* ignore */ },
           configurable: true
         });
       } catch (e) { }
     });
 
+    // 2. Mock Classes for Anti-AdBlock libraries (FuckAdBlock, BlockAdBlock, Sniffer)
+    const createAntiAdBlockInstance = () => {
+      const inst = {
+        check: function () { return true; },
+        clearEvent: function () { return inst; },
+        on: function (detected, fn) {
+          if (!detected && typeof fn === 'function') {
+            try { fn(); } catch (e) { }
+          }
+          return inst;
+        },
+        onDetected: function () { return inst; },
+        onNotDetected: function (fn) {
+          if (typeof fn === 'function') {
+            try { fn(); } catch (e) { }
+          }
+          return inst;
+        },
+        setOption: function () { return inst; }
+      };
+      return inst;
+    };
+
+    const mockFabConstructor = function () { return createAntiAdBlockInstance(); };
+    mockFabConstructor.prototype = createAntiAdBlockInstance();
+
     const mockGlobals = {
+      fuckAdBlock: createAntiAdBlockInstance(),
+      FuckAdBlock: mockFabConstructor,
+      blockAdBlock: createAntiAdBlockInstance(),
+      BlockAdBlock: mockFabConstructor,
+      sniffAdBlock: createAntiAdBlockInstance(),
+      SniffAdBlock: mockFabConstructor,
       adsbygoogle: [],
       google_ad_client: 'ca-pub-mock',
       google_ad_slot: '1234567890',

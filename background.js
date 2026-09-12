@@ -235,7 +235,19 @@ async function updateOnlineFilters() {
           .map(r => r.id)
           .filter(id => id >= 20000 && id < 30000);
 
-        const domainsList = Array.from(allDomains).slice(0, 50000);
+        // Optimize: Prune redundant subdomains (e.g. if 'adserver.com' is present, prune 'ads.adserver.com')
+        const rawDomains = Array.from(allDomains);
+        const domainSet = new Set(rawDomains);
+        const prunedDomains = rawDomains.filter(domain => {
+          const parts = domain.split('.');
+          for (let i = 1; i < parts.length - 1; i++) {
+            const parent = parts.slice(i).join('.');
+            if (domainSet.has(parent)) return false;
+          }
+          return true;
+        });
+
+        const domainsList = prunedDomains.slice(0, 50000);
         let ruleIdCounter = 20000;
         const newRules = [];
 

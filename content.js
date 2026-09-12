@@ -196,6 +196,27 @@ function injectAdBlockCSS() {
     height: 0 !important;
   }
 
+  /* === SEMANTIC PROCEDURAL FILTERS (:has) FOR SPONSORED FEEDS & NATIVE ADS === */
+  article:has(span[aria-label*="Được tài trợ" i]),
+  article:has(span[aria-label*="Sponsored" i]),
+  article:has(span[aria-label*="Promoted" i]),
+  div[data-pagelet*="FeedUnit"]:has(span[aria-label*="Được tài trợ" i]),
+  div[data-pagelet*="FeedUnit"]:has(span[aria-label*="Sponsored" i]),
+  div[data-testid="cellInnerDiv"]:has(svg + span:is([aria-label*="Sponsored" i], [aria-label*="Ad" i])),
+  shreddit-post:has(shreddit-comment-badge[badge-type="sponsored"]),
+  div:has(> a[href*="/quang-cao/"]),
+  div:has(> a[href*="/ad-click/"]),
+  section:has(> [class*="sponsor-label"]),
+  div:has(> a[href*="bit.ly/"][rel*="sponsored"]),
+  div:has(> a[href*="shbet"]),
+  div:has(> a[href*="f8bet"]),
+  div:has(> a[href*="789bet"]) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    pointer-events: none !important;
+  }
+
   /* === END PRE-BLOCK === */
 
   /* Chỉ ép pointer-events: auto lên thẻ video và iframe trực tiếp */
@@ -888,6 +909,63 @@ if (window.location.hostname.includes('youtube.com')) {
         } catch(e) {}
       };
 
+      // Heuristic Visual Ad Inspector (detects IAB standard banner dimensions with external redirect links)
+      const checkHeuristicAdBanner = (el) => {
+        if (!el || el.nodeType !== 1 || el.hasAttribute('data-ad-blocked')) return;
+        if (isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return;
+
+        try {
+          const tag = el.tagName.toLowerCase();
+          if (tag !== 'div' && tag !== 'a' && tag !== 'section' && tag !== 'aside') return;
+
+          const w = el.offsetWidth || el.clientWidth;
+          const h = el.offsetHeight || el.clientHeight;
+          if (w <= 0 || h <= 0) return;
+
+          // Check standard IAB display ad banner dimensions (+/- 8px)
+          const isIABDim = (
+            (Math.abs(w - 728) <= 8 && Math.abs(h - 90) <= 8) ||   // Leaderboard
+            (Math.abs(w - 970) <= 8 && Math.abs(h - 90) <= 8) ||   // Large Leaderboard
+            (Math.abs(w - 970) <= 8 && Math.abs(h - 250) <= 8) ||  // Billboard
+            (Math.abs(w - 300) <= 8 && Math.abs(h - 250) <= 8) ||  // Medium Rectangle (MPU)
+            (Math.abs(w - 336) <= 8 && Math.abs(h - 280) <= 8) ||  // Large Rectangle
+            (Math.abs(w - 160) <= 8 && Math.abs(h - 600) <= 8) ||  // Wide Skyscraper
+            (Math.abs(w - 300) <= 8 && Math.abs(h - 600) <= 8) ||  // Half Page
+            (Math.abs(w - 320) <= 8 && Math.abs(h - 50) <= 8)  ||  // Mobile Leaderboard
+            (Math.abs(w - 320) <= 8 && Math.abs(h - 100) <= 8)     // Large Mobile Banner
+          );
+
+          if (!isIABDim) return;
+
+          const anchors = el.querySelectorAll('a');
+          const cleanDom = (d) => d.replace(/^www\./i, '');
+          let hasSuspiciousLink = false;
+
+          for (let i = 0; i < anchors.length; i++) {
+            const href = anchors[i].href || '';
+            if (!href || href.startsWith('javascript:') || href.startsWith('#')) continue;
+            try {
+              const aHost = new URL(href, window.location.href).hostname;
+              if (aHost && cleanDom(aHost) !== cleanDom(window.location.hostname)) {
+                const hrefLower = href.toLowerCase();
+                const rel = (anchors[i].getAttribute('rel') || '').toLowerCase();
+                if (gamblingRegex.test(hrefLower) || adUrlRegex.test(hrefLower) || 
+                    rel.includes('sponsored') || anchors[i].getAttribute('target') === '_blank') {
+                  hasSuspiciousLink = true;
+                  break;
+                }
+              }
+            } catch(err) {}
+          }
+
+          if (hasSuspiciousLink) {
+            el.setAttribute('data-ad-blocked', 'true');
+            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+            console.log('[Heuristic Inspector] Blocked IAB display banner:', `${w}x${h}`, el);
+          }
+        } catch(e) {}
+      };
+
       // Verify element itself
       if (tagName === 'a') {
         checkAnchor(el);
@@ -899,6 +977,7 @@ if (window.location.hostname.includes('youtube.com')) {
         checkVideo(el);
       }
       hideExplicitAd(el);
+      checkHeuristicAdBanner(el);
 
       // Verify children only if element has child elements
       if (el.childElementCount > 0) {
