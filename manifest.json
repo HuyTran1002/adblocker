@@ -15,6 +15,7 @@
     "storage",
     "contextMenus",
     "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
     "activeTab",
     "alarms"
   ],

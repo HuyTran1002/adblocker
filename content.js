@@ -229,6 +229,8 @@ function injectAdBlockCSS() {
   iframe[src*="embed"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
   iframe[src*="stream"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
   iframe[src*="video"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
+  iframe[src*="hotp"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
+  iframe[src*="hotphim"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
   iframe[class*="player"], iframe[id*="player"],
   #player-wrapper iframe, .player iframe, [class*="player"] iframe, [id*="player"] iframe {
     display: block !important;
@@ -729,7 +731,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
           const srcLower = src.toLowerCase();
           // Never hide movie player iframes
-          if (srcLower.includes('player') || srcLower.includes('embed') || srcLower.includes('stream') || srcLower.includes('video') || srcLower.includes('watch') || srcLower.includes('film') || srcLower.includes('movie') || srcLower.includes('vids') || srcLower.includes('hls') || srcLower.includes('m3u8') || srcLower.includes('mp4') || srcLower.includes('halim') || srcLower.includes('play')) {
+          if (srcLower.includes('player') || srcLower.includes('embed') || srcLower.includes('stream') || srcLower.includes('video') || srcLower.includes('watch') || srcLower.includes('film') || srcLower.includes('movie') || srcLower.includes('vids') || srcLower.includes('hls') || srcLower.includes('m3u8') || srcLower.includes('mp4') || srcLower.includes('halim') || srcLower.includes('play') || srcLower.includes('hotp') || srcLower.includes('hotphim')) {
             return;
           }
 

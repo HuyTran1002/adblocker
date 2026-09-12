@@ -1612,5 +1612,31 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 250,
+    "priority": 100,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "http://mflix.store/"
+        }
+      ]
+    },
+    "condition": {
+      "requestDomains": [
+        "cdn-1-hotp.com",
+        "hotphim.win"
+      ],
+      "resourceTypes": [
+        "sub_frame",
+        "xmlhttprequest",
+        "media",
+        "other"
+      ]
+    }
   }
 ]

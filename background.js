@@ -54,7 +54,8 @@ const SAFE_EXCLUDED = [
   'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1',
   'facebook', 'github', 'microsoft', 'apple', 'cloudflare',
   'cdnjs', 'jsdelivr', 'animevietsub', 'phim', 'embed', 'm3u8',
-  'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim'
+  'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
+  'mflix', 'hotp', 'playerstream', 'hotphim'
 ];
 
 function isSafeAdDomain(dom) {
