@@ -37,6 +37,10 @@
       VideoSlider: { init: function () { } },
       univresalP: function () { },
       pickDirect: function () { console.log('[Anti Pop-Under] Blocked pickDirect ad overlay'); },
+      funcGetvastAdx: function () { return []; },
+      funcJWonReadyVAST: function () { },
+      COUNT_VAST: 0,
+      show_adx: 0,
       google: {
         ima: {
           AdDisplayContainer: function () { return { initialize: function () { }, destroy: function () { } }; },
@@ -62,6 +66,13 @@
         }
       } catch (e) { }
     });
+
+    try {
+      window.funcGetvastAdx = function () { return []; };
+      window.funcJWonReadyVAST = function () { };
+      window.COUNT_VAST = 0;
+      window.show_adx = 0;
+    } catch (e) { }
 
     try {
       const dummyAdProvider = { push: function () { } };
@@ -394,10 +405,13 @@
   function isInteractiveElement(el) {
     if (!el) return false;
     try {
+      // In embedded iframes (e.g. video players like play.vlstream.net), clicks are always legitimate user gestures
+      if (window.self !== window.top) return true;
+
       const tagName = el.tagName.toLowerCase();
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
-      if (el.closest('div, section') && el.closest('div, section').querySelector('video')) return true;
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, #box, .loader, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
+      if (el.closest('div, section') && el.closest('div, section').querySelector('video, #box, .jwplayer')) return true;
 
       if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"]')) return true;
       const style = window.getComputedStyle(el);
@@ -413,32 +427,10 @@
   }
 
   function blockScriptedRedirects(e) {
-    if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
-
-    const target = e.target;
-    if (!target) return;
-
-    // Allow clicks on interactive elements
-    if (isInteractiveElement(target)) return;
-
-    // Respect modifier keys
-    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-
-    // Heuristic: allow clicks on elements with substantial text
-    try {
-      const textLen = (target.innerText || '').trim().length;
-      if (textLen > 30) return;
-    } catch (err) { }
-
-    // If the user clicked the actual page background (body/html), block navigations
-    const isBodyClick = (target === document.body || target === document.documentElement || target === document);
-    if (isBodyClick) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      reportBlocked(window.location.href, 'Blocked scripted redirect on page background click');
-      console.log('[Anti Pop-Under] Blocked scripted redirect from background click', target);
-    }
+    // Background clicks should never cancel event propagation or preventDefault.
+    // Clicks on body/html in embed iframes (like play.vlstream.net) or player wrappers are legitimate user gestures.
+    // Actual malicious redirects (window.open, location changes, synthetic event dispatch) are already strictly intercepted by WebShield.
+    return;
   }
 
   function isSeekBarOrControlButton(el) {
