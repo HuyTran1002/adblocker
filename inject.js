@@ -366,6 +366,92 @@
       return false;
     }
 
+    // === document.getElementById / querySelector OVERRIDE ===
+    // Intercept early bait-element lookups that happen before body exists.
+    // Anti-adblock scripts in <head> do: getElementById('_preload-ads-1') and
+    // check offsetHeight/style. Return a real (but off-screen) fake element.
+    try {
+      const BAIT_IDS = new Set([
+        '_preload-ads-1', '_preload-ads-2', 'preload-ads', 'ads-preload',
+        'adsbox', 'ads-banner', 'ad-banner', 'google-ads', 'google_ads',
+        'googlead', 'ad-box', 'ad_box', 'ads-box'
+      ]);
+      const BAIT_CLASS_SELECTORS = [
+        '.Adv', '.adv', '.ad-center-header', '.adsbox', '.ads-banner', '.ad-banner',
+        '[id="_preload-ads-1"]', '[id="_preload-ads-2"]'
+      ];
+
+      // Cache of fake elements keyed by id
+      const _fakeElCache = new Map();
+
+      function createFakeBaitElement(id) {
+        if (_fakeElCache.has(id)) return _fakeElCache.get(id);
+        try {
+          const el = document.createElement('div');
+          el.id = id || '';
+          el.className = 'Adv ad-center-header adsbox';
+          el.setAttribute('style', 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;');
+          el.setAttribute('aria-hidden', 'true');
+          _fakeElCache.set(id, el);
+          // Attach to body as soon as it's available so real DOM checks also work
+          if (document.body) {
+            document.body.insertBefore(el, document.body.firstChild);
+          } else {
+            document.addEventListener('DOMContentLoaded', () => {
+              if (!el.parentElement && document.body) {
+                document.body.insertBefore(el, document.body.firstChild);
+              }
+            }, { once: true });
+          }
+          return el;
+        } catch (e) { return null; }
+      }
+
+      const _origGetElementById = document.getElementById.bind(document);
+      document.getElementById = function (id) {
+        const real = _origGetElementById(id);
+        if (real) return real;
+        if (typeof id === 'string' && BAIT_IDS.has(id)) {
+          return createFakeBaitElement(id);
+        }
+        return null;
+      };
+
+      const _origQuerySelector = document.querySelector.bind(document);
+      document.querySelector = function (sel) {
+        const real = _origQuerySelector(sel);
+        if (real) return real;
+        // Return fake for known bait selectors
+        if (typeof sel === 'string') {
+          const selLow = sel.toLowerCase();
+          if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase() || selLow.startsWith(bc.toLowerCase() + ' ') || selLow.startsWith(bc.toLowerCase() + '.'))) {
+            return createFakeBaitElement('adsbox');
+          }
+          // Also handle ID selectors like #_preload-ads-1
+          const idMatch = sel.match(/^#([\w-]+)$/);
+          if (idMatch && BAIT_IDS.has(idMatch[1])) {
+            return createFakeBaitElement(idMatch[1]);
+          }
+        }
+        return null;
+      };
+
+      const _origQuerySelectorAll = document.querySelectorAll.bind(document);
+      document.querySelectorAll = function (sel) {
+        const real = _origQuerySelectorAll(sel);
+        if (real && real.length > 0) return real;
+        if (typeof sel === 'string') {
+          const selLow = sel.toLowerCase();
+          if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase())) {
+            const fakeEl = createFakeBaitElement('adsbox');
+            return fakeEl ? [fakeEl] : [];
+          }
+        }
+        return real;
+      };
+    } catch (e) { }
+    // === END document override ===
+
     // Intercept fetch() to fake successful responses for ad network check URLs
     // (Defeats network-based adblock detection used by sites like animevietsub.li)
     try {
