@@ -223,24 +223,28 @@ function injectAdBlockCSS() {
   /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
   :is(
     .movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster,
-    .poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide,
+    .poster-film, .film-item, .movie-item, .tray-item,
     .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"],
     [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
     [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
-    .carousel, .slider, .swiper, .slick-slider, .owl-carousel
+    [class*="hero-anim"], [class*="backdrop"]
   ) {
     visibility: visible !important;
-    opacity: 1 !important;
     pointer-events: auto !important;
+  }
+
+  .swiper, .swiper-wrapper {
+    visibility: visible !important;
   }
 
   img:is(
     [src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"],
     [src*="poster"], [src*="thumb"], [src*="cover"],
+    [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"],
+    [src*="ophim"], [src*="vsmov"], [src*="themoviedb"],
     [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]
   ) {
     visibility: visible !important;
-    opacity: 1 !important;
     pointer-events: auto !important;
     min-width: 1px !important;
     min-height: 1px !important;
@@ -521,10 +525,11 @@ if (window.location.hostname.includes('youtube.com')) {
       try {
         if (el.closest && el.closest(
           '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-          '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+          '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper, .swiper-wrapper, .swiper-slide, ' +
           '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
           '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
           '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+          '[class*="hero-anim"], [class*="backdrop"], ' +
           '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"]'
         )) return true;
 
@@ -534,11 +539,15 @@ if (window.location.hostname.includes('youtube.com')) {
           const alt = (el.getAttribute('alt') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
           if (src.includes('animevietsub') || src.includes('phim') || src.includes('film') || src.includes('movie') || src.includes('poster') || src.includes('thumb') || src.includes('cover')) return true;
+          if (src.includes('tmdb.org') || src.includes('wsrv.nl') || src.includes('nguonc.com') || src.includes('phimimg.com') || src.includes('ophim') || src.includes('vsmov') || src.includes('themoviedb')) return true;
           if (alt.includes('phim') || alt.includes('tập') || alt.includes('season') || alt.includes('episode')) return true;
           if (title.includes('phim') || title.includes('tập') || title.includes('season') || title.includes('episode')) return true;
         }
 
-        if (el.querySelector && el.querySelector('img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"]')) {
+        if (el.querySelector && el.querySelector(
+          'img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"], ' +
+          'img[src*="tmdb.org"], img[src*="wsrv.nl"], img[src*="nguonc.com"], img[src*="phimimg.com"], img[src*="ophim"], img[src*="vsmov"], img[src*="themoviedb"]'
+        )) {
           return true;
         }
       } catch(e) {}
@@ -647,16 +656,16 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
                 break;
               }
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+              const isAdWrapper = isAnchor ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -721,16 +730,16 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
                 break;
               }
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+              const isAdWrapper = isAnchor ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -839,16 +848,16 @@ if (window.location.hostname.includes('youtube.com')) {
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide')) {
                 break;
               }
 
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+              const isAdWrapper = isAnchor ||
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -1994,7 +2003,20 @@ if (window.location.hostname.includes('youtube.com')) {
         dynamicCosmeticStyle.id = 'adblock-max-dynamic-cosmetics';
         document.documentElement.appendChild(dynamicCosmeticStyle);
       }
-      dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
+      const overrideProtection = `
+        :is(.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, .poster-film, .film-item, .movie-item, .tray-item, .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], [class*="hero-anim"], [class*="backdrop"]) {
+          visibility: visible !important;
+          pointer-events: auto !important;
+        }
+        .swiper, .swiper-wrapper { visibility: visible !important; }
+        img:is([src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"], [src*="poster"], [src*="thumb"], [src*="cover"], [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"], [src*="ophim"], [src*="vsmov"], [src*="themoviedb"], [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]) {
+          visibility: visible !important;
+          pointer-events: auto !important;
+          min-width: 1px !important;
+          min-height: 1px !important;
+        }
+      `;
+      dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
     }
 
     function refreshDynamicCosmetics() {
