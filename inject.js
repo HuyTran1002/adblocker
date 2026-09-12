@@ -2,17 +2,6 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
-  // Diagnostic listener to log unexpected player/media resource load failures
-  window.addEventListener('error', function (e) {
-    if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK' || e.target.tagName === 'IFRAME')) {
-      const srcUrl = (e.target.src || e.target.href || '').toLowerCase();
-      // Skip expected blocked ad trackers to keep console clean
-      if (srcUrl && !srcUrl.includes('doubleclick') && !srcUrl.includes('googlesyndication') && !srcUrl.includes('googleadservices') && !srcUrl.includes('adqc') && !srcUrl.includes('adsterra') && !srcUrl.includes('popads')) {
-        console.warn('[Anti Pop-Under Diagnostic] Resource failed to load:', e.target.tagName, e.target.src || e.target.href);
-      }
-    }
-  }, true);
-
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function () {
@@ -288,8 +277,7 @@
           get: srcDescriptor.get,
           set: function (val) {
             if (typeof val === 'string' && isAdUrl(val)) {
-              console.log('[Anti Pop-Under] Intercepted and mocked script src:', val);
-              srcDescriptor.set.call(this, 'data:text/javascript;base64,console.log("Mocked ad script");');
+              srcDescriptor.set.call(this, 'data:text/javascript;charset=utf-8;base64,;');
               return;
             }
             srcDescriptor.set.call(this, val);
@@ -307,8 +295,7 @@
           const tag = this.tagName.toLowerCase();
           if (tag === 'script' && typeof name === 'string' && name.toLowerCase() === 'src') {
             if (typeof value === 'string' && isAdUrl(value)) {
-              console.log('[Anti Pop-Under] Intercepted script setAttribute(src):', value);
-              originalSetAttribute.call(this, name, 'data:text/javascript;base64,console.log("Mocked ad script");');
+              originalSetAttribute.call(this, name, 'data:text/javascript;charset=utf-8;base64,;');
               return;
             }
           }
