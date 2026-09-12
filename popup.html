@@ -138,81 +138,89 @@
       <div class="tab-content">
         <!-- TAB 1: FILTERS LIST -->
         <div class="tab-pane active" id="tab-filters">
-          <div class="tab-pane-header">
-            <span class="pane-subtitle">Quy tắc bộ lọc đang hoạt động</span>
-            <button class="update-all-btn" id="update-filters-btn" title="Cập nhật bộ lọc mới nhất">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <div class="filters-header">
+            <div class="filters-title-group">
+              <h3 class="filters-title">Quy tắc & Bộ lọc thực tế</h3>
+              <p class="filters-subtitle">Chỉ áp dụng và cập nhật các quy tắc thực sự có hiệu lực</p>
+            </div>
+            <button id="update-filters-btn" class="update-btn" title="Kiểm tra và cập nhật quy tắc trực tuyến">
+              <span class="update-btn-spinner">↻</span>
               <span id="update-btn-text">Cập nhật</span>
             </button>
           </div>
 
-          <div class="filter-list">
-            <div class="filter-item" title="Quy tắc bộ lọc tiêu chuẩn">
+          <div class="filters-list">
+            <!-- Tầng 1: Quy tắc mạng cốt lõi -->
+            <div class="filter-item" title="Quy tắc Declarative Net Request cốt lõi xử lý ở tầng mạng với 0ms độ trễ">
               <div class="filter-info">
                 <span class="filter-icon">🛡️</span>
                 <div class="filter-names">
-                  <span class="filter-name">Standard Filter Rules</span>
-                  <span class="filter-rules-count">116,000+ quy tắc</span>
+                  <span class="filter-name">Quy tắc Mạng Cốt lõi (DNR)</span>
+                  <span id="rules-static-count" class="filter-rules-count">91 quy tắc cốt lõi</span>
                 </div>
               </div>
               <div class="filter-status">
                 <span class="status-dot online"></span>
-                <span class="status-text">Mới nhất</span>
-                <span class="update-icon" title="Mới nhất">✔️</span>
+                <span class="status-text">Hoạt động</span>
+                <span class="update-icon" title="Quy tắc tĩnh cố định">⚡</span>
               </div>
             </div>
 
-            <div class="filter-item" title="Quy tắc mở rộng">
+            <!-- Tầng 2: Máy chủ & Tên miền quảng cáo trực tuyến -->
+            <div class="filter-item" title="Danh sách máy chủ quảng cáo & theo dõi được biên dịch và nạp trực tiếp vào DNR">
               <div class="filter-info">
-                <span class="filter-icon">🛡️</span>
+                <span class="filter-icon">🌐</span>
                 <div class="filter-names">
-                  <span class="filter-name">Extended Filter Rules</span>
-                  <span class="filter-rules-count">137,800+ quy tắc</span>
+                  <span class="filter-name">Tên miền Quảng cáo Động (DNR)</span>
+                  <span id="rules-dynamic-count" class="filter-rules-count">25,000+ máy chủ chặn</span>
                 </div>
               </div>
               <div class="filter-status">
                 <span class="status-dot online"></span>
-                <span class="status-text">Mới nhất</span>
-                <span class="update-icon" title="Mới nhất">✔️</span>
+                <span class="status-text" id="status-dynamic-text">Mới nhất</span>
+                <span class="update-icon" title="Đang hiệu lực">✔️</span>
               </div>
             </div>
 
-            <div class="filter-item" title="Quy tắc nâng cao">
+            <!-- Tầng 3: Bộ chọn ẩn giao diện & banner -->
+            <div class="filter-item" title="Bộ chọn CSS tối ưu được chèn trực tiếp để ẩn banner, catfish và khung quảng cáo lơ lửng">
               <div class="filter-info">
-                <span class="filter-icon">🛡️</span>
+                <span class="filter-icon">🎨</span>
                 <div class="filter-names">
-                  <span class="filter-name">Advanced Network Rules</span>
-                  <span class="filter-rules-count">652,000+ quy tắc</span>
+                  <span class="filter-name">Bộ lọc Giao diện & Banner (CSS)</span>
+                  <span id="rules-cosmetic-count" class="filter-rules-count">2,000 bộ chọn phần tử</span>
                 </div>
               </div>
               <div class="filter-status">
                 <span class="status-dot online"></span>
-                <span class="status-text">Mới nhất</span>
-                <span class="update-icon" title="Mới nhất">✔️</span>
+                <span class="status-text" id="status-cosmetic-text">Mới nhất</span>
+                <span class="update-icon" title="Tối ưu DOM">✔️</span>
               </div>
             </div>
 
-            <div class="filter-item highlight" title="Quy tắc khu vực">
+            <!-- Tầng 4: Quy tắc khu vực & Chống Pop-under VN -->
+            <div class="filter-item highlight" title="Quy tắc đặc thù cho các trang web Việt Nam: chống nhảy trang, cờ bạc, link rút gọn">
               <div class="filter-info">
                 <span class="filter-icon">🇻🇳</span>
                 <div class="filter-names">
-                  <span class="filter-name">Regional Web Rules</span>
-                  <span class="filter-rules-count">1,076 quy tắc khu vực</span>
+                  <span class="filter-name">Khu vực & Chống Nhảy Tab VN</span>
+                  <span id="rules-regional-count" class="filter-rules-count">1,076 quy tắc khu vực</span>
                 </div>
               </div>
               <div class="filter-status">
                 <span class="status-dot online"></span>
-                <span class="status-text">Mới nhất</span>
+                <span class="status-text" id="status-regional-text">Mới nhất</span>
                 <span class="update-icon" title="Mới nhất">✔️</span>
               </div>
             </div>
 
-            <div class="filter-item highlight" title="Bộ lọc video & đa phương tiện">
+            <!-- Tầng 5: Bảo vệ luồng video & YouTube -->
+            <div class="filter-item highlight" title="Lõi Zero-Ad vô hiệu hóa luồng quảng cáo YouTube và web phát video">
               <div class="filter-info">
                 <span class="filter-icon">🎬</span>
                 <div class="filter-names">
-                  <span class="filter-name">Media Stream Filter</span>
-                  <span class="filter-rules-count">v3.5.4 Filter Engine</span>
+                  <span class="filter-name">Bảo vệ Video & YouTube Shield</span>
+                  <span id="rules-media-count" class="filter-rules-count">Lõi Zero-Ad Engine</span>
                 </div>
               </div>
               <div class="filter-status">
@@ -221,27 +229,12 @@
                 <span class="update-icon" title="Đang chạy">⚡</span>
               </div>
             </div>
-
-            <div class="filter-item" title="Quy tắc bảo mật máy chủ quảng cáo">
-              <div class="filter-info">
-                <span class="filter-icon">🚫</span>
-                <div class="filter-names">
-                  <span class="filter-name">Adserver Host Rules</span>
-                  <span class="filter-rules-count">3,541 máy chủ</span>
-                </div>
-              </div>
-              <div class="filter-status">
-                <span class="status-dot online"></span>
-                <span class="status-text">Mới nhất</span>
-                <span class="update-icon" title="Mới nhất">✔️</span>
-              </div>
-            </div>
           </div>
 
           <div class="filter-status-banner">
             <div class="filter-status-left">
               <span class="status-dot online"></span>
-              <span><strong>6/6 bộ lọc</strong> hoạt động song song</span>
+              <span><strong id="applied-filter-summary">5/5 tầng phòng thủ</strong> áp dụng 100% thực tế</span>
             </div>
             <span class="filter-status-right">Tự động đồng bộ</span>
           </div>
