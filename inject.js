@@ -1525,7 +1525,11 @@
 
         for (const key of Object.keys(obj)) {
           if (AD_KEYS.has(key)) {
-            delete obj[key];
+            if (key === 'adPlacements' || key === 'playerAds' || key === 'adSlots') {
+              obj[key] = [];
+            } else {
+              delete obj[key];
+            }
           } else if (obj[key] && typeof obj[key] === 'object') {
             deepPurgeAdProperties(obj[key], depth + 1);
           }
@@ -1593,7 +1597,10 @@
           cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
           cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
           cfg.EXPERIMENT_FLAGS.enable_server_stitched_dai = false;
-          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 0;
+          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_preroll_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_midroll_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_postroll_timeout_ms = 1;
           cfg.EXPERIMENT_FLAGS.web_disable_defer_ad = true;
           cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
         }
@@ -1849,6 +1856,46 @@
     } catch (e) { }
 
     setInterval(scheduleClear, 2000);
+
+    // 10. Instant YouTube Ad Fast-Forward & Zero-Delay Auto-Skipper
+    function setupYouTubeInstantPlayback() {
+      function accelerateAndSkipAds() {
+        const player = document.querySelector('.html5-video-player, #movie_player');
+        if (!player) return;
+
+        const isAdActive = player.classList.contains('ad-showing') ||
+                           player.classList.contains('ad-interrupting') ||
+                           document.querySelector('.ytp-ad-player-overlay, .ytp-ad-showing, .ytp-ad-text');
+
+        if (isAdActive) {
+          const video = player.querySelector('video');
+          if (video) {
+            video.muted = true;
+            video.playbackRate = 16;
+            if (isFinite(video.duration) && video.duration > 0) {
+              video.currentTime = video.duration;
+            }
+          }
+
+          const skipSelectors = [
+            '.ytp-skip-ad-button', '.ytp-ad-skip-button', '.ytp-ad-skip-button-modern',
+            '.ytp-ad-skip-button-slot button', '.ytp-ad-preview-container', 'button.ytp-ad-skip-button'
+          ];
+          for (const sel of skipSelectors) {
+            const btn = document.querySelector(sel);
+            if (btn) {
+              if (typeof simulateNativeClick === 'function') simulateNativeClick(btn);
+              else btn.click();
+              break;
+            }
+          }
+        }
+      }
+
+      setInterval(accelerateAndSkipAds, 50);
+      window.addEventListener('timeupdate', accelerateAndSkipAds, true);
+    }
+    setupYouTubeInstantPlayback();
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
