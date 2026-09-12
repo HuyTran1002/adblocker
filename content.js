@@ -1323,36 +1323,156 @@ if (window.location.hostname.includes('youtube.com')) {
         mount.appendChild(pickerOverlay);
       }
 
+      // Inject dedicated target picker styles (Desktop + Mobile Responsive)
+      let pickerStyle = document.getElementById('adblock-max-picker-style');
+      if (!pickerStyle) {
+        pickerStyle = document.createElement('style');
+        pickerStyle.id = 'adblock-max-picker-style';
+        pickerStyle.textContent = `
+          #adblock-max-target-badge {
+            position: fixed !important;
+            bottom: 14px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 2147483647 !important;
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65), 0 0 16px rgba(99, 102, 241, 0.25) !important;
+            padding: 6px 10px !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            font-size: 11px !important;
+            color: #f3f4f6 !important;
+            user-select: none !important;
+            box-sizing: border-box !important;
+            max-width: calc(100vw - 16px) !important;
+            width: max-content !important;
+            pointer-events: auto !important;
+          }
+
+          #adblock-max-target-badge * {
+            box-sizing: border-box !important;
+          }
+
+          .abm-badge-row {
+            display: flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            min-width: 0 !important;
+          }
+
+          .abm-selector-tag {
+            background: rgba(255, 255, 255, 0.12) !important;
+            color: #a5b4fc !important;
+            padding: 2px 6px !important;
+            border-radius: 4px !important;
+            font-family: monospace !important;
+            font-size: 10.5px !important;
+            max-width: 140px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            display: inline-block !important;
+            vertical-align: middle !important;
+          }
+
+          .abm-btn {
+            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: #e2e8f0 !important;
+            padding: 4px 8px !important;
+            border-radius: 12px !important;
+            font-size: 10.5px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            white-space: nowrap !important;
+            touch-action: manipulation !important;
+            line-height: 1.2 !important;
+          }
+
+          .abm-btn:active {
+            transform: scale(0.95) !important;
+          }
+
+          .abm-btn-reselect {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: #cbd5e1 !important;
+            font-weight: 500 !important;
+          }
+
+          .abm-btn-block {
+            background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+            border: none !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            box-shadow: 0 2px 8px rgba(244, 63, 94, 0.4) !important;
+            padding: 4px 12px !important;
+          }
+
+          .abm-btn-cancel {
+            background: none !important;
+            border: none !important;
+            color: #94a3b8 !important;
+            padding: 3px 6px !important;
+            font-size: 11px !important;
+          }
+
+          /* Mobile Phone Optimization (<= 480px): 2 Neat Rows, No Overflow or Truncation of Buttons */
+          @media (max-width: 480px) {
+            #adblock-max-target-badge {
+              flex-direction: column !important;
+              bottom: 10px !important;
+              padding: 6px 8px !important;
+              gap: 5px !important;
+              border-radius: 14px !important;
+              width: calc(100vw - 16px) !important;
+              max-width: 360px !important;
+            }
+            .abm-badge-row-header {
+              width: 100% !important;
+              justify-content: space-between !important;
+            }
+            .abm-badge-row-header .abm-selector-tag {
+              max-width: calc(100vw - 80px) !important;
+            }
+            .abm-badge-row-actions {
+              width: 100% !important;
+              justify-content: space-between !important;
+              gap: 4px !important;
+            }
+            .abm-badge-row-actions .abm-btn {
+              flex: 1 1 auto !important;
+              padding: 6px 4px !important;
+              font-size: 11px !important;
+              border-radius: 10px !important;
+            }
+            .abm-badge-row-actions .abm-btn-block {
+              flex: 1.4 1 auto !important;
+            }
+            .abm-badge-row-actions .abm-btn-cancel {
+              flex: 0 0 26px !important;
+              padding: 6px 2px !important;
+            }
+          }
+        `;
+        mount.appendChild(pickerStyle);
+      }
+
       // Create control badge
       if (!pickerBadge) {
         pickerBadge = document.createElement('div');
         pickerBadge.id = 'adblock-max-target-badge';
-        pickerBadge.style.cssText = `
-          position: fixed !important;
-          bottom: 16px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 2147483647 !important;
-          background: rgba(15, 23, 42, 0.94) !important;
-          backdrop-filter: blur(10px) !important;
-          -webkit-backdrop-filter: blur(10px) !important;
-          border: 1px solid rgba(255, 255, 255, 0.22) !important;
-          border-radius: 20px !important;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(99, 102, 241, 0.25) !important;
-          padding: 6px 12px !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 6px !important;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-          font-size: 11px !important;
-          color: #f3f4f6 !important;
-          user-select: none !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          pointer-events: auto !important;
-          max-width: 95vw !important;
-          white-space: nowrap !important;
-        `;
         mount.appendChild(pickerBadge);
       }
 
@@ -1371,11 +1491,13 @@ if (window.location.hostname.includes('youtube.com')) {
       function renderInstructionBadge() {
         if (!pickerBadge) return;
         pickerBadge.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 13px;">🎯</span>
-            <span style="font-weight: 600; color: #cbd5e1;">Click phần tử để chọn</span>
+          <div class="abm-badge-row abm-badge-row-header" style="justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+              <span style="font-size: 13px;">🎯</span>
+              <span style="font-weight: 600; color: #cbd5e1; font-size: 11px; white-space: nowrap;">Chạm phần tử để chọn</span>
+            </div>
+            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: #e2e8f0; padding: 3px 8px; font-size: 10.5px;">✕ Thoát</button>
           </div>
-          <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 3px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;">✕ Thoát</button>
         `;
         const cncBtn = document.getElementById('abm-cancel-btn');
         if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
@@ -1398,18 +1520,20 @@ if (window.location.hostname.includes('youtube.com')) {
         }
 
         const selector = getRobustSelector(el);
-        const selDisplay = selector ? (selector.length > 20 ? selector.substring(0, 20) + '...' : selector) : 'phần tử';
+        const selDisplay = selector ? (selector.length > 25 ? selector.substring(0, 25) + '...' : selector) : 'phần tử';
 
         if (!pickerBadge) return;
 
         // When NOT locked (just hovering over elements before clicking):
         if (!isLocked) {
           pickerBadge.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 13px;">🎯</span>
-              <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 10.5px;">${selDisplay}</code>
+            <div class="abm-badge-row abm-badge-row-header" style="justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                <span style="font-size: 13px;">🎯</span>
+                <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+              </div>
+              <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: #e2e8f0; padding: 3px 8px; font-size: 10.5px;">✕ Thoát</button>
             </div>
-            <button id="abm-cancel-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 3px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;">✕ Thoát</button>
           `;
           const cncBtn = document.getElementById('abm-cancel-btn');
           if (cncBtn) cncBtn.onclick = () => stopTargetPicker();
@@ -1419,15 +1543,17 @@ if (window.location.hostname.includes('youtube.com')) {
         // When LOCKED (user has clicked to select):
         const canShrink = historyIndex > 0;
         pickerBadge.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 5px;">
+          <div class="abm-badge-row abm-badge-row-header">
             <span style="font-size: 13px;">🎯</span>
-            <code style="background: rgba(255,255,255,0.12); color: #a5b4fc; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 10.5px;" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+            <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
           </div>
-          <button id="abm-expand-btn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 600; cursor: pointer;" title="Mở rộng ra thẻ cha">🔼</button>
-          ${canShrink ? `<button id="abm-shrink-btn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 600; cursor: pointer;" title="Thu nhỏ lại">🔽</button>` : ''}
-          <button id="abm-reselect-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; padding: 4px 8px; border-radius: 14px; font-size: 10.5px; font-weight: 500; cursor: pointer;" title="Đổi phần tử khác">Đổi</button>
-          <button id="abm-block-btn" style="background: linear-gradient(135deg, #f43f5e, #e11d48); border: none; color: #ffffff; padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(244,63,94,0.4);" title="Chặn và ẩn">🚫 Chặn</button>
-          <button id="abm-cancel-btn" style="background: none; border: none; color: #94a3b8; font-size: 11px; cursor: pointer; padding: 3px 5px;" title="Thoát">✕</button>
+          <div class="abm-badge-row abm-badge-row-actions">
+            <button id="abm-expand-btn" class="abm-btn" title="Mở rộng ra thẻ cha">🔼</button>
+            ${canShrink ? `<button id="abm-shrink-btn" class="abm-btn" title="Thu nhỏ lại">🔽</button>` : ''}
+            <button id="abm-reselect-btn" class="abm-btn abm-btn-reselect" title="Đổi phần tử khác">Đổi</button>
+            <button id="abm-block-btn" class="abm-btn abm-btn-block" title="Chặn và ẩn phần tử này">🚫 Chặn</button>
+            <button id="abm-cancel-btn" class="abm-btn abm-btn-cancel" title="Thoát">✕</button>
+          </div>
         `;
 
         // Mở rộng vùng chọn 🔼
@@ -1574,6 +1700,8 @@ if (window.location.hostname.includes('youtube.com')) {
         window.removeEventListener('keydown', onKeyDown, true);
         const cStyle = document.getElementById('adblock-max-cursor-override');
         if (cStyle && cStyle.parentNode) cStyle.remove();
+        const pStyle = document.getElementById('adblock-max-picker-style');
+        if (pStyle && pStyle.parentNode) pStyle.remove();
         if (pickerOverlay && pickerOverlay.parentNode) pickerOverlay.remove();
         if (pickerBadge && pickerBadge.parentNode) pickerBadge.remove();
         pickerOverlay = null;
