@@ -122,6 +122,42 @@
       window.show_adx = 0;
     } catch (e) { }
 
+    // Neutralize VideoJS preroll ad hijackings on video tube sites (e.g. 91porn, adult tube sites)
+    try {
+      const overrideVideoJsPreroll = (vjs) => {
+        if (!vjs || vjs._prerollNeutralized) return;
+        vjs._prerollNeutralized = true;
+        try {
+          if (vjs.Player && vjs.Player.prototype) {
+            vjs.Player.prototype.preroll = function () {
+              console.log('[Anti Pop-Under] Neutralized videojs preroll ad injection');
+              return this;
+            };
+          }
+          if (vjs.prototype) {
+            vjs.prototype.preroll = function () {
+              return this;
+            };
+          }
+        } catch (err) { }
+      };
+
+      if (window.videojs) {
+        overrideVideoJsPreroll(window.videojs);
+      } else {
+        let realVideoJs = window.videojs;
+        Object.defineProperty(window, 'videojs', {
+          configurable: true,
+          enumerable: true,
+          get() { return realVideoJs; },
+          set(val) {
+            realVideoJs = val;
+            overrideVideoJsPreroll(val);
+          }
+        });
+      }
+    } catch (e) { }
+
     try {
       const dummyAdProvider = { push: function () { } };
       Object.defineProperty(window, 'AdProvider', {
@@ -461,7 +497,7 @@
       if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, #box, .loader, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
       if (el.closest('div, section') && el.closest('div, section').querySelector('video, #box, .jwplayer')) return true;
 
-      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"]')) return true;
+      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"], [class*="thumb"], [id*="thumb"], .thumb-overlay, .img-responsive')) return true;
       const style = window.getComputedStyle(el);
       if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
       const ariaAttrs = ['aria-haspopup', 'aria-pressed', 'aria-expanded', 'aria-label', 'aria-controls'];
@@ -499,6 +535,8 @@
 
   function toggleVideoPlayPause(target) {
     if (!target) return;
+    // Strictly only toggle if clicked directly on a video player or player control element!
+    if (!isPlayerOrPlayButton(target)) return;
     try {
       let video = null;
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
@@ -525,13 +563,6 @@
             if (found) { video = found; break; }
             p = p.parentElement;
             depth++;
-          }
-        }
-        // Safe fallback: if there is only exactly ONE video on the page, play it!
-        if (!video) {
-          const allVideos = document.querySelectorAll('video');
-          if (allVideos.length === 1) {
-            video = allVideos[0];
           }
         }
       }
@@ -565,6 +596,8 @@
         '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
         '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
         '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
         '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
       )) {
         return;
@@ -628,8 +661,8 @@
           overlay.remove();
         } catch (err) { }
 
-        // After clearing the ad overlay, try to resume play/pause naturally
-        if (e.type === 'click') {
+        // After clearing the ad overlay, try to resume play/pause naturally ONLY IF click was on the player!
+        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
           toggleVideoPlayPause(target);
         }
         return;
@@ -782,6 +815,8 @@
         '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
         '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
         '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
         '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
       )) {
         return false;
@@ -801,8 +836,8 @@
       // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') ||
-        elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control')) {
+      if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') || elId.includes('thumb') ||
+        elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control') || elClass.includes('thumb')) {
         return false;
       }
 
@@ -914,7 +949,8 @@
     '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
     '/preroll', '/midroll', '/postroll', 'streamux.top',
     'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
-    'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com'
+    'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
+    'yqxtm.com', 'kwai.net/bs2/ad-'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');

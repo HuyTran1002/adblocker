@@ -223,8 +223,9 @@ function injectAdBlockCSS() {
 
   /* === END PRE-BLOCK === */
 
-  /* Chỉ ép pointer-events: auto lên thẻ video và iframe trực tiếp */
-  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]) {
+  /* Chỉ ép pointer-events: auto lên thẻ video, iframe trực tiếp và control player */
+  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
+  .video-js, .vjs-big-play-button, .vjs-control-bar, .vjs-poster, .vjs-tech {
     pointer-events: auto !important;
   }
 

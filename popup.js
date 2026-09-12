@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.5.8" }),
+      getManifest: () => ({ version: "3.5.9" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -671,7 +671,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const manifest = chrome.runtime.getManifest();
-        const version = manifest.version || "3.5.8";
+        const version = manifest.version || "3.5.9";
         const browserInfo = navigator.userAgent;
         const now = new Date().toLocaleString("vi-VN");
 
