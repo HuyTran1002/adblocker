@@ -103,7 +103,11 @@ const adSelectors = [
   // XNhau and video banner networks
   '#catfishPcGuest', '.fxMidGrid', '.fxMidWrap', 'video.fxMid',
   '.video-ad-wrap', '.sponsor .video-ad-wrap', '.ad-container .video-ad-wrap',
-  'video[src*="/static/media/pc-"]', 'source[src*="/static/media/pc-"]'
+  'video[src*="/static/media/pc-"]', 'source[src*="/static/media/pc-"]',
+
+  // Xemcliphot & Cliphotnew floating gambling banners
+  '.telegram2', '.telegram2-close', '#telegram2', 'div.telegram2',
+  'a[href*="bboocclink015"]', 'a[href*="linkroyal.workers.dev"]', 'a[href*="shortlink.linkroyal"]'
 ];
 
 function injectAdBlockCSS() {

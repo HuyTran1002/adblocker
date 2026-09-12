@@ -1638,5 +1638,18 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 92,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "bboocclink015.com",
+        "linkroyal.workers.dev"
+      ]
+    }
   }
 ]
