@@ -1352,6 +1352,16 @@
       'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
     ]);
 
+    let lastYtReportTime = 0;
+    function reportYouTubeAdBlocked(label = 'Quảng cáo Video') {
+      const now = Date.now();
+      if (now - lastYtReportTime < 2500) return;
+      lastYtReportTime = now;
+      try {
+        reportBlocked('https://www.youtube.com/watch (' + label + ')', 'Chặn quảng cáo YouTube thành công');
+      } catch (e) { }
+    }
+
     function deepPurgeAdProperties(obj, depth = 0) {
       if (!obj || typeof obj !== 'object' || depth > 10) return obj;
       try {
@@ -1380,6 +1390,7 @@
                 item.adBreakServiceRenderer;
               const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
               if (renderer || targetId.includes('ads') || targetId.includes('engagement-panel-ads')) {
+                reportYouTubeAdBlocked('Quảng cáo Giao diện/Đề xuất');
                 obj.splice(i, 1);
               } else {
                 deepPurgeAdProperties(item, depth + 1);
@@ -1400,6 +1411,7 @@
 
         for (const key of Object.keys(obj)) {
           if (AD_KEYS.has(key)) {
+            reportYouTubeAdBlocked('Quảng cáo Video');
             delete obj[key];
           } else if (obj[key] && typeof obj[key] === 'object') {
             deepPurgeAdProperties(obj[key], depth + 1);
@@ -1522,6 +1534,7 @@
               url.includes('doubleclick.net') ||
               url.includes('/ptracking') ||
               url.includes('/api/stats/qoe') && url.includes('adformat')) {
+            reportYouTubeAdBlocked('Theo dõi quảng cáo');
             return new Response('', { status: 200, statusText: 'OK' });
           }
 
@@ -1661,6 +1674,7 @@
           const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
           dialog.remove();
           removed = true;
+          reportYouTubeAdBlocked('Cảnh báo chống chặn');
         });
 
         // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
