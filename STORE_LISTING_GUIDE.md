@@ -1,4 +1,4 @@
-# Hướng Dẫn & Thông Tin Đăng Tải Chrome Web Store - WebShield v3.5.6
+# Hướng Dẫn & Thông Tin Đăng Tải Chrome Web Store - WebShield v3.5.7
 
 Tài liệu này chuẩn bị sẵn toàn bộ nội dung để bạn sao chép trực tiếp lên **Chrome Web Store Developer Dashboard**, giải quyết triệt để 2 lỗi từ chối:
 1. **Red Potassium**: Mô tả và siêu dữ liệu không khớp với chức năng code thực tế.

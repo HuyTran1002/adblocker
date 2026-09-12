@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.5.6" }),
+      getManifest: () => ({ version: "3.5.7" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {

@@ -1,6 +1,8 @@
 .history/
 *.zip
 *.xpi
+*.jsonl
+*.log
 .DS_Store
 Thumbs.db
 
