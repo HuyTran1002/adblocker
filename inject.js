@@ -1352,13 +1352,44 @@
       'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
     ]);
 
-    let lastYtReportTime = 0;
-    function reportYouTubeAdBlocked(label = 'Quảng cáo Video') {
-      const now = Date.now();
-      if (now - lastYtReportTime < 2500) return;
-      lastYtReportTime = now;
+    // Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
+    const reportedVideoAds = new Set();
+
+    function getCurrentVideoId() {
       try {
-        reportBlocked('https://www.youtube.com/watch (' + label + ')', 'Chặn quảng cáo YouTube thành công');
+        const urlParams = new URLSearchParams(window.location.search);
+        const v = urlParams.get('v');
+        if (v) return v;
+        const match = window.location.pathname.match(/\/(shorts|watch|live)\/([a-zA-Z0-9_-]+)/);
+        if (match) return match[2];
+      } catch (e) { }
+      return '';
+    }
+
+    function checkAndReportVideoAds(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      try {
+        const videoId = obj?.videoDetails?.videoId ||
+                        obj?.playerResponse?.videoDetails?.videoId ||
+                        getCurrentVideoId();
+        if (!videoId || reportedVideoAds.has(videoId)) return;
+
+        const hasVideoAds = (Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) ||
+                            (Array.isArray(obj.playerAds) && obj.playerAds.length > 0) ||
+                            (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) ||
+                            (obj.playerResponse && typeof obj.playerResponse === 'object' &&
+                              ((Array.isArray(obj.playerResponse.adPlacements) && obj.playerResponse.adPlacements.length > 0) ||
+                               (Array.isArray(obj.playerResponse.playerAds) && obj.playerResponse.playerAds.length > 0)));
+
+        if (hasVideoAds) {
+          reportedVideoAds.add(videoId);
+          if (reportedVideoAds.size > 50) {
+            const firstKey = reportedVideoAds.values().next().value;
+            reportedVideoAds.delete(firstKey);
+          }
+          const adCount = Math.min(2, (obj.adPlacements?.length || obj.playerAds?.length || 1));
+          reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video`);
+        }
       } catch (e) { }
     }
 
@@ -1390,7 +1421,6 @@
                 item.adBreakServiceRenderer;
               const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
               if (renderer || targetId.includes('ads') || targetId.includes('engagement-panel-ads')) {
-                reportYouTubeAdBlocked('Quảng cáo Giao diện/Đề xuất');
                 obj.splice(i, 1);
               } else {
                 deepPurgeAdProperties(item, depth + 1);
@@ -1411,7 +1441,6 @@
 
         for (const key of Object.keys(obj)) {
           if (AD_KEYS.has(key)) {
-            reportYouTubeAdBlocked('Quảng cáo Video');
             delete obj[key];
           } else if (obj[key] && typeof obj[key] === 'object') {
             deepPurgeAdProperties(obj[key], depth + 1);
@@ -1436,6 +1465,7 @@
     // 2. Intercept window.ytInitialPlayerResponse
     let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
     if (_ytInitialPlayerResponse) {
+      checkAndReportVideoAds(_ytInitialPlayerResponse);
       deepPurgeAdProperties(_ytInitialPlayerResponse);
     }
     try {
@@ -1444,6 +1474,7 @@
           return _ytInitialPlayerResponse;
         },
         set(val) {
+          checkAndReportVideoAds(val);
           _ytInitialPlayerResponse = deepPurgeAdProperties(val);
         },
         configurable: true,
@@ -1534,7 +1565,6 @@
               url.includes('doubleclick.net') ||
               url.includes('/ptracking') ||
               url.includes('/api/stats/qoe') && url.includes('adformat')) {
-            reportYouTubeAdBlocked('Theo dõi quảng cáo');
             return new Response('', { status: 200, statusText: 'OK' });
           }
 
@@ -1548,6 +1578,7 @@
             try {
               const clone = response.clone();
               const data = await clone.json();
+              checkAndReportVideoAds(data);
               deepPurgeAdProperties(data);
 
               const modifiedBody = JSON.stringify(data);
@@ -1593,6 +1624,7 @@
             if (this.readyState === 4 && this.status === 200) {
               try {
                 const data = JSON.parse(this.responseText);
+                checkAndReportVideoAds(data);
                 deepPurgeAdProperties(data);
                 const cleanJson = JSON.stringify(data);
                 if (this.responseType === 'json') {
@@ -1616,6 +1648,7 @@
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
           if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse || result.playabilityStatus) {
+            checkAndReportVideoAds(result);
             deepPurgeAdProperties(result);
           }
         }
@@ -1674,7 +1707,6 @@
           const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
           dialog.remove();
           removed = true;
-          reportYouTubeAdBlocked('Cảnh báo chống chặn');
         });
 
         // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
