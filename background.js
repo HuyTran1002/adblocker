@@ -55,7 +55,15 @@ const SAFE_EXCLUDED = [
   'facebook', 'github', 'microsoft', 'apple', 'cloudflare',
   'cdnjs', 'jsdelivr', 'animevietsub', 'phim', 'embed', 'm3u8',
   'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
-  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn'
+  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn',
+  // Video Player Engines, CDNs & Media Infrastructure
+  'jwplayer', 'jwplatform', 'jwpcdn', 'jwpsrv', 'videojs', 'zencdn', 'plyr',
+  'artplayer', 'dplayer', 'clappr', 'flowplayer', 'hls', 'dashjs',
+  // Streaming CDNs & Hosts
+  'streamhub', 'vidspeed', 'streamtape', 'doodstream', 'filemoon', 'streamwish',
+  'streamruby', 'hydrax', 'faststream', 'playstream', '2embed', 'superstream',
+  'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
+  'centrifuge', 'websocket', 'unpkg'
 ];
 
 function isSafeAdDomain(dom) {

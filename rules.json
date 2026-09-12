@@ -62,6 +62,63 @@
     }
   },
   {
+    "id": 201,
+    "priority": 100,
+    "action": {
+      "type": "allow"
+    },
+    "condition": {
+      "requestDomains": [
+        "jwplayer.com",
+        "jwpcdn.com",
+        "ssl.p.jwpcdn.com",
+        "content.jwplatform.com",
+        "jwplatform.com",
+        "jwpsrv.com",
+        "cdn.jwplayer.com",
+        "vjs.zencdn.net",
+        "videojs.com",
+        "cdn.jsdelivr.net",
+        "cdnjs.cloudflare.com",
+        "unpkg.com",
+        "ajax.googleapis.com"
+      ],
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "font",
+        "other",
+        "ping"
+      ]
+    }
+  },
+  {
+    "id": 202,
+    "priority": 100,
+    "action": {
+      "type": "allow"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "animevietsub.li",
+        "animevietsub.by",
+        "animevietsub.tv",
+        "motphimc.app",
+        "motphim.to",
+        "tramphim.net"
+      ],
+      "resourceTypes": [
+        "media",
+        "xmlhttprequest",
+        "websocket",
+        "font"
+      ]
+    }
+  },
+  {
     "id": 1,
     "priority": 1,
     "action": {

@@ -18,9 +18,17 @@
     ];
     falsyProps.forEach(prop => {
       try {
+        let currentVal = false;
         Object.defineProperty(window, prop, {
-          get() { return false; },
-          set(val) { /* ignore overwrite attempts by anti-adblockers */ },
+          get() { return currentVal; },
+          set(val) {
+            // Allow legitimate frameworks setting complex objects or functions
+            if (val && (typeof val === 'object' || typeof val === 'function')) {
+              currentVal = val;
+            } else if (typeof val === 'boolean') {
+              currentVal = false;
+            }
+          },
           configurable: true
         });
       } catch (e) { }
@@ -31,9 +39,17 @@
     ];
     truthyProps.forEach(prop => {
       try {
+        let currentVal = prop === 'google_ad_status' ? 1 : true;
         Object.defineProperty(window, prop, {
-          get() { return prop === 'google_ad_status' ? 1 : true; },
-          set(val) { /* ignore */ },
+          get() { return currentVal; },
+          set(val) {
+            // Allow legitimate frameworks setting complex objects or functions
+            if (val && (typeof val === 'object' || typeof val === 'function')) {
+              currentVal = val;
+            } else if (typeof val === 'boolean') {
+              currentVal = true;
+            }
+          },
           configurable: true
         });
       } catch (e) { }
@@ -120,6 +136,22 @@
       window.funcJWonReadyVAST = function () { };
       window.COUNT_VAST = 0;
       window.show_adx = 0;
+
+      // Safety stub for JWPlayer telemetry (jwpsrv)
+      if (!window.jwpsrv) {
+        const dummyJwpsrv = function () {
+          return {
+            track: function () { },
+            event: function () { },
+            send: function () { }
+          };
+        };
+        dummyJwpsrv.track = function () { };
+        dummyJwpsrv.event = function () { };
+        dummyJwpsrv.send = function () { };
+        dummyJwpsrv.setTracker = function () { };
+        window.jwpsrv = dummyJwpsrv;
+      }
     } catch (e) { }
 
     // Neutralize VideoJS preroll ad hijackings on video tube sites (e.g. 91porn, adult tube sites)
@@ -390,18 +422,24 @@
           const el = document.createElement('div');
           el.id = id || '';
           el.className = 'Adv ad-center-header adsbox';
-          el.setAttribute('style', 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;');
+          el.setAttribute('style', 'position:fixed;top:-9999px;left:-9999px;width:300px;height:250px;opacity:0.01;pointer-events:none;');
           el.setAttribute('aria-hidden', 'true');
           _fakeElCache.set(id, el);
-          // Attach to body as soon as it's available so real DOM checks also work
-          if (document.body) {
-            document.body.insertBefore(el, document.body.firstChild);
-          } else {
-            document.addEventListener('DOMContentLoaded', () => {
-              if (!el.parentElement && document.body) {
-                document.body.insertBefore(el, document.body.firstChild);
+          // Attach to DOM immediately so parentElement / closest / querySelector all work natively
+          const attachTarget = document.body || document.documentElement || document.head;
+          if (attachTarget) {
+            try { attachTarget.appendChild(el); } catch (e) { }
+          }
+          if (!document.body) {
+            const moveObserver = new MutationObserver(() => {
+              if (document.body && el.parentElement !== document.body) {
+                try { document.body.insertBefore(el, document.body.firstChild); } catch (e) { }
+                moveObserver.disconnect();
               }
-            }, { once: true });
+            });
+            try {
+              moveObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+            } catch (e) { }
           }
           return el;
         } catch (e) { return null; }
@@ -409,45 +447,61 @@
 
       const _origGetElementById = document.getElementById.bind(document);
       document.getElementById = function (id) {
-        const real = _origGetElementById(id);
-        if (real) return real;
-        if (typeof id === 'string' && BAIT_IDS.has(id)) {
-          return createFakeBaitElement(id);
+        try {
+          const real = _origGetElementById(id);
+          if (real) return real;
+          if (typeof id === 'string' && BAIT_IDS.has(id)) {
+            return createFakeBaitElement(id);
+          }
+          return null;
+        } catch (e) {
+          return _origGetElementById(id);
         }
-        return null;
       };
 
       const _origQuerySelector = document.querySelector.bind(document);
       document.querySelector = function (sel) {
-        const real = _origQuerySelector(sel);
-        if (real) return real;
-        // Return fake for known bait selectors
-        if (typeof sel === 'string') {
-          const selLow = sel.toLowerCase();
-          if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase() || selLow.startsWith(bc.toLowerCase() + ' ') || selLow.startsWith(bc.toLowerCase() + '.'))) {
-            return createFakeBaitElement('adsbox');
+        try {
+          const real = _origQuerySelector(sel);
+          if (real) return real;
+          // Return fake for known bait selectors
+          if (typeof sel === 'string') {
+            const selLow = sel.toLowerCase();
+            if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase() || selLow.startsWith(bc.toLowerCase() + ' ') || selLow.startsWith(bc.toLowerCase() + '.'))) {
+              return createFakeBaitElement('adsbox');
+            }
+            // Also handle ID selectors like #_preload-ads-1
+            const idMatch = sel.match(/^#([\w-]+)$/);
+            if (idMatch && BAIT_IDS.has(idMatch[1])) {
+              return createFakeBaitElement(idMatch[1]);
+            }
           }
-          // Also handle ID selectors like #_preload-ads-1
-          const idMatch = sel.match(/^#([\w-]+)$/);
-          if (idMatch && BAIT_IDS.has(idMatch[1])) {
-            return createFakeBaitElement(idMatch[1]);
-          }
+          return null;
+        } catch (e) {
+          return _origQuerySelector(sel);
         }
-        return null;
       };
 
       const _origQuerySelectorAll = document.querySelectorAll.bind(document);
       document.querySelectorAll = function (sel) {
-        const real = _origQuerySelectorAll(sel);
-        if (real && real.length > 0) return real;
-        if (typeof sel === 'string') {
-          const selLow = sel.toLowerCase();
-          if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase())) {
-            const fakeEl = createFakeBaitElement('adsbox');
-            return fakeEl ? [fakeEl] : [];
+        try {
+          const real = _origQuerySelectorAll(sel);
+          if (real && real.length > 0) return real;
+          if (typeof sel === 'string') {
+            const selLow = sel.toLowerCase();
+            if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase())) {
+              const fakeEl = createFakeBaitElement('adsbox');
+              try {
+                const refreshed = _origQuerySelectorAll(sel);
+                if (refreshed && refreshed.length > 0) return refreshed;
+              } catch (err) { }
+              return fakeEl ? [fakeEl] : (real || []);
+            }
           }
+          return real;
+        } catch (e) {
+          return _origQuerySelectorAll(sel);
         }
-        return real;
       };
     } catch (e) { }
     // === END document override ===
