@@ -516,6 +516,18 @@
       const target = e.target;
       if (!target) return;
 
+      // Never block or destroy movie banner or poster interactions
+      if (target.closest && target.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
+      )) {
+        return;
+      }
+
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
       let anchor = null;
@@ -704,7 +716,19 @@
 
     try {
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'picture', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
+        return false;
+      }
+
+      // Protect movie banners, posters, carousels, sliders, and film items from clickjack overlay detection
+      if (el.closest && el.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
+      )) {
         return false;
       }
 
@@ -767,8 +791,8 @@
         }
       }
 
-      // If it contains genuine form controls, video media, or text-bearing children, skip
-      if (el.querySelector('video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
+      // If it contains genuine form controls, video media, images, or text-bearing children, skip
+      if (el.querySelector('img, picture, video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
         return false;
       }
 

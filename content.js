@@ -84,7 +84,7 @@ const adSelectors = [
   '.mgid-widget', '.taboola-ad', '.outbrain-ad', '.criteo-ad',
 
   // Adult ad network tags (ExoClick, Monetag, PropellerAds) & anti-adblock overlays
-  'ins[data-zoneid]', 'ins[class*="eas"]', 'div[class*="video-slider"]', '[id*="video-slider"]',
+  'ins[data-zoneid]', 'ins[class*="eas"]',
   'iframe[src*="smartpop"]', 'iframe[src*="mnaspm"]', 'iframe[src*="mayzaent"]',
   'iframe[src*="magsrv"]', 'iframe[src*="prplad"]', '#adbd', '.overdiv',
 
@@ -132,7 +132,7 @@ function injectAdBlockCSS() {
   iframe[src*="mnaspm"], iframe[src*="mayzaent"], iframe[src*="prplad"], iframe[src*="smartpop"],
   iframe[src*="vast"], iframe[src*="vpaid"], iframe[src*="adformat"], iframe[src*="trafficjunky"],
   iframe[src*="tsyndicate"], iframe[src*="adxadserv"], iframe[src*="a-ads.com"],
-  ins[data-zoneid], ins[class*="eas"], div[class*="video-slider"], #adbd, .overdiv,
+  ins[data-zoneid], ins[class*="eas"], #adbd, .overdiv,
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
   .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper {
@@ -142,12 +142,13 @@ function injectAdBlockCSS() {
     height: 0 !important;
   }
 
-  /* Ad network images - prevent flash */
+  /* Ad network images - only target explicit ad networks, NEVER generic banner/ad strings */
   img[src*="playhubconnect"], img[src*="juicyads"], img[src*="jads.co"],
   img[src*="adsterra"], img[src*="exoclick"], img[src*="adserver"],
   img[src*="abroadad.cache.wpscdn"], img[src*="streamvl.top/file/"],
   img[src*="cm8806.com"], img[src*="9splt.com"], img[src*="yuelongyy"],
-  img[src*="/ads/"], img[src*="_ad_"], img[src*="-ad-"], img[src*="banner"] {
+  img[src*="adspro.name"], img[src*="cpmgate"], img[src*="monetag"],
+  img[src*="propellerads"], img[src*="adtrue"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -199,6 +200,32 @@ function injectAdBlockCSS() {
     min-height: 200px !important;
     max-height: none !important;
     width: 100% !important;
+  }
+
+  /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
+  :is(
+    .movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster,
+    .poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide,
+    .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"],
+    [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
+    [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
+    .carousel, .slider, .swiper, .slick-slider, .owl-carousel
+  ) {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  img:is(
+    [src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"],
+    [src*="poster"], [src*="thumb"], [src*="cover"],
+    [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]
+  ) {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    min-width: 1px !important;
+    min-height: 1px !important;
   }`;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -412,8 +439,6 @@ if (window.location.hostname.includes('youtube.com')) {
         const src = (video.src || '').toLowerCase();
         const poster = (video.getAttribute('poster') || '').toLowerCase();
         return ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw) || poster.includes(kw)) ||
-               src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
-               poster.includes('/ads/') || poster.includes('_ad_') || poster.includes('-ad-') ||
                gamblingRegex.test(src) || gamblingRegex.test(poster) ||
                adUrlRegex.test(src) || adUrlRegex.test(poster);
       } catch(e) {
@@ -461,9 +486,40 @@ if (window.location.hostname.includes('youtube.com')) {
       return false;
     }
 
+    // Helper to check and guarantee absolute protection for movie banners, posters, carousels, and thumbs
+    function isMovieBannerOrPoster(el) {
+      if (!el || el === document || el === document.body || el === document.documentElement) return false;
+      try {
+        if (el.closest && el.closest(
+          '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+          '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+          '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+          '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+          '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+          '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"]'
+        )) return true;
+
+        const tag = el.tagName ? el.tagName.toUpperCase() : '';
+        if (tag === 'IMG') {
+          const src = (el.src || '').toLowerCase();
+          const alt = (el.getAttribute('alt') || '').toLowerCase();
+          const title = (el.getAttribute('title') || '').toLowerCase();
+          if (src.includes('animevietsub') || src.includes('phim') || src.includes('film') || src.includes('movie') || src.includes('poster') || src.includes('thumb') || src.includes('cover')) return true;
+          if (alt.includes('phim') || alt.includes('tập') || alt.includes('season') || alt.includes('episode')) return true;
+          if (title.includes('phim') || title.includes('tập') || title.includes('season') || title.includes('episode')) return true;
+        }
+
+        if (el.querySelector && el.querySelector('img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"]')) {
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
+      if (isMovieBannerOrPoster(el)) return;
 
       const tag = el.tagName;
       if (tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'PATH') return;
@@ -488,6 +544,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
+        if (isMovieBannerOrPoster(anchor)) return;
         try {
           const href = anchor.href;
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
@@ -522,6 +579,7 @@ if (window.location.hostname.includes('youtube.com')) {
           if (matchesGambling || matchesAdServer || rel.includes('sponsored') || hasAdAttributes) {
             isAd = true;
           } else if (hasImage) {
+            if (isMovieBannerOrPoster(img)) return;
             const imgSrc = (img.src || '').toLowerCase();
             const imgAlt = (img.getAttribute('alt') || '').toLowerCase();
             
@@ -530,7 +588,6 @@ if (window.location.hostname.includes('youtube.com')) {
             } else if (!imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:')) {
               // Explicit ad image keywords only (never rely on width/height ratios)
               const imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => imgSrc.includes(kw)) ||
-                                   imgSrc.includes('/ads/') || imgSrc.includes('_ad_') || imgSrc.includes('-ad-') ||
                                    gamblingRegex.test(imgSrc) || adUrlRegex.test(imgSrc);
               if (imgMatchesAd) {
                 isAd = true;
@@ -546,19 +603,23 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              // STOP parent traversal immediately if we reach a video player or control bar!
-              if (isVideoPlayerOrControls(curr)) {
+              // STOP parent traversal immediately if we reach a video player or movie banner!
+              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) {
                 break;
               }
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+                break;
+              }
+
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -583,6 +644,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
       // Helper to verify and hide an iframe tag
       const checkIframe = (iframe) => {
+        if (isMovieBannerOrPoster(iframe)) return;
         try {
           const src = iframe.src;
           if (!src) return;
@@ -615,19 +677,23 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              // STOP parent traversal immediately if we reach a video player or control bar!
-              if (isVideoPlayerOrControls(curr)) {
+              // STOP parent traversal immediately if we reach a video player or movie banner!
+              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) {
                 break;
               }
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+                break;
+              }
+
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -653,6 +719,7 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an ad video tag
       const checkVideo = (video) => {
         if (video.hasAttribute('data-ad-blocked')) return;
+        if (isMovieBannerOrPoster(video)) return;
         try {
           if (isAdVideo(video)) {
             // Immediately neutralize the ad video stream playback
@@ -672,16 +739,20 @@ if (window.location.hostname.includes('youtube.com')) {
             
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              if (isVideoPlayerOrControls(curr)) break;
+              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+                break;
+              }
+
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -707,6 +778,7 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an img tag (safely ignores base64/blob)
       const checkImg = (img) => {
         if (img.hasAttribute('data-ad-blocked')) return;
+        if (isMovieBannerOrPoster(img)) return;
         try {
           const src = (img.src || '').toLowerCase();
           const alt = (img.getAttribute('alt') || '').toLowerCase();
@@ -716,7 +788,6 @@ if (window.location.hostname.includes('youtube.com')) {
             imgMatchesAd = true;
           } else if (!src.startsWith('data:') && !src.startsWith('blob:')) {
             imgMatchesAd = ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw)) ||
-                           src.includes('/ads/') || src.includes('_ad_') || src.includes('-ad-') ||
                            gamblingRegex.test(src) || adUrlRegex.test(src);
           }
                                
@@ -727,16 +798,20 @@ if (window.location.hostname.includes('youtube.com')) {
             
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              if (isVideoPlayerOrControls(curr)) break;
+              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
+              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray')) {
+                break;
+              }
+
               const style = window.getComputedStyle(curr);
               const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const isAnchor = curr.tagName.toLowerCase() === 'a';
               const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
+                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('overlay') || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
+                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || currId.includes('overlay') || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
               if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
                 elementToHide = curr;
@@ -1001,6 +1076,13 @@ if (window.location.hostname.includes('youtube.com')) {
         }
 
         if (anchor) {
+          // BẢO VỆ TUYỆT ĐỐI BANNER PHIM & POSTER PHIM:
+          // Nếu phần tử được click hoặc thẻ <a> là banner phim, poster phim, slider phim, hoặc chứa ảnh/video:
+          // TUYỆT ĐỐI KHÔNG XÓA (anchor.remove()) VÀ KHÔNG CHẶN CLICK HỢP LỆ!
+          if (isMovieBannerOrPoster(anchor) || isMovieBannerOrPoster(target)) {
+            return;
+          }
+
           const href = anchor.href || '';
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
           
@@ -1012,37 +1094,45 @@ if (window.location.hostname.includes('youtube.com')) {
             const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
             
             if (isExternal) {
+              // Bỏ qua các trang mạng xã hội / dịch vụ hợp lệ
+              const safeDomains = ['facebook.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 't.me', 'zalo.me'];
+              if (safeDomains.some(d => targetHost.includes(d))) return;
+
               const style = window.getComputedStyle(anchor);
-              const rect = anchor.getBoundingClientRect();
-              
-              // Check if it's a huge overlay (covers > 40% of screen)
-              const isHuge = rect.width > window.innerWidth * 0.4 || rect.height > window.innerHeight * 0.4;
+              const isFloating = style.position === 'fixed' || style.position === 'absolute';
               const opacity = parseFloat(style.opacity);
               const isTransparent = opacity < 0.1 || style.visibility === 'hidden' || style.display === 'none';
               
-              // Block HUGE external links (rarely legitimate)
-              if (isHuge || isTransparent) {
+              const text = (anchor.innerText || anchor.textContent || '').trim();
+              const mediaCount = anchor.querySelectorAll('img, svg, canvas, video, picture').length;
+
+              // CHỈ xóa khi thực sự là LỚP MÀN TÀNG HÌNH CLICKJACK (phải là floating fixed/absolute, trong suốt, rỗng không có chữ lẫn ảnh)
+              if (isFloating && isTransparent && text.length === 0 && mediaCount === 0) {
                 e.preventDefault();
                 e.stopPropagation();
                 anchor.remove();
-                console.log('[Anti Pop-Under] Intercepted and destroyed huge clickjacking anchor:', anchor);
+                console.log('[Anti Pop-Under] Intercepted and destroyed invisible clickjack overlay anchor:', anchor);
                 return;
               }
-              
-              // Block EMPTY external links (often used to clickjack small buttons)
-              const text = (anchor.innerText || anchor.textContent || '').trim();
-              const mediaCount = anchor.querySelectorAll('img, svg, canvas, video').length;
-              if (text.length === 0 && mediaCount === 0) {
+
+              // Nếu là link cờ bạc/adserver rõ ràng, chỉ cần chặn chuyển hướng (preventDefault), KHÔNG XÓA element
+              if (gamblingRegex.test(href) || adUrlRegex.test(href)) {
                 e.preventDefault();
                 e.stopPropagation();
-                anchor.remove();
-                console.log('[Anti Pop-Under] Intercepted and destroyed empty clickjacking anchor:', anchor);
+                console.log('[Anti Pop-Under] Blocked known ad/gambling external link click:', href);
+                safeSendMessage({
+                  type: 'AD_BLOCKED',
+                  url: href,
+                  reason: 'Chặn click chuyển hướng quảng cáo'
+                });
                 return;
               }
             }
           } catch (err) {}
         } else {
-          // 2. Detect if click is on a huge invisible DIV/SECTION overlay
+          // 2. Detect if click is on an invisible DIV/SECTION overlay
+          if (isMovieBannerOrPoster(target)) return;
+
           const style = window.getComputedStyle(target);
           const isFloating = style.position === 'absolute' || style.position === 'fixed';
           
@@ -1056,24 +1146,25 @@ if (window.location.hostname.includes('youtube.com')) {
               const isTransparent = opacity < 0.1 || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent';
               
               const text = (target.innerText || target.textContent || '').trim();
+              const mediaCount = target.querySelectorAll('img, svg, canvas, video, picture').length;
               
-              if (isTransparent && text.length < 50) {
-                // Before destroying, ensure it's NOT a legitimate video player overlay (e.g. play/pause click zone)
+              if (isTransparent && text.length === 0 && mediaCount === 0) {
+                // Before destroying, ensure it's NOT a legitimate video player overlay or movie container
                 let c = target;
-                let inPlayer = false;
+                let inPlayerOrMovie = false;
                 while (c && c !== document.body && c !== document.documentElement) {
-                  if (isVideoPlayerOrControls(c)) {
-                    inPlayer = true;
+                  if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c)) {
+                    inPlayerOrMovie = true;
                     break;
                   }
                   c = c.parentElement;
                 }
                 
-                if (!inPlayer) {
+                if (!inPlayerOrMovie) {
                   e.preventDefault();
                   e.stopPropagation();
                   target.remove();
-                  console.log('[Anti Pop-Under] Intercepted and destroyed huge invisible clickjacking div:', target);
+                  console.log('[Anti Pop-Under] Intercepted and destroyed invisible clickjacking div:', target);
                 }
               }
             }
