@@ -711,7 +711,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const versionParam = encodeURIComponent(`v${version} | ${browserInfo} | ${now}`);
 
         let screenshotMarkdown = uploadedUrl
-          ? `![Ảnh chụp màn hình lỗi](${uploadedUrl})\n\n[Xem ảnh kích thước gốc](${uploadedUrl})`
+          ? `![Ảnh chụp màn hình lỗi](${uploadedUrl})`
           : `*(Đã tự động sao chép ảnh vào bộ nhớ tạm. Nhấp vào đây và nhấn Ctrl+V để dán ảnh)*`;
 
         const screenshotsParam = encodeURIComponent(screenshotMarkdown);
