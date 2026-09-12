@@ -98,7 +98,12 @@ const adSelectors = [
   '#vl-top-adx', '#vl-native-adx', '[id*="vl-"][id*="-adx"]',
   '.banner-preload-container', '[class*="banner-preload"]',
   '.catfish-top-container', '.catfish-bottom-container', '[class*="catfish-top"]', '[class*="catfish-bottom"]',
-  'a[id^="bb"][style*="opacity:0"]', 'a[id^="bb"][style*="1px"]', 'a[id^="bb"][target="_blank"]'
+  'a[id^="bb"][style*="opacity:0"]', 'a[id^="bb"][style*="1px"]', 'a[id^="bb"][target="_blank"]',
+
+  // XNhau and video banner networks
+  '#catfishPcGuest', '.fxMidGrid', '.fxMidWrap', 'video.fxMid',
+  '.video-ad-wrap', '.sponsor .video-ad-wrap', '.ad-container .video-ad-wrap',
+  'video[src*="/static/media/pc-"]', 'source[src*="/static/media/pc-"]'
 ];
 
 function injectAdBlockCSS() {
@@ -143,6 +148,8 @@ function injectAdBlockCSS() {
   #vl-top-adx, #vl-native-adx, .banner-preload-container,
   .catfish-top-container, .catfish-bottom-container,
   a[id^="bb"][style*="opacity:0"], a[id^="bb"][style*="1px"],
+  #catfishPcGuest, .fxMidGrid, .fxMidWrap, video.fxMid,
+  .video-ad-wrap, .sponsor .video-ad-wrap, .ad-container .video-ad-wrap,
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
   .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper {
@@ -169,7 +176,8 @@ function injectAdBlockCSS() {
   video[src*="playhubconnect"], video[src*="adserver"], video[src*="popunder"],
   video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"],
   video[src*="vast"], video[src*="vpaid"], video[src*="/ads/"], video[src*="preroll"],
-  video[src*="midroll"], video[src*="postroll"], video[src*="streamux.top"] {
+  video[src*="midroll"], video[src*="postroll"], video[src*="streamux.top"],
+  video[src*="/static/media/pc-"], video[src*="/static/media/"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -420,7 +428,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88',
       'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin', 
       'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88', 'sc88',
-      'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai'
+      'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai',
+      'qq88', 'xx88', 'bet789'
     ];
 
     const adUrlKeywords = [
@@ -437,7 +446,8 @@ if (window.location.hostname.includes('youtube.com')) {
       'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
       '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
       '/preroll', '/midroll', '/postroll', 'streamux.top',
-      'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx'
+      'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
+      'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -448,9 +458,16 @@ if (window.location.hostname.includes('youtube.com')) {
     function isAdVideo(video) {
       if (!video) return false;
       try {
-        const src = (video.src || '').toLowerCase();
+        if (video.closest && video.closest('.fxMidWrap, .fxMidGrid, .video-ad-wrap, #catfishPcGuest, .catfish-top-container, .catfish-bottom-container, .banner-preload-container')) return true;
+        if (video.classList && (video.classList.contains('fxMid') || video.classList.contains('video-ad'))) return true;
+
+        let src = (video.src || video.getAttribute('src') || '').toLowerCase();
+        const sourceEl = video.querySelector('source');
+        if (sourceEl) {
+          src += ' ' + (sourceEl.src || sourceEl.getAttribute('src') || '').toLowerCase();
+        }
         const poster = (video.getAttribute('poster') || '').toLowerCase();
-        return ['quangcao', 'adserver', 'popunder'].some(kw => src.includes(kw) || poster.includes(kw)) ||
+        return ['quangcao', 'adserver', 'popunder', '/static/media/pc-', '/static/media/'].some(kw => src.includes(kw) || poster.includes(kw)) ||
                gamblingRegex.test(src) || gamblingRegex.test(poster) ||
                adUrlRegex.test(src) || adUrlRegex.test(poster);
       } catch(e) {

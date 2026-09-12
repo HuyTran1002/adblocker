@@ -847,7 +847,8 @@
     'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88',
     'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin',
     'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88',
-    'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai'
+    'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai',
+    'qq88', 'xx88', 'bet789'
   ];
 
   const adUrlKeywords = [
@@ -864,7 +865,8 @@
     'vast.xml', 'vpaid', '/vast/', 'vast_tag', 'vastxml', 'adxml',
     '/static/video/bn/', 'trafficjunky', 'tsyndicate', 'a-ads.com',
     '/preroll', '/midroll', '/postroll', 'streamux.top',
-    'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx'
+    'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
+    'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
