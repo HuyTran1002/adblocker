@@ -138,18 +138,15 @@
       <div class="tab-content">
         <!-- TAB 1: FILTERS LIST -->
         <div class="tab-pane active" id="tab-filters">
-          <div class="filters-header">
-            <div class="filters-title-group">
-              <h3 class="filters-title">Quy tắc & Bộ lọc thực tế</h3>
-              <p class="filters-subtitle">Chỉ áp dụng và cập nhật các quy tắc thực sự có hiệu lực</p>
-            </div>
-            <button id="update-filters-btn" class="update-btn" title="Kiểm tra và cập nhật quy tắc trực tuyến">
-              <span class="update-btn-spinner">↻</span>
+          <div class="tab-pane-header">
+            <span class="pane-subtitle">Quy tắc & bộ lọc thực tế (100%)</span>
+            <button class="update-all-btn" id="update-filters-btn" title="Kiểm tra và cập nhật quy tắc trực tuyến">
+              <svg class="update-icon-svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
               <span id="update-btn-text">Cập nhật</span>
             </button>
           </div>
 
-          <div class="filters-list">
+          <div class="filter-list">
             <!-- Tầng 1: Quy tắc mạng cốt lõi -->
             <div class="filter-item" title="Quy tắc Declarative Net Request cốt lõi xử lý ở tầng mạng với 0ms độ trễ">
               <div class="filter-info">

@@ -593,12 +593,30 @@ input:not(:checked) ~ .pulse-indicator,
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
 .update-all-btn:hover, .add-current-site-btn:hover, .action-btn:hover {
   background: var(--accent-color);
   color: #ffffff;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.35);
+}
+
+.update-all-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.update-all-btn.loading .update-icon-svg {
+  animation: spin-icon 0.8s linear infinite;
+}
+
+@keyframes spin-icon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .danger-btn-text {

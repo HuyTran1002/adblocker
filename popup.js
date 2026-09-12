@@ -444,10 +444,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Real Online Filter Update Action (Fetches uBlock, EasyList, AdGuard, ABPVN, Peter Lowe online via HTTP)
   updateFiltersBtn.addEventListener("click", () => {
     updateBtnText.textContent = "Đang tải...";
+    updateFiltersBtn.classList.add("loading");
     updateFiltersBtn.disabled = true;
 
     try {
       chrome.runtime.sendMessage({ type: "FETCH_LATEST_FILTERS" }, (response) => {
+        updateFiltersBtn.classList.remove("loading");
         if (chrome.runtime.lastError || !response || !response.success) {
           updateBtnText.textContent = "Mới nhất!";
         } else {
@@ -465,6 +467,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 2000);
       });
     } catch(e) {
+      updateFiltersBtn.classList.remove("loading");
       updateBtnText.textContent = "Cập nhật";
       updateFiltersBtn.disabled = false;
     }
