@@ -596,11 +596,69 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Report Issue on Active Tab to GitHub Issues
+  // Helper to convert base64 dataUrl to Blob
+  function dataUrlToBlob(dataUrl) {
+    const parts = dataUrl.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  }
+
+  // Upload screenshot to high-speed image host with timeout and clipboard backup
+  async function uploadScreenshot(dataUrl) {
+    try {
+      const blob = dataUrlToBlob(dataUrl);
+
+      // Also copy to clipboard as seamless local backup
+      try {
+        if (navigator.clipboard && window.ClipboardItem) {
+          const item = new ClipboardItem({ [blob.type]: blob });
+          navigator.clipboard.write([item]).catch(() => {});
+        }
+      } catch (clipErr) {}
+
+      const formData = new FormData();
+      formData.append('file', blob, 'screenshot.jpg');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const json = await res.json();
+      if (json && json.status === 'success' && json.data && json.data.url) {
+        return json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+      }
+    } catch (e) {
+      console.warn('[WebShield] Auto screenshot upload notice:', e);
+    }
+    return null;
+  }
+
+  // Report Issue on Active Tab to GitHub Issues with Auto-Screenshot
   const reportIssueBtn = document.getElementById("report-issue-btn");
   if (reportIssueBtn) {
+    let isReporting = false;
     reportIssueBtn.addEventListener("click", () => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (isReporting) return;
+      isReporting = true;
+
+      const btnSpan = reportIssueBtn.querySelector("span");
+      const origText = btnSpan ? btnSpan.textContent : "Báo lỗi trang";
+      reportIssueBtn.classList.add("loading");
+      if (btnSpan) btnSpan.textContent = "Đang chụp...";
+
+      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
         const activeTab = tabs && tabs[0];
         let currentUrl = "Không xác định";
         let currentDomain = "Chưa rõ";
@@ -617,7 +675,47 @@ document.addEventListener("DOMContentLoaded", () => {
         const browserInfo = navigator.userAgent;
         const now = new Date().toLocaleString("vi-VN");
 
-        const title = encodeURIComponent(`[Báo cáo trang]: ${currentDomain}`);
+        // 1. Tự động chụp màn hình tab hiện tại
+        let uploadedUrl = null;
+        try {
+          const capturePromise = new Promise((resolve) => {
+            if (chrome.tabs && chrome.tabs.captureVisibleTab) {
+              chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 80 }, (dataUrl) => {
+                if (chrome.runtime.lastError || !dataUrl) {
+                  resolve(null);
+                } else {
+                  resolve(dataUrl);
+                }
+              });
+            } else {
+              resolve(null);
+            }
+          });
+
+          const dataUrl = await Promise.race([
+            capturePromise,
+            new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+          ]);
+
+          if (dataUrl) {
+            if (btnSpan) btnSpan.textContent = "Đang tải ảnh...";
+            uploadedUrl = await uploadScreenshot(dataUrl);
+          }
+        } catch (capErr) {
+          console.warn('[WebShield] Capture error:', capErr);
+        }
+
+        const titleParam = encodeURIComponent(`[Báo cáo]: ${currentDomain}`);
+        const domainParam = encodeURIComponent(currentDomain);
+        const urlParam = encodeURIComponent(currentUrl);
+        const versionParam = encodeURIComponent(`v${version} | ${browserInfo} | ${now}`);
+
+        let screenshotMarkdown = uploadedUrl
+          ? `![Ảnh chụp màn hình lỗi](${uploadedUrl})\n\n[Xem ảnh kích thước gốc](${uploadedUrl})`
+          : `*(Đã tự động sao chép ảnh vào bộ nhớ tạm. Nhấp vào đây và nhấn Ctrl+V để dán ảnh)*`;
+
+        const screenshotsParam = encodeURIComponent(screenshotMarkdown);
+
         const bodyContent = `### 🌐 Thông tin trang web
 - **Tên miền:** \`${currentDomain}\`
 - **URL đầy đủ:** ${currentUrl}
@@ -627,33 +725,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
 ---
 
-### ⚠️ Loại vấn đề gặp phải (Đánh dấu [x] vào ô phù hợp)
+### ⚠️ Loại vấn đề gặp phải
 - [ ] 🚨 **Quảng cáo lọt lưới:** Quảng cáo vẫn xuất hiện trên trang này
-- [ ] 💥 **Vỡ giao diện / Chặn nhầm:** Trang web bị mất hình ảnh, video, banner phim hoặc nội dung chính
+- [ ] 💥 **Vỡ giao diện / Chặn nhầm:** Mất hình ảnh, video, banner phim hoặc nội dung chính
 - [ ] 🛑 **Phát hiện chặn quảng cáo:** Website hiện thông báo yêu cầu tắt AdBlock
-- [ ] 🔄 **Lỗi tính năng:** Nút bấm hoặc trình phát video không hoạt động bình thường
+- [ ] 🔄 **Lỗi tính năng / Trình phát:** Nút bấm hoặc trình phát video không hoạt động bình thường
 
 ---
 
 ### 📝 Mô tả chi tiết vấn đề
-*(Vui lòng mô tả vị trí quảng cáo xuất hiện hoặc phần nội dung bị ẩn nhầm trên trang...)*
+*(Vui lòng mô tả vị trí lỗi hoặc phần nội dung bị ẩn nhầm trên trang...)*
 
 ---
 
-### 📷 Ảnh chụp màn hình (Khuyến khích)
-*(Kéo thả hoặc dán ảnh chụp màn hình lỗi vào đây để tác giả sửa nhanh nhất)*
+### 📷 Ảnh chụp màn hình lỗi (Tự động đính kèm)
+${screenshotMarkdown}
 `;
-        const titleParam = encodeURIComponent(`[Báo cáo]: ${currentDomain}`);
-        const domainParam = encodeURIComponent(currentDomain);
-        const urlParam = encodeURIComponent(currentUrl);
-        const versionParam = encodeURIComponent(`v${version} | ${browserInfo} | ${now}`);
         const bodyParam = encodeURIComponent(bodyContent);
 
-        // GitHub Issue Form: template=site_report.yml provides interactive checkboxes & screenshot upload zone
-        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&body=${bodyParam}`;
+        // GitHub Issue Form: template=site_report.yml with prefilled fields including direct screenshot preview
+        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&screenshots=${screenshotsParam}&body=${bodyParam}`;
 
-        chrome.tabs.create({ url: githubUrl });
-        window.close();
+        chrome.tabs.create({ url: githubUrl }, () => {
+          setTimeout(() => window.close(), 300);
+        });
       });
     });
   }

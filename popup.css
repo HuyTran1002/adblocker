@@ -366,6 +366,24 @@ input:checked + .slider:before {
   transform: scale(1.15);
 }
 
+.report-issue-btn.loading {
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(245, 158, 11, 0.25) 100%);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fef08a;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.report-issue-btn.loading svg {
+  animation: btn-spin 1s linear infinite;
+  color: #fbbf24;
+}
+
+@keyframes btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* History Section */
 .section {
   display: flex;
