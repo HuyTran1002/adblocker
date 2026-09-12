@@ -410,32 +410,99 @@
       };
     } catch (e) { }
 
+    // Intercept Image() to fake onload for ad beacon/pixel checks
+    // Many sites do: var img = new Image(); img.onload = successFn; img.onerror = detectFn; img.src = adUrl;
+    try {
+      const OrigImage = window.Image;
+      const imgSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      if (imgSrcDescriptor && imgSrcDescriptor.set) {
+        Object.defineProperty(HTMLImageElement.prototype, 'src', {
+          get: imgSrcDescriptor.get,
+          set(val) {
+            if (typeof val === 'string' && isAdUrl(val)) {
+              console.log('[Anti Pop-Under] Faking Image onload for ad beacon:', val);
+              // Set a 1x1 transparent gif data URI instead to trigger onload
+              imgSrcDescriptor.set.call(this, 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+              return;
+            }
+            imgSrcDescriptor.set.call(this, val);
+          },
+          configurable: true,
+          enumerable: true
+        });
+      }
+    } catch (e) { }
+
     // Auto-inject stub bait elements that anti-adblock scripts expect to find in DOM
-    // This defeats checkers that use document.getElementById('_preload-ads-1') etc.
+    // Uses MutationObserver so stubs appear as soon as <body> is created (document_start)
     try {
       const baitElementSpecs = [
-        { id: '_preload-ads-1', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
-        { id: '_preload-ads-2', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
-        { id: 'ads-banner', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' },
-        { id: 'google-ads', style: 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;' }
+        { id: '_preload-ads-1' },
+        { id: '_preload-ads-2' },
+        { id: 'ads-banner' },
+        { id: 'google-ads' },
+        { id: 'adsbox' },
+        { id: 'ad-banner' }
       ];
+      const STUB_STYLE = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;z-index:-1;';
+
       const injectBaitStubs = () => {
         if (!document.body) return;
         baitElementSpecs.forEach(spec => {
           if (!document.getElementById(spec.id)) {
             const stub = document.createElement('div');
             stub.id = spec.id;
-            stub.setAttribute('style', spec.style);
+            stub.setAttribute('style', STUB_STYLE);
             stub.className = 'Adv ad-center-header adsbox';
             stub.setAttribute('aria-hidden', 'true');
-            document.body.appendChild(stub);
+            document.body.insertBefore(stub, document.body.firstChild);
           }
         });
       };
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', injectBaitStubs, { once: true });
-      } else {
+
+      if (document.body) {
         injectBaitStubs();
+      } else {
+        // MutationObserver watching documentElement for body insertion
+        const bodyObserver = new MutationObserver((mutations, obs) => {
+          if (document.body) {
+            obs.disconnect();
+            injectBaitStubs();
+            startBaitGuardian();
+          }
+        });
+        bodyObserver.observe(document.documentElement || document, {
+          childList: true,
+          subtree: false
+        });
+        // Fallback
+        document.addEventListener('DOMContentLoaded', () => {
+          injectBaitStubs();
+          startBaitGuardian();
+          try { bodyObserver.disconnect(); } catch (e) { }
+        }, { once: true });
+      }
+
+      // Guardian: re-inject if any bait element gets removed
+      function startBaitGuardian() {
+        try {
+          const baitIds = new Set(baitElementSpecs.map(s => s.id));
+          const guardObserver = new MutationObserver(() => {
+            baitElementSpecs.forEach(spec => {
+              if (!document.getElementById(spec.id) && document.body) {
+                const stub = document.createElement('div');
+                stub.id = spec.id;
+                stub.setAttribute('style', STUB_STYLE);
+                stub.className = 'Adv ad-center-header adsbox';
+                stub.setAttribute('aria-hidden', 'true');
+                document.body.insertBefore(stub, document.body.firstChild);
+              }
+            });
+          });
+          if (document.body) {
+            guardObserver.observe(document.body, { childList: true, subtree: false });
+          }
+        } catch (e) { }
       }
     } catch (e) { }
 

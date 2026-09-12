@@ -25,14 +25,22 @@
     },
     "condition": {
       "requestDomains": [
+        "animevietsub.li",
         "animevietsub.by",
-        "media.animevietsub.by"
+        "media.animevietsub.li",
+        "media.animevietsub.by",
+        "static.animevietsub.li",
+        "cdn.animevietsub.li",
+        "api.animevietsub.li"
       ],
       "resourceTypes": [
         "main_frame",
         "sub_frame",
+        "script",
+        "xmlhttprequest",
         "image",
-        "media"
+        "media",
+        "other"
       ]
     }
   },
