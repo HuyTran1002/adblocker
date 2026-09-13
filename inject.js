@@ -958,11 +958,14 @@
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
-      // Do not interfere with buttons, sliders, links, control bars
+      // Do not interfere with external links, inputs, sliders, bottom control bars, or skip buttons
       if (target.closest && target.closest(
-        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
+        'a, input, select, textarea, [role="slider"], ' +
         '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, ' +
-        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link'
+        '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], ' +
+        '[class*="bg-gradient-to-t"], [class*="rotate-ccw"], [class*="rotate-cw"], ' +
+        '[class*="skip"], [aria-label*="skip" i], [title*="kế tiếp" i], [title*="tiếp theo" i], [title*="lùi" i], [title*="sau" i], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, [class*="episode"], [class*="server"]'
       )) {
         return;
       }
