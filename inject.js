@@ -956,13 +956,15 @@
   if (!isYouTube) {
     document.addEventListener('click', function (e) {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      // In embedded player iframes, allow 100% native player controls & play/pause handling
+      if (window.self !== window.top) return;
       const target = e.target;
       if (!target) return;
-      // Do not interfere with buttons (site's own play/pause/skip handlers), links, inputs, sliders, control bars
+      // Do not interfere with buttons (site's own play/pause/skip handlers), links, inputs, sliders, control bars, iframes
       if (target.closest && target.closest(
-        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
-        '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, ' +
-        '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], ' +
+        'a, button, input, select, textarea, iframe, [role="button"], [role="slider"], ' +
+        '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, .edge-custom-controls, ' +
+        '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], [class*="custom-controls"], ' +
         '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, [class*="episode"], [class*="server"]'
       )) {
         return;

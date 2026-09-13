@@ -319,11 +319,11 @@ function injectAdBlockCSS() {
   }
 
   /* Đảm bảo thanh điều khiển của các player luôn hiển thị con trỏ phù hợp và nhận click bình thường */
-  .jwplayer .jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls {
+  .jwplayer .jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, .edge-custom-controls, [class*="custom-controls"] {
     cursor: default;
     pointer-events: auto !important;
   }
-  .jwplayer .jw-controlbar *, .art-controls *, .vjs-control-bar *, .plyr__controls * {
+  .jwplayer .jw-controlbar *, .art-controls *, .vjs-control-bar *, .plyr__controls *, .edge-custom-controls *, [class*="custom-controls"] * {
     cursor: pointer !important;
     pointer-events: auto !important;
   }
