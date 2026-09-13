@@ -117,12 +117,11 @@ const adSelectors = [
   'a[href*="gem88"]', 'a[href*="rikvip"]', 'a[href*="net88"]', 'a[href*="uk88"]',
   'a[href*="musicskins"]', 'a[href*="bom88"]', 'a[href*="vsbet"]',
 
-  // Fullscreen transparent popunder, clickjack overlays, and modal ad backdrops
+  // Mflix.store & streaming site popup overlays and catfish ads
+  '.preload_popup', '.preload_ads', '.close-preload-ads',
+  '.cashfish-ads', '.close-cashfish-ads', 'a.btn-popup-click',
   'div[style*="z-index:99999999"]', 'div[style*="z-index: 99999999"]',
-  'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]',
-  '#movieModal', '#profile-modal', '.preload_popup', '.cashfish-ads',
-  '[data-state="open"][class*="z-[9998]"]', '[data-state="open"][class*="z-[9999]"]',
-  '[data-state="open"][class*="backdrop-blur"]', '[data-radix-popper-content-wrapper]'
+  'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]'
 ];
 
 function injectAdBlockCSS() {
@@ -270,35 +269,32 @@ function injectAdBlockCSS() {
 
   /* === END PRE-BLOCK === */
 
-  /* Giải phóng chuột và scroll lock: đảm bảo người dùng LUÔN click được tất cả nút bấm trên web */
+  /* Đảm bảo html & body luôn nhận tương tác chuột bình thường */
   html, body {
     pointer-events: auto !important;
   }
-  body[data-scroll-locked], body.modal-open, body[style*="pointer-events: none"] {
+
+  /* Đảm bảo tất cả các nút xem phim, chọn tập, player control luôn có con trỏ pointer và nhận click */
+  .watch-now-btn, .main-btn, .btn-episode, .module-play-list-link,
+  .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"],
+  .module-info-play, .module-mobile-play, .module-play-list {
+    cursor: pointer !important;
     pointer-events: auto !important;
-    overflow: visible !important;
   }
 
   /* Chỉ ép pointer-events: auto lên thẻ video, iframe trực tiếp và control player */
   video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
-  video, iframe, canvas,
-  #playleft, #playleft *,
-  #player, #player *,
-  #jwplayer-video, #jwplayer-video *,
-  .jwplayer, .jwplayer *,
-  .video-js, .video-js *,
-  .dplayer, .dplayer *,
-  .artplayer, .artplayer *,
-  .plyr, .plyr *,
-  [class*="player"], [class*="player"] *,
-  [id*="player"], [id*="player"] *,
-  [class*="video-wrap"], [class*="video-wrap"] *,
-  [class*="danmaku"], [class*="danmaku"] *,
-  [class*="danmu"], [class*="danmu"] *,
-  .art-mask, .art-controls, .art-control-progress, .art-control-playAndPause, .art-bottom, .art-layers,
-  .jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .jw-media, .jw-preview, .jw-knob, .jw-display-icon-container,
-  .vjs-control-bar, .vjs-progress-control, .vjs-play-control, .vjs-slider,
-  .dplayer-controller, .dplayer-bar-wrap, .dplayer-bar, .dplayer-mask {
+  .video-js, .vjs-big-play-button, .vjs-control-bar, .vjs-poster, .vjs-tech,
+  .jwplayer, .jw-controls, .jw-controlbar, .artplayer, .art-controls, .dplayer, .plyr {
+    pointer-events: auto !important;
+  }
+
+  /* Khắc phục lỗi JWPlayer ẩn thanh tiến trình khi không di chuột để người dùng luôn click/chạm hiện lại được */
+  .jwplayer.jw-flag-user-inactive:hover .jw-controlbar,
+  .jwplayer:active .jw-controlbar,
+  .jwplayer.jw-state-paused .jw-controlbar {
+    opacity: 1 !important;
+    visibility: visible !important;
     pointer-events: auto !important;
   }
 
@@ -588,16 +584,19 @@ if (window.location.hostname.includes('youtube.com')) {
     function isVideoPlayerOrControls(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
-        if (window.self !== window.top) return true; // All elements in iframe players
-
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
         if (['audio', 'canvas', 'source', 'track'].includes(tag)) return true;
         if (tag === 'video' && !isAdVideo(el)) return true;
         
         if (el.querySelector) {
-          const videos = el.querySelectorAll('video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"]');
-          if (videos.length > 0) return true;
-          if (el.querySelector('audio, canvas')) return true;
+          const videos = el.querySelectorAll('video');
+          if (videos.length > 0) {
+            for (let i = 0; i < videos.length; i++) {
+              if (!isAdVideo(videos[i])) return true;
+            }
+          } else if (el.querySelector('audio, canvas')) {
+            return true;
+          }
         }
 
         const elId = (el.id || '').toLowerCase();
@@ -605,23 +604,17 @@ if (window.location.hostname.includes('youtube.com')) {
         
         const keywords = [
           'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'media', 'vp-', 'ytp-',
-          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track',
-          'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen', 'danmaku', 'danmu', 'jw-controls', 'jw-slider', 'jw-knob'
+          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track', 'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen'
         ];
 
         if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
-          return true;
-        }
-
-        if (el.closest && el.closest(
-          '.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, ' +
-          '.danmaku, .danmaku-container, [class*="danmaku"], [class*="danmu"], ' +
-          '[class*="player"], [id*="player"], [class*="video"], [id*="video"], ' +
-          '[class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], ' +
-          '[class*="progress"], [id*="progress"], [class*="timeline"], [id*="timeline"], ' +
-          '[class*="slider"], [id*="slider"]'
-        )) {
-          return true;
+          // If it is inside or near a player container
+          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]')) {
+            return true;
+          }
+          if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('time') || elClass.includes('progress') || elClass.includes('duration')) {
+            return true;
+          }
         }
       } catch(e) {}
       return false;
@@ -639,6 +632,7 @@ if (window.location.hostname.includes('youtube.com')) {
           '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
           '[class*="hero-anim"], [class*="backdrop"], ' +
           '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"], ' +
+          '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
           '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
           '[id*="player_one"], .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"]'
         )) return true;
@@ -661,53 +655,6 @@ if (window.location.hostname.includes('youtube.com')) {
           return true;
         }
       } catch(e) {}
-      return false;
-    }
-
-    // Helper to check if element is a legitimate interactive element on the site
-    function isSiteInteractiveElement(el) {
-      if (!el || el === document || el === document.body || el === document.documentElement) return false;
-      try {
-        if (window.self !== window.top) return true;
-
-        // 1. Never consider known ad containers, overlays, or blurred popups as legitimate
-        if (el.closest && el.closest(
-          '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
-          'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], ' +
-          '#movieModal, #profile-modal, .preload_popup, .cashfish-ads, [id*="ad-"], [class*="ad-banner"], [class*="sponsored"], ' +
-          '[class*="catfish"], [id*="catfish"], [class*="floating-ad"], [class*="quang-cao"], [class*="quangcao"], .modal-backdrop'
-        )) {
-          return false;
-        }
-
-        const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-        if (['button', 'input', 'select', 'textarea', 'label', 'summary', 'option', 'video', 'audio', 'canvas', 'svg', 'path', 'i', 'picture'].includes(tagName)) {
-          return true;
-        }
-        if (el.getAttribute) {
-          const role = (el.getAttribute('role') || '').toLowerCase();
-          if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox', 'slider'].includes(role)) return true;
-          if (el.hasAttribute('onclick') || el.hasAttribute('tabindex') || el.hasAttribute('data-action') || el.hasAttribute('data-ep') || el.hasAttribute('data-sv') || el.hasAttribute('data-link')) return true;
-        }
-        if (el.closest && el.closest(
-          'a, button, input, select, textarea, label, summary, option, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [onclick], [tabindex], ' +
-          '.btn-episode, .module-play-list-link, .btn-episode-sv, .watch-now-btn, .main-btn, .btn-play, .play-btn, .btn, ' +
-          '[class*="btn-"], [class*="_btn"], [class*="button"], [id*="btn"], [id*="button"], ' +
-          '[class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="tap"], [id*="tap"], [class*="list-ep"], [id*="list-ep"], ' +
-          '[class*="watch"], [id*="watch"], [class*="play"], [id*="play"], [class*="thumb"], [id*="thumb"], ' +
-          '.module-play-list, .module-block, .play-box, .episode-server, .list-search-episode, #episodeList1, #episodeList2, ' +
-          '#playleft, #player, #jwplayer-video, .jwplayer, .plyr, .video-js, .vjs-, .artplayer, .dplayer, ' +
-          '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-          '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
-          '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
-          '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
-          '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-          '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
-          '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-          '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
-          'nav, header, footer, form, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"]'
-        )) return true;
-      } catch (e) { }
       return false;
     }
 
@@ -1171,10 +1118,7 @@ if (window.location.hostname.includes('youtube.com')) {
           const elId = (el.id || '').toLowerCase();
 
           const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
-                                 elClass.includes('backdrop-blur') || elClass.includes('z-[9998]') || elClass.includes('z-[9999]') ||
-                                 elId.includes('moviemodal') || elId.includes('profile-modal') || elClass.includes('preload_popup') || elClass.includes('cashfish') ||
-                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish') ||
-                                 (style.zIndex && parseInt(style.zIndex, 10) >= 9999999);
+                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish');
 
           if (!isOverlayClass) return;
 
@@ -1229,20 +1173,12 @@ if (window.location.hostname.includes('youtube.com')) {
             el.setAttribute('data-ad-blocked', 'true');
             el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
             console.log('[Anti Pop-Under] Hide orphaned overlay backdrop & close button:', el);
+
+            // Restore scroll locks if body/html was locked
+            if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+            if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
           }
         });
-
-        // Unconditionally restore scroll & pointer interactions if body/html was locked
-        if (document.body) {
-          if (document.body.hasAttribute('data-scroll-locked')) document.body.removeAttribute('data-scroll-locked');
-          document.body.classList.remove('modal-open');
-          if (document.body.style.pointerEvents === 'none') document.body.style.pointerEvents = 'auto';
-          if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
-        }
-        if (document.documentElement) {
-          if (document.documentElement.style.pointerEvents === 'none') document.documentElement.style.pointerEvents = 'auto';
-          if (document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
-        }
       } catch(e) {}
     }
 
@@ -1266,7 +1202,6 @@ if (window.location.hostname.includes('youtube.com')) {
           checkAndHideElement(nodes[i]);
         }
       }
-      cleanOrphanedBackdrops();
     }
 
     function queueNodeCheck(node) {
@@ -1347,55 +1282,39 @@ if (window.location.hostname.includes('youtube.com')) {
     document.addEventListener('click', function(e) {
       if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.self !== window.top) return; // Allow 100% native clicks inside embedded video player iframes
       try {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
-        const anchor = target.closest ? target.closest('a') : null;
-
-        // BẢO VỆ TUYỆT ĐỐI NÚT BẤM, TẬP PHIM, XEM PHIM, TÌM KIẾM, MENU, VIDEO PLAYER & BANNER/POSTER:
-        if (window.self !== window.top || isSiteInteractiveElement(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
-          if (!anchor) return; // Cho phép tương tác nút bấm / tập phim / player tự nhiên 100%
-          const href = anchor.getAttribute('href') || '';
-          if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') return;
-          try {
-            const targetUrl = new URL(href, window.location.href);
-            const currentHost = window.location.hostname.replace(/^www\./i, '');
-            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
-            const isExternal = targetHost && targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + targetHost);
-            if (!isExternal) {
-              return; // Chuyển trang cùng domain (ví dụ /movie-watch/..., /phim/...)
-            }
-          } catch (e) {
-            return;
+        // 1. Detect if click is inside an anchor (<a>)
+        let anchor = null;
+        let curr = target;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          if (curr.tagName === 'A') {
+            anchor = curr;
+            break;
           }
-          if (gamblingRegex.test(href) || adUrlRegex.test(href)) {
-            e.preventDefault();
-            e.stopPropagation();
-            safeSendMessage({
-              type: 'AD_BLOCKED',
-              url: href,
-              reason: 'Chặn click chuyển hướng quảng cáo'
-            });
-          }
-          return;
+          curr = curr.parentElement;
         }
 
-        // 1. Detect if click is inside an anchor (<a>)
         if (anchor) {
-          if (isMovieBannerOrPoster(anchor) || isMovieBannerOrPoster(target) || isSiteInteractiveElement(anchor)) {
+          // BẢO VỆ TUYỆT ĐỐI BANNER PHIM & POSTER PHIM:
+          // Nếu phần tử được click hoặc thẻ <a> là banner phim, poster phim, slider phim, hoặc chứa ảnh/video:
+          // TUYỆT ĐỐI KHÔNG XÓA (anchor.remove()) VÀ KHÔNG CHẶN CLICK HỢP LỆ!
+          if (isMovieBannerOrPoster(anchor) || isMovieBannerOrPoster(target)) {
             return;
           }
 
-          const href = anchor.getAttribute('href') || '';
-          if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') return;
+          const href = anchor.href || '';
+          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
           
           try {
             const targetUrl = new URL(href, window.location.href);
             const currentHost = window.location.hostname.replace(/^www\./i, '');
             const targetHost = targetUrl.hostname.replace(/^www\./i, '');
             
-            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + targetHost);
+            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
             
             if (isExternal) {
               // Bỏ qua các trang mạng xã hội / dịch vụ hợp lệ
@@ -1435,7 +1354,7 @@ if (window.location.hostname.includes('youtube.com')) {
           } catch (err) {}
         } else {
           // 2. Detect if click is on an invisible DIV/SECTION overlay
-          if (isMovieBannerOrPoster(target) || isSiteInteractiveElement(target)) return;
+          if (isMovieBannerOrPoster(target)) return;
 
           const style = window.getComputedStyle(target);
           const isFloating = style.position === 'absolute' || style.position === 'fixed';
@@ -1457,7 +1376,7 @@ if (window.location.hostname.includes('youtube.com')) {
                 let c = target;
                 let inPlayerOrMovie = false;
                 while (c && c !== document.body && c !== document.documentElement) {
-                  if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c) || isSiteInteractiveElement(c)) {
+                  if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c)) {
                     inPlayerOrMovie = true;
                     break;
                   }
@@ -2352,26 +2271,14 @@ if (window.location.hostname.includes('youtube.com')) {
         return false;
       }
 
-      function hideAndDisableElement(el) {
-        if (!el) return;
-        try {
-          el.style.setProperty('display', 'none', 'important');
-          el.style.setProperty('pointer-events', 'none', 'important');
-          el.style.setProperty('opacity', '0', 'important');
-          el.style.setProperty('z-index', '-9999', 'important');
-          el.style.setProperty('width', '0', 'important');
-          el.style.setProperty('height', '0', 'important');
-        } catch (e) { }
-      }
-
       function scanAndRemovePopups(root) {
         const candidates = (root || document).querySelectorAll(
           '[class*="z-[9998]"], [class*="z-[9999]"], [role="dialog"], [aria-modal="true"]'
         );
         candidates.forEach(el => {
           if (isPopupOrOverlay(el)) {
-            hideAndDisableElement(el);
-            console.log('[Anti Pop-Under] Hidden motphimc popup overlay:', el.className || el.tagName);
+            el.remove();
+            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
           }
         });
         // Also reset body overflow if it was locked by the popup
@@ -2385,7 +2292,7 @@ if (window.location.hostname.includes('youtube.com')) {
           for (const node of mut.addedNodes) {
             if (node.nodeType === 1) {
               if (isPopupOrOverlay(node)) {
-                hideAndDisableElement(node);
+                node.remove();
                 if (document.body && document.body.style.overflow === 'hidden') {
                   document.body.style.overflow = '';
                 }

@@ -55,6 +55,23 @@
       } catch (e) { }
     });
 
+    // Neutralize mflix.store popup config safely (sets isVip = true and empty ads array so pu.js exits on line 1 without creating any overlay)
+    try {
+      let _popupConfig = { cooldown: 999999, ads: [], isVip: true };
+      Object.defineProperty(window, 'POPUP_CONFIG', {
+        get() { return _popupConfig; },
+        set(val) {
+          if (val && typeof val === 'object') {
+            val.isVip = true;
+            val.ads = [];
+          }
+          _popupConfig = val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) { }
+
     // 2. Mock Classes for Anti-AdBlock libraries (FuckAdBlock, BlockAdBlock, Sniffer)
     const createAntiAdBlockInstance = () => {
       const inst = {
@@ -137,31 +154,7 @@
       window.COUNT_VAST = 0;
       window.show_adx = 0;
 
-      // Neutralize popup configs (e.g. pu.js on movie sites)
-      let _popupConfig = { isVip: true, cooldown: 999999, ads: [] };
-      Object.defineProperty(window, 'POPUP_CONFIG', {
-        get() { return _popupConfig; },
-        set(val) {
-          if (val && typeof val === 'object') {
-            val.isVip = true;
-            val.ads = [];
-            _popupConfig = val;
-          }
-        },
-        configurable: true
-      });
-
-      // Neutralize TVC preroll ad flags
-      let _onTvc = 0;
-      Object.defineProperty(window, 'on_tvc', {
-        get() { return 0; },
-        set() { _onTvc = 0; },
-        configurable: true
-      });
-    } catch (e) { }
-
-    // Safety stub for JWPlayer telemetry (jwpsrv)
-    try {
+      // Safety stub for JWPlayer telemetry (jwpsrv)
       if (!window.jwpsrv) {
         const dummyJwpsrv = function () {
           return {
@@ -229,17 +222,6 @@
       });
       Object.defineProperty(window, 'pickDirect', {
         get() { return function () { console.log('[Anti Pop-Under] Neutralized pickDirect ad'); }; },
-        set(val) { /* ignore */ },
-        configurable: true
-      });
-      // Neutralize mflix.store / motphim popunder overlay config & TVC pre-roll
-      Object.defineProperty(window, 'POPUP_CONFIG', {
-        get() { return { isVip: true, ads: [], cooldown: 999999 }; },
-        set(val) { /* ignore */ },
-        configurable: true
-      });
-      Object.defineProperty(window, 'on_tvc', {
-        get() { return 0; },
         set(val) { /* ignore */ },
         configurable: true
       });
@@ -861,121 +843,55 @@
     window.location.hostname.includes('doubleclick');
 
   function isInteractiveElement(el) {
-    return isLegitimateInteractiveElement(el);
-  }
-
-  function isLegitimateInteractiveElement(el) {
-    if (!el || el === document || el === document.body || el === document.documentElement) return false;
+    if (!el) return false;
     try {
+      // In embedded iframes (e.g. video players like play.vlstream.net), clicks are always legitimate user gestures
       if (window.self !== window.top) return true;
 
-      // 1. Never consider known ad containers, overlays, or blurred popups as legitimate
-      if (el.closest && el.closest(
-        '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
-        'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], ' +
-        '#movieModal, #profile-modal, .preload_popup, [id*="ad-"], [class*="ad-banner"], [class*="sponsored"], ' +
-        '[class*="catfish"], [id*="catfish"], [class*="floating-ad"], [class*="quang-cao"], [class*="quangcao"], .modal-backdrop'
-      )) {
-        return false;
-      }
+      const tagName = el.tagName.toLowerCase();
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, #box, .loader, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
+      if (el.closest('div, section') && el.closest('div, section').querySelector('video, #box, .jwplayer')) return true;
 
-      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['button', 'input', 'select', 'textarea', 'label', 'summary', 'option', 'video', 'audio', 'canvas', 'svg', 'path', 'i', 'picture'].includes(tagName)) {
-        return true;
+      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"], [class*="thumb"], [id*="thumb"], .thumb-overlay, .img-responsive')) return true;
+      const style = window.getComputedStyle(el);
+      if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
+      const ariaAttrs = ['aria-haspopup', 'aria-pressed', 'aria-expanded', 'aria-label', 'aria-controls'];
+      for (let a of ariaAttrs) { if (el.hasAttribute && el.hasAttribute(a)) return true; }
+      if (el.getAttribute && el.getAttribute('role')) {
+        const r = (el.getAttribute('role') || '').toLowerCase();
+        if (r === 'button' || r === 'link' || r === 'tab' || r === 'option') return true;
       }
-
-      // 2. Protect legitimate movie website elements
-      if (el.closest && el.closest(
-        '.btn-episode, .module-play-list-link, .btn-episode-sv, .watch-now-btn, .main-btn, .btn-play, .play-btn, .btn, ' +
-        '[class*="btn-"], [class*="_btn"], [class*="button"], [id*="btn"], [id*="button"], ' +
-        '[class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="tap"], [id*="tap"], [class*="list-ep"], [id*="list-ep"], ' +
-        '[class*="watch"], [id*="watch"], [class*="play"], [id*="play"], [class*="thumb"], [id*="thumb"], ' +
-        '.module-play-list, .module-block, .play-box, .episode-server, .list-search-episode, #episodeList1, #episodeList2, ' +
-        '#playleft, #player, #jwplayer-video, .jwplayer, .plyr, .video-js, .vjs-, .artplayer, .dplayer, ' +
-        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
-        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
-        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
-        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-        '.thumb-overlay, .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
-        'nav, header, footer, form, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"]'
-      )) {
-        return true;
-      }
-
-      if (el.hasAttribute && (el.hasAttribute('data-ep') || el.hasAttribute('data-sv') || el.hasAttribute('data-link'))) {
-        return true;
-      }
-    } catch (e) { }
+    } catch (err) { }
     return false;
   }
 
   function blockScriptedRedirects(e) {
+    // Background clicks should never cancel event propagation or preventDefault.
+    // Clicks on body/html in embed iframes (like play.vlstream.net) or player wrappers are legitimate user gestures.
+    // Actual malicious redirects (window.open, location changes, synthetic event dispatch) are already strictly intercepted by WebShield.
     return;
-  }
-
-  function isPlayerOrPlayButton(el) {
-    if (!el) return false;
-    try {
-      if (window.self !== window.top) return true;
-
-      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
-
-      if (el.closest && el.closest(
-        '#playleft, #player, #jwplayer-video, .jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, ' +
-        '.danmaku, .danmaku-container, [class*="danmaku"], [class*="danmu"], ' +
-        '[class*="player"], [id*="player"], ' +
-        '[class*="video"], [id*="video"], ' +
-        '[class*="embed"], [id*="embed"], ' +
-        '[class*="stream"], [id*="stream"], ' +
-        '[class*="halim"], [id*="halim"], ' +
-        '[class*="film"], [id*="film"], ' +
-        '[class*="xem"], [id*="xem"], ' +
-        '[class*="control"], [id*="control"], ' +
-        '[class*="seekbar"], [id*="seekbar"], ' +
-        '[class*="progress"], [id*="progress"], ' +
-        '[class*="timeline"], [id*="timeline"], ' +
-        '[class*="slider"], [id*="slider"], ' +
-        '.art-mask, .art-controls, .art-control-progress, .art-control-playAndPause, .art-layers, .art-bottom, ' +
-        '.jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .jw-media, .jw-preview, .jw-knob'
-      )) return true;
-
-      let p = el.parentElement;
-      let depth = 0;
-      while (p && p !== document.body && depth < 5) {
-        if (p.querySelector && p.querySelector('video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"], iframe[src*="hotp"]')) return true;
-        p = p.parentElement;
-        depth++;
-      }
-    } catch (e) { }
-    return false;
   }
 
   function isSeekBarOrControlButton(el) {
     if (!el) return false;
     try {
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['button', 'input', 'select'].includes(tag)) return true;
+      if (['button', 'input', 'select', 'a'].includes(tag)) return true;
       if (el.getAttribute && (el.getAttribute('role') === 'button' || el.getAttribute('role') === 'slider')) return true;
 
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      const keywords = [
-        'seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting',
-        'vjs-control-bar', 'jw-controlbar', 'jw-controls', 'jw-slider', 'jw-knob', 'jw-display-icon',
-        'jw-preview', 'jw-overlays', 'jw-media', 'plyr__controls', 'vjs-play-control', 'jw-icon-play',
-        'art-control', 'art-mask', 'art-progress', 'art-controls', 'dplayer-bar', 'danmaku', 'danmu', 'scrubber', 'elapsed', 'duration', 'tooltip'
-      ];
+      // Explicit seekbar, progress bar, volume, fullscreen, setting buttons only (do not include generic 'control')
+      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'vjs-control-bar', 'jw-controlbar', 'plyr__controls', 'vjs-play-control', 'jw-icon-play'];
       if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
-      if (el.closest && el.closest('#playleft, #player, #jwplayer-video, .jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .vjs-control-bar, .plyr__controls, .art-controls, .art-mask, .art-control-progress, .dplayer-controller, [class*="control"], [class*="seekbar"], [class*="progress"], [class*="timeline"], [class*="slider"], [class*="danmaku"], [class*="danmu"]')) return true;
     } catch (e) { }
     return false;
   }
 
   function toggleVideoPlayPause(target) {
     if (!target) return;
+    // Strictly only toggle if clicked directly on a video player or player control element!
     if (!isPlayerOrPlayButton(target)) return;
     try {
       let video = null;
@@ -983,7 +899,9 @@
       if (tag === 'video') {
         video = target;
       } else {
+        // Search within clicked element
         if (target.querySelector) video = target.querySelector('video');
+        // Search in nearest player container ancestor
         if (!video && target.closest) {
           const container = target.closest(
             '.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer,' +
@@ -992,6 +910,7 @@
           );
           if (container) video = container.querySelector('video');
         }
+        // Walk up max 3 levels to find a sibling or nearby video
         if (!video && target.parentElement) {
           let p = target.parentElement;
           let depth = 0;
@@ -1021,54 +940,44 @@
       lastInteractionEvent = e;
 
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      // Never block interactions when Target Picker mode is active on page
       if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
+      // In embedded player iframes, allow 100% native player controls & progress bar clicks
+      if (window.self !== window.top) return;
       const target = e.target;
-      if (!target || target.nodeType !== 1) return;
+      if (!target) return;
 
-      // 1. Non-click events (pointerdown, mousedown, pointerup, mouseup, touchend) are only tracked for user gesture timestamp.
-      // NEVER block or stop propagation on pointer/mouse down/up events to ensure native browser click dispatching and button reactivity!
-      if (e.type !== 'click') {
+      // Never block or destroy movie banner, poster, or legitimate play/episode buttons
+      if (target.closest && target.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
+      )) {
         return;
       }
 
-      // 2. Find nearest anchor tag if any
-      const anchor = target.closest ? target.closest('a') : null;
-
-      // 3. Absolute bypass for legitimate site UI: buttons, episode selectors, search, menus, forms, video players, posters, banners
-      if (window.self !== window.top || isLegitimateInteractiveElement(target) || isPlayerOrPlayButton(target) || isSeekBarOrControlButton(target)) {
-        if (!anchor) {
-          return; // 100% natural native button / control / episode click
-        }
-        const href = anchor.getAttribute('href') || '';
-        // If href is empty, javascript:void(0), #, or relative/same-domain link:
-        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
-          return; // 100% natural JS episode button / hash link
-        }
-        try {
-          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-          const currentHost = window.location.hostname.toLowerCase();
-          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
-          if (!isExternal || isWhitelisted(href)) {
-            return; // Same-domain navigation (e.g. /movie-watch/..., /phim/...)
-          }
-        } catch (err) {
-          return;
-        }
-      }
-
-      // 4. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+      // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
+      let anchor = null;
       let overlay = null;
 
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+        if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
+          anchor = curr;
+        }
         if (isClickjackOverlay(curr)) {
           overlay = curr;
-          break;
         }
         curr = curr.parentElement;
       }
 
-      // 4.5 Check if anchor is a dummy trap element (like #bb0, #bb1 with 1px / opacity 0)
+      // 1.5 Check if anchor is a dummy trap element (like #bb0, #bb1 with 1px / opacity 0)
       if (anchor) {
         const anchorId = (anchor.id || '').toLowerCase();
         const aStyle = anchor.getAttribute('style') || '';
@@ -1081,8 +990,24 @@
         }
       }
 
-      // 5. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
+      // 2. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
       if (overlay) {
+        if (anchor) {
+          try {
+            const href = anchor.getAttribute('href') || '';
+            if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+              return; // Allow clicks on episode/no-link anchors without external href
+            }
+            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+            const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
+            if (!isExternal || isWhitelisted(href)) {
+              return;
+            }
+          } catch (err) {
+            return;
+          }
+        }
+
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -1095,29 +1020,15 @@
           overlay.remove();
         } catch (err) { }
 
-        // Clean any other overlay or scroll locks immediately
-        cleanAdOverlays();
-
-        // Pass-through click to genuine element underneath!
-        try {
-          if (e.clientX && e.clientY) {
-            const underEl = document.elementFromPoint(e.clientX, e.clientY);
-            if (underEl && underEl !== overlay && !underEl.contains(overlay)) {
-              if (isLegitimateInteractiveElement(underEl) || isPlayerOrPlayButton(underEl)) {
-                underEl.click();
-              }
-            }
-          }
-        } catch (err) { }
-
-        if (isPlayerOrPlayButton(target)) {
+        // After clearing the ad overlay, try to resume play/pause naturally ONLY IF click was on the player!
+        if (e.type === 'click' && isPlayerOrPlayButton(target)) {
           toggleVideoPlayPause(target);
         }
         return;
       }
 
-      // 6. Check anchor link clicks pointing to popunder/ad URLs
-      if (anchor && anchor.href) {
+      // 3. Check anchor link clicks pointing to popunder/ad URLs
+      if (e.type === 'click' && anchor && anchor.href) {
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
         if (!checkNavigationOrPopup(anchor.href, contextName)) {
@@ -1149,8 +1060,10 @@
         }
       }
 
-      // 7. Fallback check for background click or non-interactive redirect
-      blockScriptedRedirects(e);
+      // 3. Fallback check for background click or non-interactive redirect
+      if (e.type === 'click') {
+        blockScriptedRedirects(e);
+      }
     };
 
     interactionEvents.forEach(eventName => {
@@ -1242,143 +1155,43 @@
     }
   }
 
-  // Global aggressive overlay cleaner: removes all blurred ad backdrops, popunders, and unfreezes body
-  function cleanAdOverlays() {
-    if (!isEnabled() || isCurrentPageWhitelisted() || window.location.hostname.includes('youtube.com')) return;
-    
-    function hideAndDisableElement(el) {
-      if (!el) return;
-      try {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-        el.style.setProperty('opacity', '0', 'important');
-        el.style.setProperty('z-index', '-9999', 'important');
-        el.style.setProperty('width', '0', 'important');
-        el.style.setProperty('height', '0', 'important');
-      } catch (e) { }
-    }
-
-    try {
-      // 1. Target known ad overlays, modal dialogs, and clickjack traps
-      const adOverlaySelectors = [
-        'div[style*="z-index:99999999"]',
-        'div[style*="z-index: 99999999"]',
-        'div[style*="z-index:2147483647"]',
-        'div[style*="z-index: 2147483647"]',
-        '[data-state="open"][class*="z-[9998]"]',
-        '[data-state="open"][class*="z-[9999]"]',
-        '[data-state="open"][class*="backdrop-blur"]',
-        '[class*="z-[9998]"]',
-        '[class*="z-[9999]"]',
-        '[data-radix-popper-content-wrapper]',
-        '#movieModal',
-        '#profile-modal',
-        '.preload_popup',
-        '.cashfish-ads',
-        '.modal-backdrop'
-      ];
-
-      const elements = document.querySelectorAll(adOverlaySelectors.join(', '));
-      elements.forEach(el => {
-        if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) return;
-        try {
-          hideAndDisableElement(el);
-          console.log('[Anti Pop-Under] Hidden ad overlay element:', el);
-        } catch (e) { }
-      });
-
-      // 2. Remove fixed/absolute backdrop-blur overlays covering the screen
-      const blurs = document.querySelectorAll('[class*="backdrop-blur"]');
-      blurs.forEach(el => {
-        if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) return;
-        try {
-          const style = window.getComputedStyle(el);
-          if (style.position === 'fixed' || style.position === 'absolute') {
-            const zIdx = parseInt(style.zIndex, 10);
-            if (zIdx >= 100 || isNaN(zIdx)) {
-              hideAndDisableElement(el);
-              console.log('[Anti Pop-Under] Hidden backdrop-blur overlay:', el);
-            }
-          }
-        } catch (e) { }
-      });
-
-      // 3. Scan for anti-adblock modals
-      const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"]');
-      dialogs.forEach(el => {
-        const text = (el.textContent || '').toLowerCase();
-        if (
-          text.includes('phát hiện trình chặn quảng cáo') ||
-          text.includes('vui lòng tắt trình chặn quảng cáo') ||
-          text.includes('vui lòng tắt adblock') ||
-          text.includes('adblock detected') ||
-          text.includes('chặn quảng cáo') ||
-          text.includes('turn off adblock') ||
-          text.includes('disable adblock')
-        ) {
-          try { hideAndDisableElement(el); } catch (e) { }
-        }
-      });
-
-      // 4. Unfreeze body and html so users can ALWAYS click and scroll freely!
-      const html = document.documentElement;
-      const body = document.body;
-
-      if (body) {
-        if (body.hasAttribute('data-scroll-locked')) {
-          body.removeAttribute('data-scroll-locked');
-        }
-        body.classList.remove('modal-open');
-        if (body.style.pointerEvents === 'none') {
-          body.style.pointerEvents = 'auto';
-        }
-        if (body.style.overflow === 'hidden') {
-          body.style.overflow = '';
-        }
-      }
-
-      if (html) {
-        if (html.style.pointerEvents === 'none') {
-          html.style.pointerEvents = 'auto';
-        }
-        if (html.style.overflow === 'hidden') {
-          html.style.overflow = '';
-        }
-      }
-    } catch (e) { }
-  }
-
   // Helper to check if element is a clickjack overlay
   function isClickjackOverlay(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) {
       return false;
     }
-    // In embedded iframes, all elements belong to the player context
+    // Inside embedded player iframes, never flag player masks as clickjack overlays
     if (window.self !== window.top) return false;
 
     try {
-      // 1. Direct match on known ad overlay elements
-      if (el.matches && el.matches(
-        '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
-        'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], div[style*="z-index: 2147483647"], ' +
-        '#movieModal, #profile-modal, .preload_popup, .cashfish-ads, .modal-backdrop'
-      )) {
-        return true;
-      }
-
-      if (el.closest && el.closest(
-        '#movieModal, [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], .preload_popup, .cashfish-ads'
-      )) {
-        return true;
-      }
-
-      // 2. Never flag any site button, episode link, tab, control, player, or legitimate interactive UI
-      if (isLegitimateInteractiveElement(el) || isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) {
+      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'picture', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
         return false;
       }
 
-      const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'button', 'input', 'select', 'textarea', 'form'].includes(tagName)) {
+      // Protect movie banners, posters, carousels, sliders, and film items from clickjack overlay detection
+      if (el.closest && el.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
+      )) {
+        return false;
+      }
+
+      // Visible elements with text content are genuine UI elements (e.g. episode buttons "Tập 1", "Tập 2"), NOT clickjack overlays!
+      const text = (el.innerText || '').trim();
+      if (text.length > 0) {
+        return false;
+      }
+
+      // Protect video players, canvases, and player control bars from clickjack overlay detection
+      if (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(el)) {
         return false;
       }
 
@@ -1400,27 +1213,51 @@
         }
       }
 
-      // Never consider elements inside forms, navbars, headers as overlays
-      if (el.closest('form, nav, header, footer, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
+      // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
+      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
+        return false;
+      }
+
+      // Protect video player controls, seekbars, progress bars, timelines, fullscreen buttons, volume sliders
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="stream"], [id*="stream"], [class*="halim"], [id*="halim"], [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"], [class*="timeline"], [id*="timeline"], [class*="fullscreen"], [id*="fullscreen"]')) {
+        if (tagName !== 'a') {
+          return false;
+        }
+      }
+
+      // If anchor tag has same-origin href or no external ad href, it is NEVER a clickjack overlay
+      if (tagName === 'a') {
+        const href = el.getAttribute('href') || '';
+        if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
+          return false; // Episode link with id="no-link" or JS trigger
+        }
+        try {
+          const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
+          const currentHost = window.location.hostname.toLowerCase();
+          const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost);
+          if (!isExternal) {
+            return false; // Same-domain links are never clickjack overlays
+          }
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // If it contains genuine form controls, video media, images, or text-bearing children, skip
+      if (el.querySelector('img, picture, video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
         return false;
       }
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
-      const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
-      if (!isPositioned) return false;
 
       const width = rect.width;
       const height = rect.height;
       const vw = window.innerWidth || document.documentElement.clientWidth || 800;
       const vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
-      // Real overlay area check: must span a significant part of the viewport (at least 40% of viewport or >= 300x300)
-      const isLargeArea = (width >= 300 && height >= 300) || (width >= vw * 0.4 && height >= vh * 0.4);
-      if (!isLargeArea) return false;
-
-      const zIndex = parseInt(style.zIndex, 10);
-      const hasHighZ = zIndex >= 999 || isNaN(zIndex) || style.zIndex === 'auto';
+      const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
+      if (!isPositioned) return false;
 
       const opacity = parseFloat(style.opacity);
       let bgAlpha = 1;
@@ -1431,21 +1268,17 @@
         bgAlpha = 0;
       }
 
-      const isTransparent = opacity < 0.1 || bgAlpha < 0.1;
-      const hasBackdropBlur = elClass.includes('backdrop-blur') || (style.backdropFilter && style.backdropFilter !== 'none') || (style.webkitBackdropFilter && style.webkitBackdropFilter !== 'none');
-      const hasAdLinks = !!el.querySelector('a[href*="bet"], a[href*="88"], a[href*="rikvip"], a[href*="adqc"], a[href*="6789x"], a[href*="musicskins"]');
+      const isTransparent = opacity < 0.35 || bgAlpha < 0.35;
+      if (!isTransparent) return false;
 
-      if (isTransparent && hasHighZ && !el.querySelector('input, select, textarea, form, video, button')) {
-        return true;
-      }
-      if (hasBackdropBlur && hasHighZ) {
-        return true;
-      }
-      if (hasAdLinks && (hasHighZ || style.position === 'fixed')) {
-        return true;
-      }
+      // Real overlay area check: spans a significant part of the viewport (or > 200x200)
+      const isLargeArea = (width >= 200 && height >= 200) || (width >= vw * 0.4 && height >= vh * 0.4);
+      const zIndex = parseInt(style.zIndex, 10);
+      const isHighZ = !isNaN(zIndex) && zIndex >= 10;
 
-      return false;
+      // Transparent absolute/fixed elements that are large and empty are ALWAYS clickjack overlays.
+      // Ad networks deliberately omit z-index to bypass adblockers, so we no longer require high z-index.
+      return isLargeArea;
     } catch (e) {
       return false;
     }
@@ -1495,6 +1328,40 @@
     } catch (e) {
       return false;
     }
+  }
+
+  function isPlayerOrPlayButton(el) {
+    if (!el) return false;
+    // Everything inside a player iframe is part of the player!
+    if (window.self !== window.top) return true;
+    try {
+      const tagName = el.tagName.toLowerCase();
+      // Direct media / embed elements
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
+
+      // Named player container classes (all major players)
+      if (el.closest(
+        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer,' +
+        '.art-mask, .art-layers, .art-controls, .art-control-progress, .jw-controls, .jw-overlays, .jw-preview,' +
+        '[class*="player"], [id*="player"],' +
+        '[class*="video"], [id*="video"],' +
+        '[class*="embed"], [id*="embed"],' +
+        '[class*="stream"], [id*="stream"],' +
+        '[class*="halim"], [id*="halim"],' +
+        '[class*="film"], [id*="film"],' +
+        '[class*="xem"], [id*="xem"]'
+      )) return true;
+
+      // Inside any container that holds a <video> element (max 3 levels up)
+      let p = el.parentElement;
+      let depth = 0;
+      while (p && p !== document.body && depth < 3) {
+        if (p.querySelector && p.querySelector('video')) return true;
+        p = p.parentElement;
+        depth++;
+      }
+    } catch (e) { }
+    return false;
   }
 
   function checkNavigationOrPopup(url, context) {
@@ -2515,6 +2382,42 @@
   function runGenericAntiAdblockBypass() {
     if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
 
+    function cleanOverlays() {
+      if (!isEnabled()) return;
+      try {
+        const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"], [class*="backdrop"]');
+        dialogs.forEach(el => {
+          const text = (el.textContent || '').toLowerCase();
+          const matchesAdblockText = (
+            text.includes('phát hiện trình chặn quảng cáo') ||
+            text.includes('vui lòng tắt trình chặn quảng cáo') ||
+            text.includes('vui lòng tắt adblock') ||
+            text.includes('adblock detected') ||
+            text.includes('chặn quảng cáo') ||
+            text.includes('turn off adblock') ||
+            text.includes('disable adblock')
+          );
+
+          if (matchesAdblockText) {
+            el.remove();
+            console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
+
+            const html = document.documentElement;
+            const body = document.body;
+
+            if (html) {
+              if (html.style.overflow === 'hidden') html.style.overflow = '';
+              if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
+            }
+            if (body) {
+              if (body.style.overflow === 'hidden') body.style.overflow = '';
+              if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
+            }
+          }
+        });
+      } catch (e) { }
+    }
+
     let throttleTimer = null;
     function scheduleBypassScan() {
       if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
@@ -2522,8 +2425,8 @@
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
         if (!isEnabled()) return;
-        cleanAdOverlays();
-      }, 80);
+        cleanOverlays();
+      }, 1500);
     }
 
     try {
@@ -2536,12 +2439,12 @@
       });
     } catch (e) { }
 
-    // Fallback scan every 600ms to immediately eliminate any delayed ad popups or scroll-locks
+    // Fallback scan every 5 seconds for silent background changes
     setInterval(() => {
       if (isEnabled() && !window.location.hostname.includes('youtube.com') && !isCurrentPageWhitelisted()) {
-        cleanAdOverlays();
+        cleanOverlays();
       }
-    }, 600);
+    }, 5000);
 
     // Initial scan
     scheduleBypassScan();
