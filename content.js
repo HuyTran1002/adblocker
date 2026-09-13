@@ -305,6 +305,28 @@ function injectAdBlockCSS() {
     cursor: pointer !important;
   }
 
+  /* Tự động ẩn con trỏ chuột khi người dùng không di chuột trong lúc xem phim (inactive / fullscreen) */
+  .jwplayer.jw-flag-user-inactive,
+  .jwplayer.jw-flag-user-inactive *,
+  .video-js.vjs-user-inactive,
+  .video-js.vjs-user-inactive *,
+  .artplayer.art-hide-cursor,
+  .artplayer.art-hide-cursor *,
+  .plyr--hide-controls,
+  .plyr--hide-controls *,
+  .dplayer-hide-controller,
+  .dplayer-hide-controller *,
+  #edgeplayer-root:not(:has(.edge-custom-controls.show)),
+  #edgeplayer-root:not(:has(.edge-custom-controls.show)) *,
+  [class*="user-inactive"],
+  [class*="user-inactive"] *,
+  [class*="autohide"],
+  [class*="autohide"] *,
+  [class*="hide-cursor"],
+  [class*="hide-cursor"] * {
+    cursor: none !important;
+  }
+
   /* Ép pointer-events: auto lên thẻ video, controlbar, play button (không ép lên jw-controls để click xuyên vào video) */
   video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
   .jwplayer video, .jw-media, .jw-preview, .jw-display-icon-container,
