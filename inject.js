@@ -958,43 +958,35 @@
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
-      // Do not interfere with external links, inputs, sliders, bottom control bars, or skip buttons
+      // Do not interfere with buttons (site's own play/pause/skip handlers), links, inputs, sliders, control bars
       if (target.closest && target.closest(
-        'a, input, select, textarea, [role="slider"], ' +
+        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
         '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, ' +
         '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], ' +
-        '[class*="bg-gradient-to-t"], [class*="rotate-ccw"], [class*="rotate-cw"], ' +
-        '[class*="skip"], [aria-label*="skip" i], [title*="kế tiếp" i], [title*="tiếp theo" i], [title*="lùi" i], [title*="sau" i], ' +
         '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, [class*="episode"], [class*="server"]'
       )) {
         return;
       }
-      // If clicked on video player area (video, jw-media, jw-preview, jw-display-icon-container, etc.)
+      // If clicked on video player area (video surface, jw-media, jw-preview, etc.) but NOT on any button
       if (isPlayerOrPlayButton(target)) {
         const video = findVideoElement(target);
         if (video) {
           const wasPaused = video.paused;
-          // Use queueMicrotask to execute immediately after site click handlers finish within the active user gesture
-          queueMicrotask(() => {
+          // Use setTimeout(0) to run AFTER all event handlers (capture+bubble+default) have finished
+          // This ensures we don't double-toggle if the site natively handled the click
+          setTimeout(() => {
             if (video.paused === wasPaused) {
               if (wasPaused) {
                 if (video.ended || (video.duration > 0 && video.currentTime >= video.duration)) {
                   video.currentTime = 0;
                 }
                 const p = video.play();
-                if (p && p.catch) {
-                  p.catch(() => {
-                    // Fallback retry with muted if browser audio policy blocks unmuted autoplay
-                    video.muted = true;
-                    const p2 = video.play();
-                    if (p2 && p2.catch) p2.catch(() => { });
-                  });
-                }
+                if (p && p.catch) p.catch(() => { });
               } else {
                 video.pause();
               }
             }
-          });
+          }, 0);
         }
       }
     }, true);
