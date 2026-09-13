@@ -889,40 +889,58 @@
     return false;
   }
 
+  function findVideoElement(target) {
+    if (!target) return null;
+    try {
+      const tag = target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag === 'video') return target;
+
+      // 1. Direct query inside target
+      if (target.querySelector) {
+        const v = target.querySelector('video:not([muted]):not([loop])') || target.querySelector('video');
+        if (v) return v;
+      }
+
+      // 2. Nearest player container ancestor
+      if (target.closest) {
+        const container = target.closest(
+          '.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer,' +
+          '[class*="player"], [id*="player"], [class*="video"], [id*="video"],' +
+          '[class*="aspect-video"], [class*="media"], [id*="media"],' +
+          '[class*="stream"], [id*="stream"], [class*="embed"], [id*="embed"],' +
+          '[class*="halim"], [id*="halim"], [class*="film"], [id*="film"]'
+        );
+        if (container) {
+          const v = container.querySelector('video:not([muted]):not([loop])') || container.querySelector('video');
+          if (v) return v;
+        }
+      }
+
+      // 3. Walk up max 5 levels to find a sibling or nearby video
+      if (target.parentElement) {
+        let p = target.parentElement;
+        let depth = 0;
+        while (p && p !== document.body && depth < 5) {
+          const v = p.querySelector('video:not([muted]):not([loop])') || p.querySelector('video');
+          if (v) return v;
+          p = p.parentElement;
+          depth++;
+        }
+      }
+
+      // 4. In player iframe or page fallback
+      return document.querySelector('video:not([muted]):not([loop])') || document.querySelector('video');
+    } catch (e) {
+      return null;
+    }
+  }
+
   function toggleVideoPlayPause(target) {
     if (!target) return;
     // Strictly only toggle if clicked directly on a video player or player control element!
     if (!isPlayerOrPlayButton(target)) return;
     try {
-      let video = null;
-      const tag = target.tagName ? target.tagName.toLowerCase() : '';
-      if (tag === 'video') {
-        video = target;
-      } else {
-        // Search within clicked element
-        if (target.querySelector) video = target.querySelector('video');
-        // Search in nearest player container ancestor
-        if (!video && target.closest) {
-          const container = target.closest(
-            '.jwplayer, .plyr, .video-js, .artplayer, .dplayer, .vjs-, .flowplayer,' +
-            '[class*="player"], [id*="player"], [class*="video"], [id*="video"],' +
-            '[class*="embed"], [id*="embed"], [class*="halim"], [id*="halim"]'
-          );
-          if (container) video = container.querySelector('video');
-        }
-        // Walk up max 3 levels to find a sibling or nearby video
-        if (!video && target.parentElement) {
-          let p = target.parentElement;
-          let depth = 0;
-          while (p && p !== document.body && depth < 3) {
-            const found = p.querySelector('video');
-            if (found) { video = found; break; }
-            p = p.parentElement;
-            depth++;
-          }
-        }
-      }
-
+      const video = findVideoElement(target);
       if (video) {
         if (video.paused) {
           const p = video.play();
@@ -951,8 +969,7 @@
       }
       // If clicked on video player area (video, jw-media, jw-preview, jw-display-icon-container, etc.)
       if (isPlayerOrPlayButton(target)) {
-        const container = (target.closest && target.closest('.jwplayer, .artplayer, .video-js, .plyr, [class*="player"]')) || target;
-        const video = container.querySelector ? container.querySelector('video') : (target.tagName && target.tagName.toLowerCase() === 'video' ? target : null);
+        const video = findVideoElement(target);
         if (video) {
           const wasPaused = video.paused;
           // Check if player or site natively toggled it within 120ms; if not, toggle it
@@ -1382,6 +1399,8 @@
         '.art-mask, .art-layers, .art-controls, .art-control-progress, .jw-controls, .jw-overlays, .jw-preview,' +
         '[class*="player"], [id*="player"],' +
         '[class*="video"], [id*="video"],' +
+        '[class*="aspect-video"], [class*="screen"], [id*="screen"],' +
+        '[class*="media"], [id*="media"], [id*="playBox"], [class*="playBox"],' +
         '[class*="embed"], [id*="embed"],' +
         '[class*="stream"], [id*="stream"],' +
         '[class*="halim"], [id*="halim"],' +
@@ -1389,10 +1408,10 @@
         '[class*="xem"], [id*="xem"]'
       )) return true;
 
-      // Inside any container that holds a <video> element (max 3 levels up)
+      // Inside any container that holds a <video> element (max 5 levels up)
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && depth < 3) {
+      while (p && p !== document.body && depth < 5) {
         if (p.querySelector && p.querySelector('video')) return true;
         p = p.parentElement;
         depth++;

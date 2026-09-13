@@ -290,15 +290,29 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Chỉ ép pointer-events: auto lên thẻ video, controlbar, play button (không ép lên jw-controls để click màn hình xuyên vào video) */
-  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
-  .video-js, .vjs-big-play-button, .vjs-control-bar, .vjs-poster, .vjs-tech,
-  .jwplayer, .jw-controlbar, .jw-display-icon-container, .artplayer, .art-controls, .dplayer, .plyr {
+  /* Bắt buộc hiển thị con trỏ ngón tay (pointer) & nhận tương tác chuột trên toàn bộ bề mặt trình phát video */
+  video:not([muted]):not([loop]):not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
+  .jwplayer, .jwplayer video, .jw-media, .jw-preview, .jw-controls, .jw-display-icon-container,
+  .artplayer, .art-video, .art-mask, .art-layers,
+  .video-js, .video-js video, .vjs-tech, .vjs-poster, .vjs-big-play-button,
+  .dplayer, .dplayer-video-wrap, .dplayer-mask,
+  .plyr, .plyr video, .plyr__video-wrapper,
+  [class*="player"] video, [id*="player"] video,
+  [class*="player"] .jw-media, [class*="player"] .art-video,
+  [class*="aspect-video"], [class*="aspect-video"] video,
+  [class*="screen-box"], [id*="playBox"],
+  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
+    cursor: pointer !important;
     pointer-events: auto !important;
   }
 
-  /* Đảm bảo thanh điều khiển JWPlayer luôn bấm được và hiển thị khi tạm dừng (tự động ẩn khi phát và không di chuột) */
-  .jwplayer .jw-controlbar {
+  /* Đảm bảo thanh điều khiển của các player luôn hiển thị con trỏ phù hợp và nhận click bình thường */
+  .jwplayer .jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls {
+    cursor: default;
+    pointer-events: auto !important;
+  }
+  .jwplayer .jw-controlbar *, .art-controls *, .vjs-control-bar *, .plyr__controls * {
+    cursor: pointer !important;
     pointer-events: auto !important;
   }
   .jwplayer.jw-state-paused .jw-controlbar {
@@ -2199,6 +2213,14 @@ if (window.location.hostname.includes('youtube.com')) {
           pointer-events: auto !important;
           min-width: 1px !important;
           min-height: 1px !important;
+        }
+        video:not([muted]):not([loop]),
+        .jwplayer, .jw-media, .artplayer, .art-video, .video-js, .plyr, .dplayer,
+        [class*="player"] video, [id*="player"] video,
+        iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
+          visibility: visible !important;
+          pointer-events: auto !important;
+          cursor: pointer !important;
         }
       `;
       dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
