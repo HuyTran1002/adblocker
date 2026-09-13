@@ -115,7 +115,13 @@ const adSelectors = [
   'button[aria-label*="topfish" i]', 'button[aria-label*="catfish" i]',
   'a[href*="adqc.net"]', 'a[href*="6789x"]', 'a[href*="cm8806"]',
   'a[href*="gem88"]', 'a[href*="rikvip"]', 'a[href*="net88"]', 'a[href*="uk88"]',
-  'a[href*="musicskins"]', 'a[href*="bom88"]', 'a[href*="vsbet"]'
+  'a[href*="musicskins"]', 'a[href*="bom88"]', 'a[href*="vsbet"]',
+
+  // Fullscreen transparent popunder and clickjack overlays (e.g. pu.js, popunder scripts)
+  'div[style*="z-index:99999999"]', 'div[style*="z-index: 99999999"]',
+  'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]',
+  'div[style*="cursor:pointer"][style*="z-index:999"]', 'div[style*="cursor: pointer"][style*="z-index: 999"]',
+  '#profile-modal', '.preload_popup'
 ];
 
 function injectAdBlockCSS() {
@@ -265,16 +271,24 @@ function injectAdBlockCSS() {
 
   /* Chỉ ép pointer-events: auto lên thẻ video, iframe trực tiếp và control player */
   video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
-  .jwplayer, .jw-controls, .jw-slider-horizontal, .jw-knob, .jw-controlbar, .jw-display-icon-container, .jw-preview, .jw-overlays, .jw-media,
-  .video-js, .vjs-big-play-button, .vjs-control-bar, .vjs-poster, .vjs-tech, .vjs-slider, .vjs-progress-control,
-  .dplayer, .dplayer-video-wrap, .dplayer-controller, .dplayer-bar-wrap, .dplayer-bar,
-  .artplayer, .art-video-player, .art-controls, .art-progress,
-  .plyr, .plyr__controls, .plyr__progress, .plyr__video-wrapper,
-  .danmaku, .danmaku-container, [class*="danmaku"], [class*="danmu"],
-  [class*="player"], [id*="player"], [class*="video"], [id*="video"],
-  [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"],
-  [class*="progress"], [id*="progress"], [class*="timeline"], [id*="timeline"],
-  [class*="slider"], [id*="slider"] {
+  video, iframe, canvas,
+  #playleft, #playleft *,
+  #player, #player *,
+  #jwplayer-video, #jwplayer-video *,
+  .jwplayer, .jwplayer *,
+  .video-js, .video-js *,
+  .dplayer, .dplayer *,
+  .artplayer, .artplayer *,
+  .plyr, .plyr *,
+  [class*="player"], [class*="player"] *,
+  [id*="player"], [id*="player"] *,
+  [class*="video-wrap"], [class*="video-wrap"] *,
+  [class*="danmaku"], [class*="danmaku"] *,
+  [class*="danmu"], [class*="danmu"] *,
+  .art-mask, .art-controls, .art-control-progress, .art-control-playAndPause, .art-bottom, .art-layers,
+  .jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .jw-media, .jw-preview, .jw-knob, .jw-display-icon-container,
+  .vjs-control-bar, .vjs-progress-control, .vjs-play-control, .vjs-slider,
+  .dplayer-controller, .dplayer-bar-wrap, .dplayer-bar, .dplayer-mask {
     pointer-events: auto !important;
   }
 

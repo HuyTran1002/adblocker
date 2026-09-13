@@ -208,6 +208,17 @@
         set(val) { /* ignore */ },
         configurable: true
       });
+      // Neutralize mflix.store / motphim popunder overlay config & TVC pre-roll
+      Object.defineProperty(window, 'POPUP_CONFIG', {
+        get() { return { isVip: true, ads: [], cooldown: 999999 }; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+      Object.defineProperty(window, 'on_tvc', {
+        get() { return 0; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
 
       // Safety patch for jQuery .position() on movie sites (e.g. animevietsub home-v1.js:373)
       // Prevents: "TypeError: Cannot read properties of undefined (reading 'top')" when active episode is not found
@@ -868,7 +879,7 @@
 
       // Named player container classes (all major players)
       if (el.closest && el.closest(
-        '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, ' +
+        '#playleft, #player, #jwplayer-video, .jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, ' +
         '.danmaku, .danmaku-container, [class*="danmaku"], [class*="danmu"], ' +
         '[class*="player"], [id*="player"], ' +
         '[class*="video"], [id*="video"], ' +
@@ -881,14 +892,16 @@
         '[class*="seekbar"], [id*="seekbar"], ' +
         '[class*="progress"], [id*="progress"], ' +
         '[class*="timeline"], [id*="timeline"], ' +
-        '[class*="slider"], [id*="slider"]'
+        '[class*="slider"], [id*="slider"], ' +
+        '.art-mask, .art-controls, .art-control-progress, .art-control-playAndPause, .art-layers, .art-bottom, ' +
+        '.jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .jw-media, .jw-preview, .jw-knob'
       )) return true;
 
       // Inside any container that holds a <video> or player iframe element (max 5 levels up)
       let p = el.parentElement;
       let depth = 0;
       while (p && p !== document.body && depth < 5) {
-        if (p.querySelector && p.querySelector('video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"]')) return true;
+        if (p.querySelector && p.querySelector('video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"], iframe[src*="hotp"]')) return true;
         p = p.parentElement;
         depth++;
       }
@@ -910,10 +923,10 @@
         'seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting',
         'vjs-control-bar', 'jw-controlbar', 'jw-controls', 'jw-slider', 'jw-knob', 'jw-display-icon',
         'jw-preview', 'jw-overlays', 'jw-media', 'plyr__controls', 'vjs-play-control', 'jw-icon-play',
-        'art-control', 'dplayer-bar', 'danmaku', 'danmu', 'scrubber', 'elapsed', 'duration', 'tooltip'
+        'art-control', 'art-mask', 'art-progress', 'art-controls', 'dplayer-bar', 'danmaku', 'danmu', 'scrubber', 'elapsed', 'duration', 'tooltip'
       ];
       if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
-      if (el.closest && el.closest('.jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .vjs-control-bar, .plyr__controls, .art-controls, .dplayer-controller, [class*="control"], [class*="seekbar"], [class*="progress"], [class*="timeline"], [class*="slider"], [class*="danmaku"], [class*="danmu"]')) return true;
+      if (el.closest && el.closest('#playleft, #player, #jwplayer-video, .jw-controls, .jw-controlbar, .jw-slider-horizontal, .jw-overlays, .vjs-control-bar, .plyr__controls, .art-controls, .art-mask, .art-control-progress, .dplayer-controller, [class*="control"], [class*="seekbar"], [class*="progress"], [class*="timeline"], [class*="slider"], [class*="danmaku"], [class*="danmu"]')) return true;
     } catch (e) { }
     return false;
   }
