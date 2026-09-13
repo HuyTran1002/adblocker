@@ -934,6 +934,43 @@
     } catch (e) { }
   }
 
+  // Ensure clicking on any video player screen naturally toggles play/pause if site disabled displayClick
+  if (!isYouTube) {
+    document.addEventListener('click', function (e) {
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      const target = e.target;
+      if (!target) return;
+      // Do not interfere with buttons, sliders, links, control bars
+      if (isSiteInteractiveElement(target)) return;
+      if (target.closest && target.closest(
+        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
+        '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link'
+      )) {
+        return;
+      }
+      // If clicked on video player area (video, jw-media, jw-preview, jw-display-icon-container, etc.)
+      if (isPlayerOrPlayButton(target)) {
+        const container = (target.closest && target.closest('.jwplayer, .artplayer, .video-js, .plyr, [class*="player"]')) || target;
+        const video = container.querySelector ? container.querySelector('video') : (target.tagName && target.tagName.toLowerCase() === 'video' ? target : null);
+        if (video) {
+          const wasPaused = video.paused;
+          // Check if player or site natively toggled it within 120ms; if not, toggle it
+          setTimeout(() => {
+            if (video.paused === wasPaused) {
+              if (wasPaused) {
+                const p = video.play();
+                if (p && p.catch) p.catch(() => { });
+              } else {
+                video.pause();
+              }
+            }
+          }, 120);
+        }
+      }
+    }, true);
+  }
+
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();

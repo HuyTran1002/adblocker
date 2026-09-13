@@ -121,7 +121,15 @@ const adSelectors = [
   '.preload_popup', '.preload_ads', '.close-preload-ads',
   '.cashfish-ads', '.close-cashfish-ads', 'a.btn-popup-click',
   'div[style*="z-index:99999999"]', 'div[style*="z-index: 99999999"]',
-  'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]'
+  'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]',
+
+  // Tramphim headers and floating ad banners
+  'aside[aria-label*="Quảng cáo" i]',
+  '[aria-label*="Quảng cáo đầu trang" i]',
+  '[aria-label*="Quảng cáo cuối trang" i]',
+  'a[aria-label*="Quảng cáo SHBET" i]',
+  'a[aria-label*="Quảng cáo F8BET" i]',
+  'a[aria-label*="Quảng cáo SC88" i]'
 ];
 
 function injectAdBlockCSS() {
@@ -282,16 +290,17 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Chỉ ép pointer-events: auto lên thẻ video, iframe trực tiếp và control player */
+  /* Chỉ ép pointer-events: auto lên thẻ video, controlbar, play button (không ép lên jw-controls để click màn hình xuyên vào video) */
   video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
   .video-js, .vjs-big-play-button, .vjs-control-bar, .vjs-poster, .vjs-tech,
-  .jwplayer, .jw-controls, .jw-controlbar, .artplayer, .art-controls, .dplayer, .plyr {
+  .jwplayer, .jw-controlbar, .jw-display-icon-container, .artplayer, .art-controls, .dplayer, .plyr {
     pointer-events: auto !important;
   }
 
-  /* Khắc phục lỗi JWPlayer ẩn thanh tiến trình khi không di chuột để người dùng luôn click/chạm hiện lại được */
-  .jwplayer.jw-flag-user-inactive:hover .jw-controlbar,
-  .jwplayer:active .jw-controlbar,
+  /* Đảm bảo thanh điều khiển JWPlayer luôn bấm được và hiển thị khi tạm dừng (tự động ẩn khi phát và không di chuột) */
+  .jwplayer .jw-controlbar {
+    pointer-events: auto !important;
+  }
   .jwplayer.jw-state-paused .jw-controlbar {
     opacity: 1 !important;
     visibility: visible !important;
