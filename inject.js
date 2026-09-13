@@ -959,7 +959,6 @@
       const target = e.target;
       if (!target) return;
       // Do not interfere with buttons, sliders, links, control bars
-      if (isSiteInteractiveElement(target)) return;
       if (target.closest && target.closest(
         'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
         '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, ' +
@@ -972,17 +971,27 @@
         const video = findVideoElement(target);
         if (video) {
           const wasPaused = video.paused;
-          // Check if player or site natively toggled it within 120ms; if not, toggle it
-          setTimeout(() => {
+          // Use queueMicrotask to execute immediately after site click handlers finish within the active user gesture
+          queueMicrotask(() => {
             if (video.paused === wasPaused) {
               if (wasPaused) {
+                if (video.ended || (video.duration > 0 && video.currentTime >= video.duration)) {
+                  video.currentTime = 0;
+                }
                 const p = video.play();
-                if (p && p.catch) p.catch(() => { });
+                if (p && p.catch) {
+                  p.catch(() => {
+                    // Fallback retry with muted if browser audio policy blocks unmuted autoplay
+                    video.muted = true;
+                    const p2 = video.play();
+                    if (p2 && p2.catch) p2.catch(() => { });
+                  });
+                }
               } else {
                 video.pause();
               }
             }
-          }, 120);
+          });
         }
       }
     }, true);
@@ -1584,6 +1593,23 @@
     return false;
   }
 
+  function createDummyWindow() {
+    let _closed = false;
+    const dummyWindow = new Proxy({}, {
+      get(targetProp, prop) {
+        if (prop === 'closed') return _closed;
+        if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => { };
+        if (prop === 'close') return () => { _closed = true; };
+        if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
+        if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => { }; } });
+        if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
+        return undefined;
+      },
+      set() { return true; }
+    });
+    return dummyWindow;
+  }
+
   // The custom window.open logic
   function customOpen(url, target, features) {
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
@@ -1612,20 +1638,7 @@
     }
 
     if (!checkNavigationOrPopup(url, 'window.open')) {
-      let _closed = false;
-      const dummyWindow = new Proxy({}, {
-        get(targetProp, prop) {
-          if (prop === 'closed') return _closed;
-          if (prop === 'focus' || prop === 'blur' || prop === 'postMessage') return () => { };
-          if (prop === 'close') return () => { _closed = true; };
-          if (prop === 'location') return new Proxy({ href: '' }, { get(t, p) { return t[p] || ''; }, set() { return true; } });
-          if (prop === 'document') return new Proxy({ readyState: 'complete' }, { get(t, p) { if (p === 'readyState') return t[p]; return () => { }; } });
-          if (prop === 'window' || prop === 'top' || prop === 'self' || prop === 'parent') return dummyWindow;
-          return undefined;
-        },
-        set() { return true; }
-      });
-      return dummyWindow;
+      return createDummyWindow();
     }
 
     return originalOpen.apply(this, arguments);

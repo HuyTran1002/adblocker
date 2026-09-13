@@ -290,7 +290,7 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Bắt buộc hiển thị con trỏ ngón tay (pointer) & nhận tương tác chuột trên toàn bộ bề mặt trình phát video */
+  /* Bắt buộc hiển thị con trỏ ngón tay (pointer) trên toàn bộ bề mặt trình phát video */
   video:not([muted]):not([loop]):not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
   .jwplayer, .jwplayer video, .jw-media, .jw-preview, .jw-controls, .jw-display-icon-container,
   .artplayer, .art-video, .art-mask, .art-layers,
@@ -303,6 +303,18 @@ function injectAdBlockCSS() {
   [class*="screen-box"], [id*="playBox"],
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
     cursor: pointer !important;
+  }
+
+  /* Ép pointer-events: auto lên thẻ video, controlbar, play button (không ép lên jw-controls để click xuyên vào video) */
+  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
+  .jwplayer video, .jw-media, .jw-preview, .jw-display-icon-container,
+  .artplayer, .art-video, .art-mask, .art-layers,
+  .video-js, .video-js video, .vjs-tech, .vjs-poster, .vjs-big-play-button,
+  .dplayer, .dplayer-video-wrap, .dplayer-mask,
+  .plyr, .plyr video, .plyr__video-wrapper,
+  [class*="player"] video, [id*="player"] video,
+  [class*="aspect-video"], [class*="aspect-video"] video,
+  [class*="screen-box"], [id*="playBox"] {
     pointer-events: auto !important;
   }
 
