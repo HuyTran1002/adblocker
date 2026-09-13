@@ -120,7 +120,6 @@ const adSelectors = [
   // Fullscreen transparent popunder and clickjack overlays (e.g. pu.js, popunder scripts)
   'div[style*="z-index:99999999"]', 'div[style*="z-index: 99999999"]',
   'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]',
-  'div[style*="cursor:pointer"][style*="z-index:999"]', 'div[style*="cursor: pointer"][style*="z-index: 999"]',
   '#profile-modal', '.preload_popup'
 ];
 
@@ -651,6 +650,42 @@ if (window.location.hostname.includes('youtube.com')) {
           return true;
         }
       } catch(e) {}
+      return false;
+    }
+
+    // Helper to check if element is a legitimate interactive element on the site
+    function isSiteInteractiveElement(el) {
+      if (!el || el === document || el === document.body || el === document.documentElement) return false;
+      try {
+        if (window.self !== window.top) return true;
+        const tagName = el.tagName ? el.tagName.toLowerCase() : '';
+        if (['button', 'input', 'select', 'textarea', 'label', 'summary', 'option', 'video', 'audio', 'canvas', 'svg', 'path', 'i', 'picture'].includes(tagName)) {
+          return true;
+        }
+        if (el.getAttribute) {
+          const role = (el.getAttribute('role') || '').toLowerCase();
+          if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox', 'slider'].includes(role)) return true;
+          if (el.hasAttribute('onclick') || el.hasAttribute('tabindex') || el.hasAttribute('data-action') || el.hasAttribute('data-ep') || el.hasAttribute('data-sv') || el.hasAttribute('data-link')) return true;
+        }
+        if (el.closest && el.closest(
+          'a, button, input, select, textarea, label, summary, option, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [onclick], [tabindex], ' +
+          '.btn-episode, .module-play-list-link, .btn-episode-sv, .watch-now-btn, .main-btn, .btn-play, .play-btn, .btn, ' +
+          '[class*="btn-"], [class*="_btn"], [class*="button"], [id*="btn"], [id*="button"], ' +
+          '[class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="tap"], [id*="tap"], [class*="list-ep"], [id*="list-ep"], ' +
+          '[class*="watch"], [id*="watch"], [class*="play"], [id*="play"], [class*="thumb"], [id*="thumb"], ' +
+          '.module-play-list, .module-block, .play-box, .episode-server, .list-search-episode, #episodeList1, #episodeList2, ' +
+          '#playleft, #player, #jwplayer-video, .jwplayer, .plyr, .video-js, .vjs-, .artplayer, .dplayer, ' +
+          '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+          '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+          '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+          '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+          '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+          '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+          '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+          '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
+          'nav, header, footer, form, dialog, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"], [class*="modal"]'
+        )) return true;
+      } catch (e) { }
       return false;
     }
 
@@ -1282,12 +1317,24 @@ if (window.location.hostname.includes('youtube.com')) {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
-        // BẢO VỆ TUYỆT ĐỐI VIDEO PLAYER & BANNER/POSTER:
-        if (window.self !== window.top || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
-          const anchor = target.closest ? target.closest('a') : null;
-          if (!anchor) return; // Cho phép tương tác trình phát tự nhiên 100%
-          const href = anchor.href || '';
-          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
+        const anchor = target.closest ? target.closest('a') : null;
+
+        // BẢO VỆ TUYỆT ĐỐI NÚT BẤM, TẬP PHIM, XEM PHIM, TÌM KIẾM, MENU, VIDEO PLAYER & BANNER/POSTER:
+        if (window.self !== window.top || isSiteInteractiveElement(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
+          if (!anchor) return; // Cho phép tương tác nút bấm / tập phim / player tự nhiên 100%
+          const href = anchor.getAttribute('href') || '';
+          if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') return;
+          try {
+            const targetUrl = new URL(href, window.location.href);
+            const currentHost = window.location.hostname.replace(/^www\./i, '');
+            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
+            const isExternal = targetHost && targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + targetHost);
+            if (!isExternal) {
+              return; // Chuyển trang cùng domain (ví dụ /movie-watch/..., /phim/...)
+            }
+          } catch (e) {
+            return;
+          }
           if (gamblingRegex.test(href) || adUrlRegex.test(href)) {
             e.preventDefault();
             e.stopPropagation();
@@ -1301,33 +1348,20 @@ if (window.location.hostname.includes('youtube.com')) {
         }
 
         // 1. Detect if click is inside an anchor (<a>)
-        let anchor = null;
-        let curr = target;
-        while (curr && curr !== document.body && curr !== document.documentElement) {
-          if (curr.tagName === 'A') {
-            anchor = curr;
-            break;
-          }
-          curr = curr.parentElement;
-        }
-
         if (anchor) {
-          // BẢO VỆ TUYỆT ĐỐI BANNER PHIM & POSTER PHIM:
-          // Nếu phần tử được click hoặc thẻ <a> là banner phim, poster phim, slider phim, hoặc chứa ảnh/video:
-          // TUYỆT ĐỐI KHÔNG XÓA (anchor.remove()) VÀ KHÔNG CHẶN CLICK HỢP LỆ!
-          if (isMovieBannerOrPoster(anchor) || isMovieBannerOrPoster(target)) {
+          if (isMovieBannerOrPoster(anchor) || isMovieBannerOrPoster(target) || isSiteInteractiveElement(anchor)) {
             return;
           }
 
-          const href = anchor.href || '';
-          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
+          const href = anchor.getAttribute('href') || '';
+          if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') return;
           
           try {
             const targetUrl = new URL(href, window.location.href);
             const currentHost = window.location.hostname.replace(/^www\./i, '');
             const targetHost = targetUrl.hostname.replace(/^www\./i, '');
             
-            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
+            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + targetHost);
             
             if (isExternal) {
               // Bỏ qua các trang mạng xã hội / dịch vụ hợp lệ
@@ -1367,7 +1401,7 @@ if (window.location.hostname.includes('youtube.com')) {
           } catch (err) {}
         } else {
           // 2. Detect if click is on an invisible DIV/SECTION overlay
-          if (isMovieBannerOrPoster(target)) return;
+          if (isMovieBannerOrPoster(target) || isSiteInteractiveElement(target)) return;
 
           const style = window.getComputedStyle(target);
           const isFloating = style.position === 'absolute' || style.position === 'fixed';
@@ -1389,7 +1423,7 @@ if (window.location.hostname.includes('youtube.com')) {
                 let c = target;
                 let inPlayerOrMovie = false;
                 while (c && c !== document.body && c !== document.documentElement) {
-                  if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c)) {
+                  if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c) || isSiteInteractiveElement(c)) {
                     inPlayerOrMovie = true;
                     break;
                   }
