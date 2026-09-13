@@ -137,7 +137,31 @@
       window.COUNT_VAST = 0;
       window.show_adx = 0;
 
-      // Safety stub for JWPlayer telemetry (jwpsrv)
+      // Neutralize popup configs (e.g. pu.js on movie sites)
+      let _popupConfig = { isVip: true, cooldown: 999999, ads: [] };
+      Object.defineProperty(window, 'POPUP_CONFIG', {
+        get() { return _popupConfig; },
+        set(val) {
+          if (val && typeof val === 'object') {
+            val.isVip = true;
+            val.ads = [];
+            _popupConfig = val;
+          }
+        },
+        configurable: true
+      });
+
+      // Neutralize TVC preroll ad flags
+      let _onTvc = 0;
+      Object.defineProperty(window, 'on_tvc', {
+        get() { return 0; },
+        set() { _onTvc = 0; },
+        configurable: true
+      });
+    } catch (e) { }
+
+    // Safety stub for JWPlayer telemetry (jwpsrv)
+    try {
       if (!window.jwpsrv) {
         const dummyJwpsrv = function () {
           return {
@@ -845,23 +869,23 @@
     try {
       if (window.self !== window.top) return true;
 
+      // 1. Never consider known ad containers, overlays, or blurred popups as legitimate
+      if (el.closest && el.closest(
+        '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
+        'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], ' +
+        '#movieModal, #profile-modal, .preload_popup, [id*="ad-"], [class*="ad-banner"], [class*="sponsored"], ' +
+        '[class*="catfish"], [id*="catfish"], [class*="floating-ad"], [class*="quang-cao"], [class*="quangcao"], .modal-backdrop'
+      )) {
+        return false;
+      }
+
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
       if (['button', 'input', 'select', 'textarea', 'label', 'summary', 'option', 'video', 'audio', 'canvas', 'svg', 'path', 'i', 'picture'].includes(tagName)) {
         return true;
       }
 
-      if (el.getAttribute) {
-        const role = (el.getAttribute('role') || '').toLowerCase();
-        if (['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'searchbox', 'textbox', 'combobox', 'slider'].includes(role)) {
-          return true;
-        }
-        if (el.hasAttribute('onclick') || el.hasAttribute('tabindex') || el.hasAttribute('data-action') || el.hasAttribute('data-ep') || el.hasAttribute('data-sv') || el.hasAttribute('data-link')) {
-          return true;
-        }
-      }
-
+      // 2. Protect legitimate movie website elements
       if (el.closest && el.closest(
-        'a, button, input, select, textarea, label, summary, option, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [onclick], [tabindex], ' +
         '.btn-episode, .module-play-list-link, .btn-episode-sv, .watch-now-btn, .main-btn, .btn-play, .play-btn, .btn, ' +
         '[class*="btn-"], [class*="_btn"], [class*="button"], [id*="btn"], [id*="button"], ' +
         '[class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="tap"], [id*="tap"], [class*="list-ep"], [id*="list-ep"], ' +
@@ -873,11 +897,14 @@
         '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
         '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
         '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
-        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+        '.thumb-overlay, .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
         '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
-        'nav, header, footer, form, dialog, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"], [class*="modal"]'
+        'nav, header, footer, form, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"]'
       )) {
+        return true;
+      }
+
+      if (el.hasAttribute && (el.hasAttribute('data-ep') || el.hasAttribute('data-sv') || el.hasAttribute('data-link'))) {
         return true;
       }
     } catch (e) { }
@@ -1056,23 +1083,6 @@
 
       // 5. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
       if (overlay) {
-        if (anchor) {
-          try {
-            const href = anchor.getAttribute('href') || '';
-            if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
-              return;
-            }
-            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-            const currentHost = window.location.hostname.toLowerCase();
-            const isExternal = targetHost && targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
-            if (!isExternal || isWhitelisted(href)) {
-              return;
-            }
-          } catch (err) {
-            return;
-          }
-        }
-
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -1085,7 +1095,21 @@
           overlay.remove();
         } catch (err) { }
 
-        // After clearing the ad overlay, try to resume play/pause naturally ONLY IF click was on the player!
+        // Clean any other overlay or scroll locks immediately
+        cleanAdOverlays();
+
+        // Pass-through click to genuine element underneath!
+        try {
+          if (e.clientX && e.clientY) {
+            const underEl = document.elementFromPoint(e.clientX, e.clientY);
+            if (underEl && underEl !== overlay && !underEl.contains(overlay)) {
+              if (isLegitimateInteractiveElement(underEl) || isPlayerOrPlayButton(underEl)) {
+                underEl.click();
+              }
+            }
+          }
+        } catch (err) { }
+
         if (isPlayerOrPlayButton(target)) {
           toggleVideoPlayPause(target);
         }
@@ -1218,6 +1242,102 @@
     }
   }
 
+  // Global aggressive overlay cleaner: removes all blurred ad backdrops, popunders, and unfreezes body
+  function cleanAdOverlays() {
+    if (!isEnabled() || isCurrentPageWhitelisted() || window.location.hostname.includes('youtube.com')) return;
+    try {
+      // 1. Target known ad overlays, modal dialogs, and clickjack traps
+      const adOverlaySelectors = [
+        'div[style*="z-index:99999999"]',
+        'div[style*="z-index: 99999999"]',
+        'div[style*="z-index:2147483647"]',
+        'div[style*="z-index: 2147483647"]',
+        '[data-state="open"][class*="z-[9998]"]',
+        '[data-state="open"][class*="z-[9999]"]',
+        '[data-state="open"][class*="backdrop-blur"]',
+        '[class*="z-[9998]"]',
+        '[class*="z-[9999]"]',
+        '[data-radix-popper-content-wrapper]',
+        '#movieModal',
+        '#profile-modal',
+        '.preload_popup',
+        '.cashfish-ads',
+        '.modal-backdrop'
+      ];
+
+      const elements = document.querySelectorAll(adOverlaySelectors.join(', '));
+      elements.forEach(el => {
+        if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) return;
+        try {
+          el.remove();
+          console.log('[Anti Pop-Under] Removed ad overlay element:', el);
+        } catch (e) {
+          el.style.display = 'none';
+          el.style.pointerEvents = 'none';
+        }
+      });
+
+      // 2. Remove fixed/absolute backdrop-blur overlays covering the screen
+      const blurs = document.querySelectorAll('[class*="backdrop-blur"]');
+      blurs.forEach(el => {
+        if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) return;
+        try {
+          const style = window.getComputedStyle(el);
+          if (style.position === 'fixed' || style.position === 'absolute') {
+            const zIdx = parseInt(style.zIndex, 10);
+            if (zIdx >= 100 || isNaN(zIdx)) {
+              el.remove();
+              console.log('[Anti Pop-Under] Removed backdrop-blur overlay:', el);
+            }
+          }
+        } catch (e) { }
+      });
+
+      // 3. Scan for anti-adblock modals
+      const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"]');
+      dialogs.forEach(el => {
+        const text = (el.textContent || '').toLowerCase();
+        if (
+          text.includes('phát hiện trình chặn quảng cáo') ||
+          text.includes('vui lòng tắt trình chặn quảng cáo') ||
+          text.includes('vui lòng tắt adblock') ||
+          text.includes('adblock detected') ||
+          text.includes('chặn quảng cáo') ||
+          text.includes('turn off adblock') ||
+          text.includes('disable adblock')
+        ) {
+          try { el.remove(); } catch (e) { }
+        }
+      });
+
+      // 4. Unfreeze body and html so users can ALWAYS click and scroll freely!
+      const html = document.documentElement;
+      const body = document.body;
+
+      if (body) {
+        if (body.hasAttribute('data-scroll-locked')) {
+          body.removeAttribute('data-scroll-locked');
+        }
+        body.classList.remove('modal-open');
+        if (body.style.pointerEvents === 'none') {
+          body.style.pointerEvents = 'auto';
+        }
+        if (body.style.overflow === 'hidden') {
+          body.style.overflow = '';
+        }
+      }
+
+      if (html) {
+        if (html.style.pointerEvents === 'none') {
+          html.style.pointerEvents = 'auto';
+        }
+        if (html.style.overflow === 'hidden') {
+          html.style.overflow = '';
+        }
+      }
+    } catch (e) { }
+  }
+
   // Helper to check if element is a clickjack overlay
   function isClickjackOverlay(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) {
@@ -1227,24 +1347,28 @@
     if (window.self !== window.top) return false;
 
     try {
-      // 1. Never flag any site button, episode link, tab, control, player, or legitimate interactive UI
-      if (isLegitimateInteractiveElement(el)) {
+      // 1. Direct match on known ad overlay elements
+      if (el.matches && el.matches(
+        '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
+        'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], div[style*="z-index: 2147483647"], ' +
+        '#movieModal, #profile-modal, .preload_popup, .cashfish-ads, .modal-backdrop'
+      )) {
+        return true;
+      }
+
+      if (el.closest && el.closest(
+        '#movieModal, [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], .preload_popup, .cashfish-ads'
+      )) {
+        return true;
+      }
+
+      // 2. Never flag any site button, episode link, tab, control, player, or legitimate interactive UI
+      if (isLegitimateInteractiveElement(el) || isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) {
         return false;
       }
 
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'picture', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option', 'a', 'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ul', 'ol', 'nav', 'header', 'footer'].includes(tagName)) {
-        return false;
-      }
-
-      // Visible elements with text content are genuine UI elements (e.g. episode buttons "Tập 1", "Tập 2"), NOT clickjack overlays!
-      const text = (el.innerText || el.textContent || '').trim();
-      if (text.length > 0) {
-        return false;
-      }
-
-      // Protect video players, canvases, and player control bars from clickjack overlay detection
-      if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) {
+      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'button', 'input', 'select', 'textarea', 'form'].includes(tagName)) {
         return false;
       }
 
@@ -1266,26 +1390,27 @@
         }
       }
 
-      // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
-      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
-        return false;
-      }
-
-      // If it contains genuine form controls, video media, images, or text-bearing children, skip
-      if (el.querySelector('img, picture, video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6, i, svg, li, label')) {
+      // Never consider elements inside forms, navbars, headers as overlays
+      if (el.closest('form, nav, header, footer, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
         return false;
       }
 
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
+      const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
+      if (!isPositioned) return false;
 
       const width = rect.width;
       const height = rect.height;
       const vw = window.innerWidth || document.documentElement.clientWidth || 800;
       const vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
-      const isPositioned = (style.position === 'absolute' || style.position === 'fixed');
-      if (!isPositioned) return false;
+      // Real overlay area check: must span a significant part of the viewport (at least 40% of viewport or >= 300x300)
+      const isLargeArea = (width >= 300 && height >= 300) || (width >= vw * 0.4 && height >= vh * 0.4);
+      if (!isLargeArea) return false;
+
+      const zIndex = parseInt(style.zIndex, 10);
+      const hasHighZ = zIndex >= 999 || isNaN(zIndex) || style.zIndex === 'auto';
 
       const opacity = parseFloat(style.opacity);
       let bgAlpha = 1;
@@ -1297,11 +1422,20 @@
       }
 
       const isTransparent = opacity < 0.1 || bgAlpha < 0.1;
-      if (!isTransparent) return false;
+      const hasBackdropBlur = elClass.includes('backdrop-blur') || (style.backdropFilter && style.backdropFilter !== 'none') || (style.webkitBackdropFilter && style.webkitBackdropFilter !== 'none');
+      const hasAdLinks = !!el.querySelector('a[href*="bet"], a[href*="88"], a[href*="rikvip"], a[href*="adqc"], a[href*="6789x"], a[href*="musicskins"]');
 
-      // Real overlay area check: must span a significant part of the viewport (at least 40% of viewport in both dimensions or > 300x300)
-      const isLargeArea = (width >= 300 && height >= 300) || (width >= vw * 0.4 && height >= vh * 0.4);
-      return isLargeArea;
+      if (isTransparent && hasHighZ && !el.querySelector('input, select, textarea, form, video, button')) {
+        return true;
+      }
+      if (hasBackdropBlur && hasHighZ) {
+        return true;
+      }
+      if (hasAdLinks && (hasHighZ || style.position === 'fixed')) {
+        return true;
+      }
+
+      return false;
     } catch (e) {
       return false;
     }
@@ -2371,42 +2505,6 @@
   function runGenericAntiAdblockBypass() {
     if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
 
-    function cleanOverlays() {
-      if (!isEnabled()) return;
-      try {
-        const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"], [class*="backdrop"]');
-        dialogs.forEach(el => {
-          const text = (el.textContent || '').toLowerCase();
-          const matchesAdblockText = (
-            text.includes('phát hiện trình chặn quảng cáo') ||
-            text.includes('vui lòng tắt trình chặn quảng cáo') ||
-            text.includes('vui lòng tắt adblock') ||
-            text.includes('adblock detected') ||
-            text.includes('chặn quảng cáo') ||
-            text.includes('turn off adblock') ||
-            text.includes('disable adblock')
-          );
-
-          if (matchesAdblockText) {
-            el.remove();
-            console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
-
-            const html = document.documentElement;
-            const body = document.body;
-
-            if (html) {
-              if (html.style.overflow === 'hidden') html.style.overflow = '';
-              if (html.style.pointerEvents === 'none') html.style.pointerEvents = '';
-            }
-            if (body) {
-              if (body.style.overflow === 'hidden') body.style.overflow = '';
-              if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
-            }
-          }
-        });
-      } catch (e) { }
-    }
-
     let throttleTimer = null;
     function scheduleBypassScan() {
       if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
@@ -2414,8 +2512,8 @@
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
         if (!isEnabled()) return;
-        cleanOverlays();
-      }, 1500);
+        cleanAdOverlays();
+      }, 80);
     }
 
     try {
@@ -2428,12 +2526,12 @@
       });
     } catch (e) { }
 
-    // Fallback scan every 5 seconds for silent background changes
+    // Fallback scan every 600ms to immediately eliminate any delayed ad popups or scroll-locks
     setInterval(() => {
       if (isEnabled() && !window.location.hostname.includes('youtube.com') && !isCurrentPageWhitelisted()) {
-        cleanOverlays();
+        cleanAdOverlays();
       }
-    }, 5000);
+    }, 600);
 
     // Initial scan
     scheduleBypassScan();

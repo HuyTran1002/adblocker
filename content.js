@@ -117,10 +117,12 @@ const adSelectors = [
   'a[href*="gem88"]', 'a[href*="rikvip"]', 'a[href*="net88"]', 'a[href*="uk88"]',
   'a[href*="musicskins"]', 'a[href*="bom88"]', 'a[href*="vsbet"]',
 
-  // Fullscreen transparent popunder and clickjack overlays (e.g. pu.js, popunder scripts)
+  // Fullscreen transparent popunder, clickjack overlays, and modal ad backdrops
   'div[style*="z-index:99999999"]', 'div[style*="z-index: 99999999"]',
   'div[style*="z-index:2147483647"]', 'div[style*="z-index: 2147483647"]',
-  '#profile-modal', '.preload_popup'
+  '#movieModal', '#profile-modal', '.preload_popup', '.cashfish-ads',
+  '[data-state="open"][class*="z-[9998]"]', '[data-state="open"][class*="z-[9999]"]',
+  '[data-state="open"][class*="backdrop-blur"]', '[data-radix-popper-content-wrapper]'
 ];
 
 function injectAdBlockCSS() {
@@ -267,6 +269,15 @@ function injectAdBlockCSS() {
   }
 
   /* === END PRE-BLOCK === */
+
+  /* Giải phóng chuột và scroll lock: đảm bảo người dùng LUÔN click được tất cả nút bấm trên web */
+  html, body {
+    pointer-events: auto !important;
+  }
+  body[data-scroll-locked], body.modal-open, body[style*="pointer-events: none"] {
+    pointer-events: auto !important;
+    overflow: visible !important;
+  }
 
   /* Chỉ ép pointer-events: auto lên thẻ video, iframe trực tiếp và control player */
   video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
@@ -658,6 +669,17 @@ if (window.location.hostname.includes('youtube.com')) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
         if (window.self !== window.top) return true;
+
+        // 1. Never consider known ad containers, overlays, or blurred popups as legitimate
+        if (el.closest && el.closest(
+          '[class*="backdrop-blur"], [class*="z-[9998]"], [class*="z-[9999]"], [data-radix-popper-content-wrapper], ' +
+          'div[style*="z-index:99999999"], div[style*="z-index: 99999999"], div[style*="z-index:2147483647"], ' +
+          '#movieModal, #profile-modal, .preload_popup, .cashfish-ads, [id*="ad-"], [class*="ad-banner"], [class*="sponsored"], ' +
+          '[class*="catfish"], [id*="catfish"], [class*="floating-ad"], [class*="quang-cao"], [class*="quangcao"], .modal-backdrop'
+        )) {
+          return false;
+        }
+
         const tagName = el.tagName ? el.tagName.toLowerCase() : '';
         if (['button', 'input', 'select', 'textarea', 'label', 'summary', 'option', 'video', 'audio', 'canvas', 'svg', 'path', 'i', 'picture'].includes(tagName)) {
           return true;
@@ -683,7 +705,7 @@ if (window.location.hostname.includes('youtube.com')) {
           '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
           '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
           '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
-          'nav, header, footer, form, dialog, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"], [class*="modal"]'
+          'nav, header, footer, form, .menu, .nav, .tab, .search, [class*="nav"], [class*="tab"], [class*="menu"]'
         )) return true;
       } catch (e) { }
       return false;
@@ -1149,7 +1171,10 @@ if (window.location.hostname.includes('youtube.com')) {
           const elId = (el.id || '').toLowerCase();
 
           const isOverlayClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') ||
-                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish');
+                                 elClass.includes('backdrop-blur') || elClass.includes('z-[9998]') || elClass.includes('z-[9999]') ||
+                                 elId.includes('moviemodal') || elId.includes('profile-modal') || elClass.includes('preload_popup') || elClass.includes('cashfish') ||
+                                 elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop') || elClass.includes('catfish') ||
+                                 (style.zIndex && parseInt(style.zIndex, 10) >= 9999999);
 
           if (!isOverlayClass) return;
 
@@ -1204,12 +1229,20 @@ if (window.location.hostname.includes('youtube.com')) {
             el.setAttribute('data-ad-blocked', 'true');
             el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
             console.log('[Anti Pop-Under] Hide orphaned overlay backdrop & close button:', el);
-
-            // Restore scroll locks if body/html was locked
-            if (document.body && document.body.style.overflow === 'hidden') document.body.style.overflow = '';
-            if (document.documentElement && document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
           }
         });
+
+        // Unconditionally restore scroll & pointer interactions if body/html was locked
+        if (document.body) {
+          if (document.body.hasAttribute('data-scroll-locked')) document.body.removeAttribute('data-scroll-locked');
+          document.body.classList.remove('modal-open');
+          if (document.body.style.pointerEvents === 'none') document.body.style.pointerEvents = 'auto';
+          if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+        }
+        if (document.documentElement) {
+          if (document.documentElement.style.pointerEvents === 'none') document.documentElement.style.pointerEvents = 'auto';
+          if (document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
+        }
       } catch(e) {}
     }
 
@@ -1233,6 +1266,7 @@ if (window.location.hostname.includes('youtube.com')) {
           checkAndHideElement(nodes[i]);
         }
       }
+      cleanOrphanedBackdrops();
     }
 
     function queueNodeCheck(node) {
