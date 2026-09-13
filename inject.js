@@ -1245,6 +1245,19 @@
   // Global aggressive overlay cleaner: removes all blurred ad backdrops, popunders, and unfreezes body
   function cleanAdOverlays() {
     if (!isEnabled() || isCurrentPageWhitelisted() || window.location.hostname.includes('youtube.com')) return;
+    
+    function hideAndDisableElement(el) {
+      if (!el) return;
+      try {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('z-index', '-9999', 'important');
+        el.style.setProperty('width', '0', 'important');
+        el.style.setProperty('height', '0', 'important');
+      } catch (e) { }
+    }
+
     try {
       // 1. Target known ad overlays, modal dialogs, and clickjack traps
       const adOverlaySelectors = [
@@ -1269,12 +1282,9 @@
       elements.forEach(el => {
         if (isPlayerOrPlayButton(el) || isSeekBarOrControlButton(el)) return;
         try {
-          el.remove();
-          console.log('[Anti Pop-Under] Removed ad overlay element:', el);
-        } catch (e) {
-          el.style.display = 'none';
-          el.style.pointerEvents = 'none';
-        }
+          hideAndDisableElement(el);
+          console.log('[Anti Pop-Under] Hidden ad overlay element:', el);
+        } catch (e) { }
       });
 
       // 2. Remove fixed/absolute backdrop-blur overlays covering the screen
@@ -1286,8 +1296,8 @@
           if (style.position === 'fixed' || style.position === 'absolute') {
             const zIdx = parseInt(style.zIndex, 10);
             if (zIdx >= 100 || isNaN(zIdx)) {
-              el.remove();
-              console.log('[Anti Pop-Under] Removed backdrop-blur overlay:', el);
+              hideAndDisableElement(el);
+              console.log('[Anti Pop-Under] Hidden backdrop-blur overlay:', el);
             }
           }
         } catch (e) { }
@@ -1306,7 +1316,7 @@
           text.includes('turn off adblock') ||
           text.includes('disable adblock')
         ) {
-          try { el.remove(); } catch (e) { }
+          try { hideAndDisableElement(el); } catch (e) { }
         }
       });
 

@@ -2352,14 +2352,26 @@ if (window.location.hostname.includes('youtube.com')) {
         return false;
       }
 
+      function hideAndDisableElement(el) {
+        if (!el) return;
+        try {
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+          el.style.setProperty('opacity', '0', 'important');
+          el.style.setProperty('z-index', '-9999', 'important');
+          el.style.setProperty('width', '0', 'important');
+          el.style.setProperty('height', '0', 'important');
+        } catch (e) { }
+      }
+
       function scanAndRemovePopups(root) {
         const candidates = (root || document).querySelectorAll(
           '[class*="z-[9998]"], [class*="z-[9999]"], [role="dialog"], [aria-modal="true"]'
         );
         candidates.forEach(el => {
           if (isPopupOrOverlay(el)) {
-            el.remove();
-            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
+            hideAndDisableElement(el);
+            console.log('[Anti Pop-Under] Hidden motphimc popup overlay:', el.className || el.tagName);
           }
         });
         // Also reset body overflow if it was locked by the popup
@@ -2373,7 +2385,7 @@ if (window.location.hostname.includes('youtube.com')) {
           for (const node of mut.addedNodes) {
             if (node.nodeType === 1) {
               if (isPopupOrOverlay(node)) {
-                node.remove();
+                hideAndDisableElement(node);
                 if (document.body && document.body.style.overflow === 'hidden') {
                   document.body.style.overflow = '';
                 }
