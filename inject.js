@@ -965,10 +965,58 @@
     } catch (e) { }
   }
 
-  function arePlayerControlsHidden(container) {
-    if (!container) return false;
+  function injectPlayerStyles() {
     try {
-      if (container.classList) {
+      if (document.getElementById('webshield-player-styles')) return;
+      const style = document.createElement('style');
+      style.id = 'webshield-player-styles';
+      style.textContent = `
+        .webshield-controls-show .art-controls,
+        .webshield-controls-show .vjs-control-bar,
+        .webshield-controls-show .jw-controlbar,
+        .webshield-controls-show .plyr__controls,
+        .webshield-controls-show .dplayer-controller,
+        .webshield-controls-show .edge-custom-controls,
+        .webshield-controls-show [class*="control-bar"],
+        .webshield-controls-show [class*="bottom-controls"],
+        .webshield-controls-show [class*="controls-bar"] {
+          opacity: 1 !important;
+          visibility: visible !important;
+          display: flex !important;
+          pointer-events: auto !important;
+          bottom: 0 !important;
+          transform: none !important;
+          z-index: 99999 !important;
+          transition: opacity 0.2s ease !important;
+        }
+
+        .webshield-controls-show .art-control-progress,
+        .webshield-controls-show .vjs-progress-control,
+        .webshield-controls-show .jw-slider-time,
+        .webshield-controls-show .plyr__progress,
+        .webshield-controls-show .dplayer-bar-wrap,
+        .webshield-controls-show [class*="progress"],
+        .webshield-controls-show [class*="seekbar"] {
+          opacity: 1 !important;
+          visibility: visible !important;
+          pointer-events: auto !important;
+        }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    } catch (e) { }
+  }
+
+  function arePlayerControlsHidden(container) {
+    try {
+      // Nếu container hoặc trang đang có class webshield-controls-show thì thanh điều khiển ĐANG HIỆN
+      if (container && container.classList && container.classList.contains('webshield-controls-show')) {
+        return false;
+      }
+      if (document.querySelector('.webshield-controls-show')) {
+        return false;
+      }
+
+      if (container && container.classList) {
         if (
           container.classList.contains('jw-flag-user-inactive') ||
           container.classList.contains('vjs-user-inactive') ||
@@ -986,14 +1034,25 @@
         if (container.classList.contains('video-js') && !container.classList.contains('vjs-user-active')) {
           return true;
         }
+        if (container.classList.contains('artplayer') && !container.classList.contains('art-control-show')) {
+          return true;
+        }
       }
-      const edgeControls = (container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
+
+      const anyInactive = document.querySelector(
+        '.jw-flag-user-inactive, .vjs-user-inactive, .art-hide-cursor, .plyr--hide-controls, .dplayer-hide-controller, [class*="user-inactive"], [class*="autohide"]'
+      );
+      if (anyInactive) return true;
+
+      const edgeControls = (container && container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
       if (edgeControls && edgeControls.classList && !edgeControls.classList.contains('show')) {
         return true;
       }
-      const ctrlBar = container.querySelector && container.querySelector(
+
+      const ctrlBar = (container && container.querySelector && container.querySelector(
         '.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls'
-      );
+      )) || document.querySelector('.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls');
+
       if (ctrlBar) {
         const style = window.getComputedStyle(ctrlBar);
         if (style.opacity === '0' || style.visibility === 'hidden' || style.display === 'none') {
@@ -1001,34 +1060,73 @@
         }
       }
     } catch (e) { }
-    return false;
+    return true; // Mặc định khi đang phát video, thanh điều khiển thường tự ẩn
   }
+
+  let controlsHideTimeout = null;
 
   function wakeUpPlayerControls(target) {
     if (!target) return;
     try {
+      injectPlayerStyles();
       const container = (target.closest && target.closest(
         '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
-      )) || target;
+      )) || target.parentElement || target;
 
-      // 1. Remove all inactive / autohide classes immediately so controls pop back up
-      if (container.classList) {
+      // 1. Cưỡng chế bật hiển thị thanh điều khiển và thanh tiến trình bằng class đặc biệt webshield-controls-show
+      if (container && container.classList) {
+        container.classList.add('webshield-controls-show');
+        container.classList.add('art-control-show');
+        container.classList.add('vjs-user-active');
+        container.classList.add('jw-flag-user-active');
+        container.classList.add('dplayer-show-controller');
+
         container.classList.remove(
           'jw-flag-user-inactive', 'vjs-user-inactive', 'art-hide-cursor',
           'plyr--hide-controls', 'dplayer-hide-controller', 'autohide', 'user-inactive'
         );
-        container.classList.add('vjs-user-active');
       }
 
-      // 2. EdgePlayer specific wake-up
-      const edgeControls = (container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
+      // 2. Kích hoạt trực tiếp các API của các thư viện player phổ biến
+      try {
+        const art = window.art || (container && container.__artplayer);
+        if (art && art.controls) art.controls.show = true;
+
+        const vjs = (container && container.player) || (window.videojs && window.videojs.players && (window.videojs.players[container.id] || Object.values(window.videojs.players)[0]));
+        if (vjs && vjs.userActive) {
+          vjs.userActive(true);
+          if (vjs.reportUserActivity) vjs.reportUserActivity();
+        }
+
+        if (typeof window.jwplayer === 'function') {
+          try { window.jwplayer().setControls(true); } catch (e) { }
+        }
+
+        const dp = window.dp || (container && container.dp);
+        if (dp && dp.controller && dp.controller.show) dp.controller.show();
+      } catch (e) { }
+
+      // 3. EdgePlayer specific wake-up
+      const edgeControls = (container && container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
       if (edgeControls && edgeControls.classList) {
         edgeControls.classList.add('show');
       }
 
-      // 3. Dispatch synthetic mousemove on container to reset native player idle timers
-      const moveEvt = new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window });
-      container.dispatchEvent(moveEvt);
+      // 4. Dispatch synthetic mousemove on container to reset native player idle timers
+      if (container && container.dispatchEvent) {
+        const moveEvt = new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window });
+        container.dispatchEvent(moveEvt);
+      }
+
+      // 5. Tự động ẩn lại thanh điều khiển sau 3.5 giây nếu người dùng không tương tác tiếp
+      if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
+      controlsHideTimeout = setTimeout(() => {
+        try {
+          if (container && container.classList) {
+            container.classList.remove('webshield-controls-show');
+          }
+        } catch (e) { }
+      }, 3500);
     } catch (e) { }
   }
 
@@ -1048,7 +1146,7 @@
 
       const container = target ? ((target.closest && target.closest(
         '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
-      )) || target) : null;
+      )) || target.parentElement || target) : null;
       wasControlsHiddenOnDown = arePlayerControlsHidden(container);
     }
 
@@ -1119,7 +1217,8 @@
 
       // 5. Nếu click vào bề mặt trình phát video
       if (isPlayerOrPlayButton(target)) {
-        // Luôn đánh thức thanh điều khiển và thanh tiến trình
+        // Nếu đã click/chạm lần 2 để pause, xóa timer tự ẩn để thanh điều khiển giữ nguyên trạng thái hiển thị
+        if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
         wakeUpPlayerControls(target);
 
         if (video) {

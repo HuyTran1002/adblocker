@@ -333,6 +333,38 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
+  /* Buộc thanh tiến trình và thanh điều khiển phải hiện lên ngay lập tức khi được chạm/đánh thức trên điện thoại & máy tính */
+  .webshield-controls-show .art-controls,
+  .webshield-controls-show .vjs-control-bar,
+  .webshield-controls-show .jw-controlbar,
+  .webshield-controls-show .plyr__controls,
+  .webshield-controls-show .dplayer-controller,
+  .webshield-controls-show .edge-custom-controls,
+  .webshield-controls-show [class*="control-bar"],
+  .webshield-controls-show [class*="bottom-controls"],
+  .webshield-controls-show [class*="controls-bar"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+    bottom: 0 !important;
+    transform: none !important;
+    z-index: 99999 !important;
+    transition: opacity 0.2s ease !important;
+  }
+
+  .webshield-controls-show .art-control-progress,
+  .webshield-controls-show .vjs-progress-control,
+  .webshield-controls-show .jw-slider-time,
+  .webshield-controls-show .plyr__progress,
+  .webshield-controls-show .dplayer-bar-wrap,
+  .webshield-controls-show [class*="progress"],
+  .webshield-controls-show [class*="seekbar"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
   /* Tự động ẩn con trỏ chuột khi người dùng không di chuột trong lúc xem phim (inactive / fullscreen) */
   /* Nằm sau các quy tắc cursor ở trên để override thành công khi inactive trên PC */
   .jwplayer.jw-flag-user-inactive,
