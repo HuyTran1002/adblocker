@@ -131,55 +131,11 @@ const adSelectors = [
   'a[aria-label*="Quảng cáo F8BET" i]',
   'a[aria-label*="Quảng cáo SC88" i]',
 
-  // Popup banners, ad popups and modals
-  '.popup-banner', '[class*="popup-banner"]', '[id*="popup-banner"]',
-  '.banner-popup', '[class*="banner-popup"]', '[id*="banner-popup"]',
-  '.popup_banner', '[class*="popup_banner"]', '[id*="popup_banner"]',
-  '.banner_popup', '[class*="banner_popup"]', '[id*="banner_popup"]',
-  '.popup-ads', '[class*="popup-ads"]', '[id*="popup-ads"]',
-  '.ads-popup', '[class*="ads-popup"]', '[id*="ads-popup"]',
-  '.popup-ad', '[class*="popup-ad"]', '[id*="popup-ad"]',
-  '.ad-popup', '[class*="ad-popup"]', '[id*="ad-popup"]',
-  '.popup_ads', '[class*="popup_ads"]', '[id*="popup_ads"]',
-  '.ads_popup', '[class*="ads_popup"]', '[id*="ads_popup"]',
-  '.quangcao-popup', '[class*="quangcao-popup"]', '[class*="quang-cao-popup"]',
-  '[class*="popup-quangcao"]', '[class*="popup-quang-cao"]',
-  '.quangcao-banner', '[class*="quangcao-banner"]', '[class*="quang-cao-banner"]',
-  '.banner-quangcao', '[class*="banner-quangcao"]', '[class*="banner-quang-cao"]',
-
-  // Containers with close popup/ads triggers (using modern CSS :has selector)
-  ':is(div, section, aside):has(> *[onclick*="closePopup"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="close_popup"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="closeAds"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="close_ads"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="closeBanner"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="close_banner"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="hidePopup"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="hideAds"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> *[onclick*="hide_ads"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .close-popup):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .close-ads):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .btn-close-ads):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .btn-close-popup):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> [class*="close-popup"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> [class*="close-ads"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> [class*="close-banner"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .close-btn[onclick*="close"]):not(:has(form)):not(:has(input))',
-  ':is(div, section, aside):has(> .close_btn[onclick*="close"]):not(:has(form)):not(:has(input))',
-
-  // Floating, corner, and sticky catfish banners
-  '.floating-banner', '[class*="floating-banner"]', '[id*="floating-banner"]',
-  '.sticky-banner', '[class*="sticky-banner"]', '[id*="sticky-banner"]',
-  '.catfish-banner', '[class*="catfish-banner"]', '[id*="catfish-banner"]',
-  '.bottom-catfish', '[class*="bottom-catfish"]', '[id*="bottom-catfish"]',
-  '.top-catfish', '[class*="top-catfish"]', '[id*="top-catfish"]',
-  '.corner-banner', '[class*="corner-banner"]', '[id*="corner-banner"]',
-  '.float-banner', '[class*="float-banner"]', '[id*="float-banner"]',
-  '.box-banner', '[class*="box-banner"]', '[id*="box-banner"]',
-  '.fixed-banner', '[class*="fixed-banner"]', '[id*="fixed-banner"]',
-  '.side-banner', '[class*="side-banner"]', '[id*="side-banner"]',
-  '.banner-left', '.banner-right', '[class*="banner-left"]', '[class*="banner-right"]',
-  '.banner_left', '.banner_right', '[class*="banner_left"]', '[class*="banner_right"]'
+  // Popup banners, overlays and catfish ads (qmhsexzc, phimmoi, stream sites)
+  '#popup-overlay', '.popup-grid', '.popup-banner',
+  '#catfish-banner', '.catfish-banner',
+  '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
+  '.banner-popup', '.popup_banner', '.banner_popup'
 ];
 
 function injectAdBlockCSS() {
@@ -1205,47 +1161,6 @@ if (window.location.hostname.includes('youtube.com')) {
         } catch(e) {}
       };
 
-      // Helper to detect and hide popup banners, catfish banners, and ad modals
-      const checkPopupBanner = (targetEl) => {
-        if (!targetEl || targetEl.nodeType !== 1 || targetEl.hasAttribute('data-ad-blocked')) return;
-        if (isVideoPlayerOrControls(targetEl) || isMovieBannerOrPoster(targetEl)) return;
-
-        try {
-          const elClass = (typeof targetEl.className === 'string') ? targetEl.className.toLowerCase() : '';
-          const elId = (targetEl.id || '').toLowerCase();
-
-          const isPopupBannerMatch =
-            elClass.includes('popup-banner') || elClass.includes('popup_banner') ||
-            elClass.includes('banner-popup') || elClass.includes('banner_popup') ||
-            elClass.includes('popup-ads') || elClass.includes('popup_ads') ||
-            elClass.includes('ads-popup') || elClass.includes('ads_popup') ||
-            elClass.includes('ad-popup') || elClass.includes('ad_popup') ||
-            elClass.includes('catfish-banner') || elClass.includes('floating-banner') ||
-            elClass.includes('bottom-catfish') || elClass.includes('top-catfish') ||
-            elId.includes('popup-banner') || elId.includes('popup_banner') ||
-            elId.includes('banner-popup') || elId.includes('banner_popup');
-
-          const hasClosePopupBtn = targetEl.querySelector && targetEl.querySelector(
-            '[onclick*="closePopup"], [onclick*="close_popup"], [onclick*="closeAds"], [onclick*="close_ads"], [onclick*="closeBanner"], [onclick*="close_banner"], [onclick*="hidePopup"], [onclick*="hideAds"], .close-popup, .close-ads, .btn-close-ads, .btn-close-popup'
-          );
-
-          if (isPopupBannerMatch || hasClosePopupBtn) {
-            // Never block authentication, login, user or search modals
-            if (targetEl.closest && targetEl.closest('form, nav, header, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [id*="login"], [id*="auth"]')) {
-              return;
-            }
-            targetEl.setAttribute('data-ad-blocked', 'true');
-            targetEl.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; width: 0 !important; height: 0 !important;');
-            console.log('[Anti Pop-Under] Blocked Popup Banner:', targetEl);
-            safeSendMessage({
-              type: 'AD_BLOCKED',
-              url: window.location.href,
-              reason: 'Chặn banner quảng cáo popup'
-            });
-          }
-        } catch(e) {}
-      };
-
       // Verify element itself
       if (tagName === 'a') {
         checkAnchor(el);
@@ -1256,14 +1171,11 @@ if (window.location.hostname.includes('youtube.com')) {
       } else if (tagName === 'video') {
         checkVideo(el);
       }
-      checkPopupBanner(el);
       hideExplicitAd(el);
       checkHeuristicAdBanner(el);
 
       // Verify children only if element has child elements
       if (el.childElementCount > 0) {
-        checkPopupBanner(el);
-        el.querySelectorAll('.popup-banner, [class*="popup-banner"], .banner-popup, [class*="banner-popup"], [onclick*="closePopup"], [onclick*="close_popup"], [onclick*="closeAds"], [onclick*="close_ads"], [onclick*="closeBanner"], [onclick*="close_banner"], [onclick*="hidePopup"], [onclick*="hideAds"]').forEach(checkPopupBanner);
         el.querySelectorAll('a').forEach(checkAnchor);
         el.querySelectorAll('iframe').forEach(checkIframe);
         el.querySelectorAll('img').forEach(checkImg);
