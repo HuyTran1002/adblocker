@@ -965,6 +965,45 @@
     } catch (e) { }
   }
 
+  function arePlayerControlsHidden(container) {
+    if (!container) return false;
+    try {
+      if (container.classList) {
+        if (
+          container.classList.contains('jw-flag-user-inactive') ||
+          container.classList.contains('vjs-user-inactive') ||
+          container.classList.contains('art-hide-cursor') ||
+          container.classList.contains('plyr--hide-controls') ||
+          container.classList.contains('dplayer-hide-controller') ||
+          container.classList.contains('autohide') ||
+          container.classList.contains('user-inactive')
+        ) {
+          return true;
+        }
+        if (container.classList.contains('jwplayer') && !container.classList.contains('jw-flag-user-active')) {
+          return true;
+        }
+        if (container.classList.contains('video-js') && !container.classList.contains('vjs-user-active')) {
+          return true;
+        }
+      }
+      const edgeControls = (container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
+      if (edgeControls && edgeControls.classList && !edgeControls.classList.contains('show')) {
+        return true;
+      }
+      const ctrlBar = container.querySelector && container.querySelector(
+        '.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls'
+      );
+      if (ctrlBar) {
+        const style = window.getComputedStyle(ctrlBar);
+        if (style.opacity === '0' || style.visibility === 'hidden' || style.display === 'none') {
+          return true;
+        }
+      }
+    } catch (e) { }
+    return false;
+  }
+
   function wakeUpPlayerControls(target) {
     if (!target) return;
     try {
@@ -998,20 +1037,49 @@
     let isDraggingPointer = false;
     let pointerStartX = 0;
     let pointerStartY = 0;
+    let wasControlsHiddenOnDown = false;
+    let lastTouchTime = 0;
 
-    document.addEventListener('pointerdown', (e) => {
-      pointerStartX = e.clientX;
-      pointerStartY = e.clientY;
+    function handlePointerDown(x, y, target, isTouch) {
+      pointerStartX = x;
+      pointerStartY = y;
       isDraggingPointer = false;
-    }, { capture: true, passive: true });
+      if (isTouch) lastTouchTime = Date.now();
 
-    document.addEventListener('pointermove', (e) => {
-      if (e.buttons > 0) {
-        const dx = Math.abs(e.clientX - pointerStartX);
-        const dy = Math.abs(e.clientY - pointerStartY);
+      const container = target ? ((target.closest && target.closest(
+        '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
+      )) || target) : null;
+      wasControlsHiddenOnDown = arePlayerControlsHidden(container);
+    }
+
+    function handlePointerMove(x, y, isMoving) {
+      if (isMoving) {
+        const dx = Math.abs(x - pointerStartX);
+        const dy = Math.abs(y - pointerStartY);
         if (dx > 8 || dy > 8) {
           isDraggingPointer = true;
         }
+      }
+    }
+
+    document.addEventListener('pointerdown', (e) => {
+      handlePointerDown(e.clientX, e.clientY, e.target, e.pointerType === 'touch');
+    }, { capture: true, passive: true });
+
+    document.addEventListener('pointermove', (e) => {
+      handlePointerMove(e.clientX, e.clientY, e.buttons > 0 || e.pointerType === 'touch');
+    }, { capture: true, passive: true });
+
+    // Touch events fallback for all mobile browsers (ensures dragging seekbar never triggers click pause)
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches.length > 0) {
+        handlePointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target, true);
+      }
+    }, { capture: true, passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches && e.touches.length > 0) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY, true);
       }
     }, { capture: true, passive: true });
 
@@ -1020,7 +1088,7 @@
       const target = e.target;
       if (!target) return;
 
-      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua), bỏ qua sự kiện click sau khi thả chuột!
+      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua bằng chuột hoặc ngón tay), bỏ qua sự kiện click!
       if (isDraggingPointer) {
         isDraggingPointer = false;
         return;
@@ -1037,12 +1105,23 @@
         return;
       }
 
-      // 4. Nếu click vào bề mặt trình phát video
+      // 4. Nếu là thao tác chạm trên điện thoại (touch) và thanh điều khiển đang ẨN:
+      // Chuẩn UX Mobile: Cú chạm đầu tiên chỉ để HIỆN thanh điều khiển lên trước, KHÔNG ngắt dừng phim đang xem!
+      const isTouch = (Date.now() - lastTouchTime < 600) || (e.pointerType === 'touch');
+      const video = findVideoElement(target);
+      const isVideoPlaying = video && !video.paused;
+
+      if (isTouch && wasControlsHiddenOnDown && isVideoPlaying) {
+        wasControlsHiddenOnDown = false;
+        wakeUpPlayerControls(target);
+        return;
+      }
+
+      // 5. Nếu click vào bề mặt trình phát video
       if (isPlayerOrPlayButton(target)) {
         // Luôn đánh thức thanh điều khiển và thanh tiến trình
         wakeUpPlayerControls(target);
 
-        const video = findVideoElement(target);
         if (video) {
           // Nếu video đang trong trạng thái tua (seeking), tuyệt đối không can thiệp pause!
           if (video.seeking) return;
