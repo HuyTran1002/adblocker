@@ -952,7 +952,35 @@
     } catch (e) { }
   }
 
-  // Ensure clicking on any video player screen naturally toggles play/pause if site disabled displayClick
+  function wakeUpPlayerControls(target) {
+    if (!target) return;
+    try {
+      const container = (target.closest && target.closest(
+        '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
+      )) || target;
+
+      // 1. Remove all inactive / autohide classes immediately so controls pop back up
+      if (container.classList) {
+        container.classList.remove(
+          'jw-flag-user-inactive', 'vjs-user-inactive', 'art-hide-cursor',
+          'plyr--hide-controls', 'dplayer-hide-controller', 'autohide', 'user-inactive'
+        );
+        container.classList.add('vjs-user-active');
+      }
+
+      // 2. EdgePlayer specific wake-up
+      const edgeControls = (container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
+      if (edgeControls && edgeControls.classList) {
+        edgeControls.classList.add('show');
+      }
+
+      // 3. Dispatch synthetic mousemove on container to reset native player idle timers
+      const moveEvt = new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window });
+      container.dispatchEvent(moveEvt);
+    } catch (e) { }
+  }
+
+  // Ensure clicking/tapping on any video player screen naturally wakes up controls and toggles play/pause
   if (!isYouTube) {
     document.addEventListener('click', function (e) {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
@@ -968,16 +996,19 @@
         return;
       }
       // EdgePlayer (phimhdcss / tiktok.phimhdc) already natively handles screen click with a 350ms double-tap timer.
-      // Do not intercept or double-toggle EdgePlayer!
       if (document.getElementById('edgeplayer-root') || (target.closest && target.closest('#edgeplayer-root, .edge-custom-controls'))) {
+        wakeUpPlayerControls(target);
         return;
       }
       // If clicked on video player area (video surface, jw-media, jw-preview, etc.) but NOT on any button
       if (isPlayerOrPlayButton(target)) {
+        // ALWAYS wake up the player controls so the progress bar immediately reappears!
+        wakeUpPlayerControls(target);
+
         const video = findVideoElement(target);
         if (video) {
           const wasPaused = video.paused;
-          // Use setTimeout(0) to run AFTER all event handlers (capture+bubble+default) have finished
+          // Use setTimeout(50) to run AFTER all event handlers have finished
           // This ensures we don't double-toggle if the site natively handled the click
           setTimeout(() => {
             if (video.paused === wasPaused) {
@@ -991,10 +1022,20 @@
                 video.pause();
               }
             }
-          }, 0);
+            wakeUpPlayerControls(target);
+          }, 50);
         }
       }
     }, true);
+
+    // Mobile touch wake-up listener: tapping anywhere on the video player wakes up the controls!
+    document.addEventListener('touchend', function (e) {
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      const target = e.target;
+      if (target && isPlayerOrPlayButton(target)) {
+        wakeUpPlayerControls(target);
+      }
+    }, { capture: true, passive: true });
   }
 
   if (!isYouTube) {

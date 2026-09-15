@@ -290,22 +290,51 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Bắt buộc hiển thị con trỏ ngón tay (pointer) trên toàn bộ bề mặt trình phát video */
-  video:not([muted]):not([loop]):not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
-  .jwplayer, .jwplayer video, .jw-media, .jw-preview, .jw-controls, .jw-display-icon-container,
-  .artplayer, .art-video, .art-mask, .art-layers,
-  .video-js, .video-js video, .vjs-tech, .vjs-poster, .vjs-big-play-button,
-  .dplayer, .dplayer-video-wrap, .dplayer-mask,
-  .plyr, .plyr video, .plyr__video-wrapper,
-  [class*="player"] video, [id*="player"] video,
-  [class*="player"] .jw-media, [class*="player"] .art-video,
-  [class*="aspect-video"], [class*="aspect-video"] video,
-  [class*="screen-box"], [id*="playBox"],
+  /* Con trỏ pointer chỉ ép lên iframe trình phát */
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
     cursor: pointer !important;
   }
 
+  /* Ép pointer-events: auto lên toàn bộ bề mặt trình phát video, mặt nạ, và thanh điều khiển */
+  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
+  .jwplayer, .jwplayer video, .jw-media, .jw-preview, .jw-controls, .jw-display-icon-container, .jw-wrapper,
+  .artplayer, .art-video, .art-mask, .art-layers,
+  .video-js, .video-js video, .vjs-tech, .vjs-poster, .vjs-big-play-button,
+  .dplayer, .dplayer-video-wrap, .dplayer-mask,
+  .plyr, .plyr video, .plyr__video-wrapper,
+  [class*="player"], [id*="player"],
+  [class*="player"] video, [id*="player"] video,
+  [class*="aspect-video"], [class*="aspect-video"] video,
+  [class*="screen-box"], [id*="playBox"],
+  #edgeplayer-root {
+    pointer-events: auto !important;
+  }
+
+  /* Thanh điều khiển hiển thị con trỏ pointer khi hiển thị */
+  .jwplayer .jw-controlbar,
+  .video-js .vjs-control-bar,
+  .artplayer .art-controls,
+  .plyr .plyr__controls,
+  .edge-custom-controls {
+    cursor: default;
+    pointer-events: auto !important;
+  }
+  .jwplayer .jw-controlbar *,
+  .video-js .vjs-control-bar *,
+  .artplayer .art-controls *,
+  .plyr .plyr__controls *,
+  .edge-custom-controls * {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  .jwplayer.jw-state-paused .jw-controlbar {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
   /* Tự động ẩn con trỏ chuột khi người dùng không di chuột trong lúc xem phim (inactive / fullscreen) */
+  /* Nằm sau các quy tắc cursor ở trên để override thành công khi inactive trên PC */
   .jwplayer.jw-flag-user-inactive,
   .jwplayer.jw-flag-user-inactive *,
   .video-js.vjs-user-inactive,
@@ -323,36 +352,11 @@ function injectAdBlockCSS() {
   [class*="autohide"],
   [class*="autohide"] *,
   [class*="hide-cursor"],
-  [class*="hide-cursor"] * {
+  [class*="hide-cursor"] *,
+  :fullscreen video,
+  :-webkit-full-screen video,
+  :-moz-full-screen video {
     cursor: none !important;
-  }
-
-  /* Ép pointer-events: auto lên thẻ video, controlbar, play button (không ép lên jw-controls để click xuyên vào video) */
-  video:not([src*="playhubconnect"]):not([src*="adserver"]):not([src*="9splt"]):not([src*="juicyads"]),
-  .jwplayer video, .jw-media, .jw-preview, .jw-display-icon-container,
-  .artplayer, .art-video, .art-mask, .art-layers,
-  .video-js, .video-js video, .vjs-tech, .vjs-poster, .vjs-big-play-button,
-  .dplayer, .dplayer-video-wrap, .dplayer-mask,
-  .plyr, .plyr video, .plyr__video-wrapper,
-  [class*="player"] video, [id*="player"] video,
-  [class*="aspect-video"], [class*="aspect-video"] video,
-  [class*="screen-box"], [id*="playBox"] {
-    pointer-events: auto !important;
-  }
-
-  /* Đảm bảo thanh điều khiển của các player luôn hiển thị con trỏ phù hợp và nhận click bình thường */
-  .jwplayer .jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, .edge-custom-controls {
-    cursor: default;
-    pointer-events: auto !important;
-  }
-  .jwplayer .jw-controlbar *, .art-controls *, .vjs-control-bar *, .plyr__controls *, .edge-custom-controls * {
-    cursor: pointer !important;
-    pointer-events: auto !important;
-  }
-  .jwplayer.jw-state-paused .jw-controlbar {
-    opacity: 1 !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
   }
 
   /* Bảo vệ tuyệt đối iframe trình phát phim */
@@ -2249,8 +2253,11 @@ if (window.location.hostname.includes('youtube.com')) {
           min-height: 1px !important;
         }
         video:not([muted]):not([loop]),
-        .jwplayer, .jw-media, .artplayer, .art-video, .video-js, .plyr, .dplayer,
-        [class*="player"] video, [id*="player"] video,
+        .jwplayer, .artplayer, .video-js, .plyr,
+        [class*="player"] video, [id*="player"] video {
+          visibility: visible !important;
+          pointer-events: auto !important;
+        }
         iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
           visibility: visible !important;
           pointer-events: auto !important;
