@@ -880,10 +880,23 @@
       if (['button', 'input', 'select', 'a'].includes(tag)) return true;
       if (el.getAttribute && (el.getAttribute('role') === 'button' || el.getAttribute('role') === 'slider')) return true;
 
+      // Check closest slider, progress, seekbar, scrubber, control container
+      if (el.closest && el.closest(
+        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
+        '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, .edge-custom-controls, ' +
+        '.art-control-progress, .vjs-progress-control, .vjs-progress-holder, .vjs-play-progress, ' +
+        '.jw-slider-time, .jw-progress, .jw-rail, .jw-knob, .dplayer-bar-wrap, .dplayer-bar, .plyr__progress, ' +
+        '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], ' +
+        '[class*="progress"], [class*="seekbar"], [class*="slider"], [class*="timeline"], [class*="scrubber"], [class*="time-rail"], ' +
+        '[id*="progress"], [id*="seekbar"], [id*="slider"], [id*="timeline"], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, [class*="episode"], [class*="server"]'
+      )) {
+        return true;
+      }
+
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      // Explicit seekbar, progress bar, volume, fullscreen, setting buttons only (do not include generic 'control')
-      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'vjs-control-bar', 'jw-controlbar', 'plyr__controls', 'vjs-play-control', 'jw-icon-play'];
+      const keywords = ['seekbar', 'slider', 'progress', 'timeline', 'volume', 'fullscreen', 'setting', 'scrubber', 'bar-wrap', 'time-rail', 'play-progress'];
       if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) return true;
     } catch (e) { }
     return false;
@@ -982,35 +995,63 @@
 
   // Ensure clicking/tapping on any video player screen naturally wakes up controls and toggles play/pause
   if (!isYouTube) {
+    let isDraggingPointer = false;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+
+    document.addEventListener('pointerdown', (e) => {
+      pointerStartX = e.clientX;
+      pointerStartY = e.clientY;
+      isDraggingPointer = false;
+    }, { capture: true, passive: true });
+
+    document.addEventListener('pointermove', (e) => {
+      if (e.buttons > 0) {
+        const dx = Math.abs(e.clientX - pointerStartX);
+        const dy = Math.abs(e.clientY - pointerStartY);
+        if (dx > 8 || dy > 8) {
+          isDraggingPointer = true;
+        }
+      }
+    }, { capture: true, passive: true });
+
     document.addEventListener('click', function (e) {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
-      // Do not interfere with buttons (site's own play/pause/skip handlers), links, inputs, sliders, control bars
-      if (target.closest && target.closest(
-        'a, button, input, select, textarea, [role="button"], [role="slider"], ' +
-        '.jw-controlbar, .art-controls, .vjs-control-bar, .plyr__controls, .edge-custom-controls, ' +
-        '[class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"], ' +
-        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, [class*="episode"], [class*="server"]'
-      )) {
+
+      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua), bỏ qua sự kiện click sau khi thả chuột!
+      if (isDraggingPointer) {
+        isDraggingPointer = false;
         return;
       }
-      // EdgePlayer (phimhdcss / tiktok.phimhdc) already natively handles screen click with a 350ms double-tap timer.
+
+      // 2. Không can thiệp nếu click hoặc tương tác vào thanh tua (seekbar, slider, progress), nút bấm, control bar
+      if (isSeekBarOrControlButton(target)) {
+        return;
+      }
+
+      // 3. EdgePlayer (phimhdcss / tiktok.phimhdc) đã tự xử lý click/double-tap
       if (document.getElementById('edgeplayer-root') || (target.closest && target.closest('#edgeplayer-root, .edge-custom-controls'))) {
         wakeUpPlayerControls(target);
         return;
       }
-      // If clicked on video player area (video surface, jw-media, jw-preview, etc.) but NOT on any button
+
+      // 4. Nếu click vào bề mặt trình phát video
       if (isPlayerOrPlayButton(target)) {
-        // ALWAYS wake up the player controls so the progress bar immediately reappears!
+        // Luôn đánh thức thanh điều khiển và thanh tiến trình
         wakeUpPlayerControls(target);
 
         const video = findVideoElement(target);
         if (video) {
+          // Nếu video đang trong trạng thái tua (seeking), tuyệt đối không can thiệp pause!
+          if (video.seeking) return;
+
           const wasPaused = video.paused;
-          // Use setTimeout(50) to run AFTER all event handlers have finished
-          // This ensures we don't double-toggle if the site natively handled the click
+          // Sử dụng setTimeout(50) để chạy sau khi sự kiện của trang hoàn tất
           setTimeout(() => {
+            if (video.seeking) return;
+
             if (video.paused === wasPaused) {
               if (wasPaused) {
                 if (video.ended || (video.duration > 0 && video.currentTime >= video.duration)) {
@@ -1028,11 +1069,11 @@
       }
     }, true);
 
-    // Mobile touch wake-up listener: tapping anywhere on the video player wakes up the controls!
+    // Mobile touch wake-up listener: chạm vào video player sẽ lập tức làm hiện lại thanh tiến trình
     document.addEventListener('touchend', function (e) {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
-      if (target && isPlayerOrPlayButton(target)) {
+      if (target && isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
         wakeUpPlayerControls(target);
       }
     }, { capture: true, passive: true });
