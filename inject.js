@@ -1001,9 +1001,36 @@
           visibility: visible !important;
           pointer-events: auto !important;
         }
+
+        /* Chặn triệt để banner quảng cáo popup và nút đóng popup bẫy */
+        .popup-banner, [class*="popup-banner"], [id*="popup-banner"],
+        .banner-popup, [class*="banner-popup"], [id*="banner-popup"],
+        .popup_banner, [class*="popup_banner"], [id*="popup_banner"],
+        .banner_popup, [class*="banner_popup"], [id*="banner_popup"],
+        .popup-ads, [class*="popup-ads"], [id*="popup-ads"],
+        .ads-popup, [class*="ads-popup"], [id*="ads-popup"],
+        .popup-ad, [class*="popup-ad"], [id*="popup-ad"],
+        .ad-popup, [class*="ad-popup"], [id*="ad-popup"],
+        .catfish-banner, [class*="catfish-banner"], [id*="catfish-banner"],
+        .floating-banner, [class*="floating-banner"], [id*="floating-banner"],
+        :is(div, section, aside):has(> *[onclick*="closePopup"]):not(:has(form)):not(:has(input)),
+        :is(div, section, aside):has(> *[onclick*="close_popup"]):not(:has(form)):not(:has(input)),
+        :is(div, section, aside):has(> *[onclick*="closeAds"]):not(:has(form)):not(:has(input)),
+        :is(div, section, aside):has(> *[onclick*="closeBanner"]):not(:has(form)):not(:has(input)) {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          height: 0 !important;
+          width: 0 !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
+  }
+  injectPlayerStyles();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectPlayerStyles);
   }
 
   function arePlayerControlsHidden(container) {
