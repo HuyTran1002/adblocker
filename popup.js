@@ -645,112 +645,118 @@ document.addEventListener("DOMContentLoaded", () => {
     return null;
   }
 
-  // Report Issue on Active Tab to GitHub Issues with Auto-Screenshot
+  // View Panels Navigation (Main View <-> Report View)
+  const reportView = document.getElementById("report-view");
   const reportIssueBtn = document.getElementById("report-issue-btn");
-  if (reportIssueBtn) {
-    let isReporting = false;
+  const closeReportBtn = document.getElementById("close-report-btn");
+  const reportDomainText = document.getElementById("report-domain-text");
+  const reportUrlText = document.getElementById("report-url-text");
+  const reportIssueType = document.getElementById("report-issue-type");
+  const reportDescInput = document.getElementById("report-desc-input");
+  const reportSendEmailBtn = document.getElementById("report-send-email-btn");
+  const reportSendGithubBtn = document.getElementById("report-send-github-btn");
+  const reportCopyInfoBtn = document.getElementById("report-copy-info-btn");
+  const copyBtnText = document.getElementById("copy-btn-text");
+
+  let reportedUrl = "";
+  let reportedDomain = "";
+
+  if (reportIssueBtn && reportView) {
     reportIssueBtn.addEventListener("click", () => {
-      if (isReporting) return;
-      isReporting = true;
-
-      const btnSpan = reportIssueBtn.querySelector("span");
-      const origText = btnSpan ? btnSpan.textContent : "Báo lỗi trang";
-      reportIssueBtn.classList.add("loading");
-      if (btnSpan) btnSpan.textContent = "Đang chụp...";
-
-      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const activeTab = tabs && tabs[0];
-        let currentUrl = "Không xác định";
-        let currentDomain = "Chưa rõ";
-
-        if (activeTab && activeTab.url) {
-          currentUrl = activeTab.url;
-          try {
-            currentDomain = new URL(activeTab.url).hostname;
-          } catch(e) {}
-        }
-
-        const manifest = chrome.runtime.getManifest();
-        const version = manifest.version || "3.6.3";
-        const browserInfo = navigator.userAgent;
-        const now = new Date().toLocaleString("vi-VN");
-
-        // 1. Tự động chụp màn hình tab hiện tại
-        let uploadedUrl = null;
+        reportedUrl = activeTab && activeTab.url ? activeTab.url : "Không xác định";
+        reportedDomain = "Chưa rõ";
         try {
-          const capturePromise = new Promise((resolve) => {
-            if (chrome.tabs && chrome.tabs.captureVisibleTab) {
-              chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 80 }, (dataUrl) => {
-                if (chrome.runtime.lastError || !dataUrl) {
-                  resolve(null);
-                } else {
-                  resolve(dataUrl);
-                }
-              });
-            } else {
-              resolve(null);
-            }
-          });
-
-          const dataUrl = await Promise.race([
-            capturePromise,
-            new Promise((resolve) => setTimeout(() => resolve(null), 2500))
-          ]);
-
-          if (dataUrl) {
-            if (btnSpan) btnSpan.textContent = "Đang tải ảnh...";
-            uploadedUrl = await uploadScreenshot(dataUrl);
+          if (activeTab && activeTab.url) {
+            reportedDomain = new URL(activeTab.url).hostname;
           }
-        } catch (capErr) {
-          console.warn('[WebShield] Capture error:', capErr);
-        }
+        } catch (e) { }
 
-        const titleParam = encodeURIComponent(`[Báo cáo]: ${currentDomain}`);
-        const domainParam = encodeURIComponent(currentDomain);
-        const urlParam = encodeURIComponent(currentUrl);
-        const versionParam = encodeURIComponent(`v${version} | ${browserInfo} | ${now}`);
+        if (reportDomainText) reportDomainText.textContent = reportedDomain;
+        if (reportUrlText) reportUrlText.textContent = reportedUrl;
+        if (reportDescInput) reportDescInput.value = "";
 
-        let screenshotMarkdown = uploadedUrl
-          ? `![Ảnh chụp màn hình lỗi](${uploadedUrl})`
-          : `*(Đã tự động sao chép ảnh vào bộ nhớ tạm. Nhấp vào đây và nhấn Ctrl+V để dán ảnh)*`;
-
-        const screenshotsParam = encodeURIComponent(screenshotMarkdown);
-
-        const bodyContent = `### 🌐 Thông tin trang web
-- **Tên miền:** \`${currentDomain}\`
-- **URL đầy đủ:** ${currentUrl}
-- **Phiên bản WebShield:** v${version}
-- **Trình duyệt & HĐH:** \`${browserInfo}\`
-- **Thời gian báo cáo:** ${now}
-
----
-
-### ⚠️ Loại vấn đề gặp phải
-- [ ] 🚨 **Quảng cáo lọt lưới:** Quảng cáo vẫn xuất hiện trên trang này
-- [ ] 💥 **Vỡ giao diện / Chặn nhầm:** Mất hình ảnh, video, banner phim hoặc nội dung chính
-- [ ] 🛑 **Phát hiện chặn quảng cáo:** Website hiện thông báo yêu cầu tắt AdBlock
-- [ ] 🔄 **Lỗi tính năng / Trình phát:** Nút bấm hoặc trình phát video không hoạt động bình thường
-
----
-
-### 📝 Mô tả chi tiết vấn đề
-*(Vui lòng mô tả vị trí lỗi hoặc phần nội dung bị ẩn nhầm trên trang...)*
-
----
-
-### 📷 Ảnh chụp màn hình lỗi (Tự động đính kèm)
-${screenshotMarkdown}
-`;
-        const bodyParam = encodeURIComponent(bodyContent);
-
-        // GitHub Issue Form: template=site_report.yml with prefilled fields including direct screenshot preview
-        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&screenshots=${screenshotsParam}&body=${bodyParam}`;
-
-        chrome.tabs.create({ url: githubUrl }, () => {
-          setTimeout(() => window.close(), 300);
-        });
+        mainView.classList.remove("active");
+        if (settingsView) settingsView.classList.remove("active");
+        reportView.classList.add("active");
       });
     });
+
+    if (closeReportBtn) {
+      closeReportBtn.addEventListener("click", () => {
+        reportView.classList.remove("active");
+        mainView.classList.add("active");
+      });
+    }
+
+    function getReportData() {
+      const manifest = chrome.runtime.getManifest();
+      const version = manifest.version || "3.6.3";
+      const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
+      const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
+      const now = new Date().toLocaleString("vi-VN");
+      const browserShort = navigator.userAgent.includes("Firefox") ? "Firefox" : (navigator.userAgent.includes("Edg") ? "Edge" : "Chrome");
+
+      const fullText = `[Báo cáo lỗi WebShield]
+- Trang web: ${reportedDomain}
+- URL: ${reportedUrl}
+- Loại sự cố: ${issueType}
+- Mô tả chi tiết: ${userDesc || "Quảng cáo lọt lưới hoặc lỗi hiển thị trên trang"}
+- Phiên bản: WebShield v${version}
+- Trình duyệt: ${browserShort} (${navigator.platform || "PC"})
+- Thời gian: ${now}`;
+
+      return { version, issueType, userDesc, now, browserShort, fullText };
+    }
+
+    // 1. Gửi qua Email (Không cần tài khoản GitHub)
+    if (reportSendEmailBtn) {
+      reportSendEmailBtn.addEventListener("click", () => {
+        const data = getReportData();
+        const subject = encodeURIComponent(`[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`);
+        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subject}&body=${encodeURIComponent(data.fullText)}`;
+
+        try {
+          navigator.clipboard.writeText(data.fullText);
+        } catch (e) { }
+
+        chrome.tabs.create({ url: mailtoUrl });
+      });
+    }
+
+    // 2. Mở GitHub Issue (Đã tinh gọn URL chuẩn YAML, 100% không bị lỗi OOpss khi đăng nhập)
+    if (reportSendGithubBtn) {
+      reportSendGithubBtn.addEventListener("click", () => {
+        const data = getReportData();
+        const titleParam = encodeURIComponent(`[Báo cáo]: ${reportedDomain}`);
+        const domainParam = encodeURIComponent(reportedDomain);
+        const urlParam = encodeURIComponent(reportedUrl);
+        const versionParam = encodeURIComponent(`v${data.version} (${data.browserShort})`);
+        const descParam = encodeURIComponent(`[${data.issueType}] ${data.userDesc || "Lỗi hiển thị/quảng cáo trên trang"}`);
+
+        // Chỉ truyền các tham số hợp lệ của template site_report.yml, KHÔNG truyền &body= khổng lồ gây quá tải HTTP header
+        const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&description=${descParam}`;
+
+        chrome.tabs.create({ url: githubUrl });
+      });
+    }
+
+    // 3. Sao chép thông tin lỗi
+    if (reportCopyInfoBtn) {
+      reportCopyInfoBtn.addEventListener("click", () => {
+        const data = getReportData();
+        try {
+          navigator.clipboard.writeText(data.fullText).then(() => {
+            if (copyBtnText) {
+              const orig = copyBtnText.textContent;
+              copyBtnText.textContent = "✓ Đã sao chép!";
+              setTimeout(() => { copyBtnText.textContent = orig; }, 2000);
+            }
+          });
+        } catch (e) { }
+      });
+    }
   }
 
   // Click author tag to open GitHub Repository

@@ -290,6 +290,75 @@
         </div>
       </div>
     </div>
+
+    <!-- ================= REPORT ISSUE VIEW ================= -->
+    <div class="view-panel" id="report-view">
+      <!-- Report Header -->
+      <header class="header report-header">
+        <button class="icon-btn back-btn" id="close-report-btn" title="Quay lại trang chính">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Trang chính</span>
+        </button>
+        <h2 class="settings-title">Báo Lỗi Trang</h2>
+      </header>
+
+      <div class="report-content">
+        <!-- Site Info Card -->
+        <div class="report-site-card">
+          <div class="report-site-label">Trang web gặp sự cố:</div>
+          <div class="report-site-domain" id="report-domain-text">Đang lấy...</div>
+          <div class="report-site-url" id="report-url-text"></div>
+        </div>
+
+        <!-- Issue Type Selector -->
+        <div class="report-field-group">
+          <label class="report-field-label">Loại sự cố:</label>
+          <select class="report-select" id="report-issue-type">
+            <option value="Quảng cáo lọt lưới">🚨 Quảng cáo lọt lưới / Nhảy tab</option>
+            <option value="Vỡ giao diện / Chặn nhầm">💥 Vỡ giao diện / Mất video / Ảnh</option>
+            <option value="Phát hiện chặn quảng cáo">🛑 Website hiện thông báo chặn AdBlock</option>
+            <option value="Lỗi tính năng / Trình phát">🔄 Trình phát video không chạy / Liệt click</option>
+            <option value="Khác">⚠️ Vấn đề khác</option>
+          </select>
+        </div>
+
+        <!-- Detail Note -->
+        <div class="report-field-group">
+          <label class="report-field-label">Mô tả thêm (tùy chọn):</label>
+          <textarea class="report-textarea" id="report-desc-input" placeholder="Ví dụ: Bị kẹt thanh tiến trình, xuất hiện banner ở góc dưới..."></textarea>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="report-actions">
+          <button class="report-submit-btn email-btn" id="report-send-email-btn" title="Gửi báo cáo qua Email trực tiếp cho tác giả (Không cần tài khoản GitHub)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+              <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+            <span>Gửi qua Email (Không cần đăng nhập)</span>
+          </button>
+
+          <div class="report-secondary-actions">
+            <button class="report-sub-btn" id="report-send-github-btn" title="Gửi báo cáo sự cố lên GitHub Issues (Đã sửa lỗi, không bị OOpss)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+              </svg>
+              <span>Mở GitHub Issue</span>
+            </button>
+            <button class="report-sub-btn" id="report-copy-info-btn" title="Sao chép toàn bộ thông tin sự cố vào bộ nhớ tạm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span id="copy-btn-text">Sao chép thông tin</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
