@@ -350,7 +350,7 @@ function injectAdBlockCSS() {
     bottom: 0 !important;
     transform: none !important;
     z-index: 99999 !important;
-    transition: opacity 0.2s ease !important;
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s ease !important;
   }
 
   .webshield-controls-show .art-control-progress,

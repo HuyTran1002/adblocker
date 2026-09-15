@@ -987,7 +987,7 @@
           bottom: 0 !important;
           transform: none !important;
           z-index: 99999 !important;
-          transition: opacity 0.2s ease !important;
+          transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s ease !important;
         }
 
         .webshield-controls-show .art-control-progress,
@@ -1087,15 +1087,21 @@
         );
       }
 
-      // 2. Kích hoạt trực tiếp các API của các thư viện player phổ biến
+      // 2. Kích hoạt trực tiếp các API của các thư viện player phổ biến & kéo dài thời gian hiển thị lên 6 giây
       try {
         const art = window.art || (container && container.__artplayer);
-        if (art && art.controls) art.controls.show = true;
+        if (art) {
+          if (art.controls) art.controls.show = true;
+          art.autoHide = 6000;
+        }
 
         const vjs = (container && container.player) || (window.videojs && window.videojs.players && (window.videojs.players[container.id] || Object.values(window.videojs.players)[0]));
-        if (vjs && vjs.userActive) {
-          vjs.userActive(true);
-          if (vjs.reportUserActivity) vjs.reportUserActivity();
+        if (vjs) {
+          if (vjs.options_) vjs.options_.inactivityTimeout = 6000;
+          if (vjs.userActive) {
+            vjs.userActive(true);
+            if (vjs.reportUserActivity) vjs.reportUserActivity();
+          }
         }
 
         if (typeof window.jwplayer === 'function') {
@@ -1118,7 +1124,7 @@
         container.dispatchEvent(moveEvt);
       }
 
-      // 5. Tự động ẩn lại thanh điều khiển sau 3.5 giây nếu người dùng không tương tác tiếp
+      // 5. Tự động ẩn lại thanh điều khiển sau 6 giây (delay đủ lâu để người dùng nhìn thời lượng và thao tác)
       if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
       controlsHideTimeout = setTimeout(() => {
         try {
@@ -1126,7 +1132,7 @@
             container.classList.remove('webshield-controls-show');
           }
         } catch (e) { }
-      }, 3500);
+      }, 6000);
     } catch (e) { }
   }
 
@@ -1148,14 +1154,21 @@
         '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
       )) || target.parentElement || target) : null;
       wasControlsHiddenOnDown = arePlayerControlsHidden(container);
+
+      // Nếu đang chạm hoặc chuẩn bị kéo trên thanh tua, giữ nguyên thanh điều khiển không cho ẩn
+      if (target && isSeekBarOrControlButton(target) && controlsHideTimeout) {
+        clearTimeout(controlsHideTimeout);
+      }
     }
 
-    function handlePointerMove(x, y, isMoving) {
+    function handlePointerMove(x, y, isMoving, target) {
       if (isMoving) {
         const dx = Math.abs(x - pointerStartX);
         const dy = Math.abs(y - pointerStartY);
         if (dx > 8 || dy > 8) {
           isDraggingPointer = true;
+          // Khi đang kéo/vuốt tua, hủy bỏ bộ đếm tự ẩn để thanh điều khiển không bị biến mất
+          if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
         }
       }
     }
@@ -1165,7 +1178,7 @@
     }, { capture: true, passive: true });
 
     document.addEventListener('pointermove', (e) => {
-      handlePointerMove(e.clientX, e.clientY, e.buttons > 0 || e.pointerType === 'touch');
+      handlePointerMove(e.clientX, e.clientY, e.buttons > 0 || e.pointerType === 'touch', e.target);
     }, { capture: true, passive: true });
 
     // Touch events fallback for all mobile browsers (ensures dragging seekbar never triggers click pause)
@@ -1177,7 +1190,7 @@
 
     document.addEventListener('touchmove', (e) => {
       if (e.touches && e.touches.length > 0) {
-        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY, true);
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY, true, e.target);
       }
     }, { capture: true, passive: true });
 
