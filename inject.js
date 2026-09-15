@@ -1141,8 +1141,9 @@
     let isDraggingPointer = false;
     let pointerStartX = 0;
     let pointerStartY = 0;
-    let wasControlsHiddenOnDown = false;
     let lastTouchTime = 0;
+    let lastControlsWakeTime = 0;
+    let justWokeUpControls = false;
 
     function handlePointerDown(x, y, target, isTouch) {
       pointerStartX = x;
@@ -1153,7 +1154,18 @@
       const container = target ? ((target.closest && target.closest(
         '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
       )) || target.parentElement || target) : null;
-      wasControlsHiddenOnDown = arePlayerControlsHidden(container);
+
+      // Kiểm tra xem thanh điều khiển lúc này ĐANG ẨN hay ĐANG HIỆN
+      const controlsWereHidden = arePlayerControlsHidden(container);
+
+      if (isTouch && controlsWereHidden) {
+        // Cú chạm này bắt đầu khi thanh đang ẩn: đây là thao tác WAKE UP!
+        justWokeUpControls = true;
+        lastControlsWakeTime = Date.now();
+        wakeUpPlayerControls(target);
+      } else {
+        justWokeUpControls = false;
+      }
 
       // Nếu đang chạm hoặc chuẩn bị kéo trên thanh tua, giữ nguyên thanh điều khiển không cho ẩn
       if (target && isSeekBarOrControlButton(target) && controlsHideTimeout) {
@@ -1199,9 +1211,12 @@
       const target = e.target;
       if (!target) return;
 
-      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua bằng chuột hoặc ngón tay), bỏ qua sự kiện click!
+      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua bằng chuột hoặc ngón tay), bỏ qua và chặn sự kiện click!
       if (isDraggingPointer) {
         isDraggingPointer = false;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         return;
       }
 
@@ -1216,24 +1231,27 @@
         return;
       }
 
-      // 4. Nếu là thao tác chạm trên điện thoại (touch) và thanh điều khiển đang ẨN:
-      // Chuẩn UX Mobile: Cú chạm đầu tiên chỉ để HIỆN thanh điều khiển lên trước, KHÔNG ngắt dừng phim đang xem!
-      const isTouch = (Date.now() - lastTouchTime < 600) || (e.pointerType === 'touch');
-      const video = findVideoElement(target);
-      const isVideoPlaying = video && !video.paused;
+      // 4. Nếu là thao tác chạm trên điện thoại (touch) và cú chạm này vừa đánh thức thanh điều khiển:
+      // CHẶN ĐỨNG 100% SỰ KIỆN CLICK (stopPropagation & preventDefault) để cả extension lẫn trình phát web KHÔNG THỂ pause phim!
+      const isTouch = (Date.now() - lastTouchTime < 800) || (e.pointerType === 'touch');
+      const recentlyWoken = (Date.now() - lastControlsWakeTime < 800);
 
-      if (isTouch && wasControlsHiddenOnDown && isVideoPlaying) {
-        wasControlsHiddenOnDown = false;
+      if (isTouch && (justWokeUpControls || recentlyWoken)) {
+        justWokeUpControls = false;
         wakeUpPlayerControls(target);
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         return;
       }
 
-      // 5. Nếu click vào bề mặt trình phát video
+      // 5. Nếu click vào bề mặt trình phát video (khi thanh điều khiển đã hiển thị sẵn hoặc trên PC)
       if (isPlayerOrPlayButton(target)) {
         // Nếu đã click/chạm lần 2 để pause, xóa timer tự ẩn để thanh điều khiển giữ nguyên trạng thái hiển thị
         if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
         wakeUpPlayerControls(target);
 
+        const video = findVideoElement(target);
         if (video) {
           // Nếu video đang trong trạng thái tua (seeking), tuyệt đối không can thiệp pause!
           if (video.seeking) return;
