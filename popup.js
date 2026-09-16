@@ -698,16 +698,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const now = new Date().toLocaleString("vi-VN");
       const browserShort = navigator.userAgent.includes("Firefox") ? "Firefox" : (navigator.userAgent.includes("Edg") ? "Edge" : "Chrome");
 
-      const fullText = `[Báo cáo lỗi WebShield]
-- Trang web: ${reportedDomain}
-- URL: ${reportedUrl}
-- Loại sự cố: ${issueType}
-- Mô tả chi tiết: ${userDesc || "Quảng cáo lọt lưới hoặc lỗi hiển thị trên trang"}
-- Phiên bản: WebShield v${version}
-- Trình duyệt: ${browserShort} (${navigator.platform || "PC"})
-- Thời gian: ${now}`;
+      const fullText = `Kính gửi đội ngũ phát triển WebShield,
 
-      return { version, issueType, userDesc, now, browserShort, fullText };
+Tôi xin gửi thông tin phản hồi kỹ thuật về sự cố hiển thị:
+• Tên miền trang web: ${reportedDomain}
+• Địa chỉ URL: ${reportedUrl}
+• Phân loại sự cố: ${issueType}
+• Mô tả chi tiết: ${userDesc || "Cần tối ưu bộ lọc trên trang này"}
+• Phiên bản tiện ích: WebShield v${version}
+• Môi trường: ${browserShort} (${navigator.platform || "PC"})
+• Thời gian ghi nhận: ${now}
+
+Trân trọng cảm ơn.`;
+
+      const subject = `[WebShield Feedback] Sự cố hiển thị: ${reportedDomain}`;
+
+      return { version, issueType, userDesc, now, browserShort, fullText, subject };
     }
 
     const reportSendBtnText = document.getElementById("report-send-btn-text");
@@ -731,8 +737,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (reportSendGmailBtn) {
       reportSendGmailBtn.addEventListener("click", () => {
         const data = getReportData();
-        const subject = encodeURIComponent(`[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`);
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=huytran1002.dev@gmail.com&su=${subject}&body=${encodeURIComponent(data.fullText)}`;
+        const subjectParam = encodeURIComponent(data.subject);
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
 
         try {
           navigator.clipboard.writeText(data.fullText);
@@ -746,8 +752,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (reportSendEmailBtn) {
       reportSendEmailBtn.addEventListener("click", () => {
         const data = getReportData();
-        const subject = encodeURIComponent(`[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`);
-        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subject}&body=${encodeURIComponent(data.fullText)}`;
+        const subjectParam = encodeURIComponent(data.subject);
+        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
 
         try {
           navigator.clipboard.writeText(data.fullText);
