@@ -727,80 +727,7 @@ document.addEventListener("DOMContentLoaded", () => {
       reportStatusMsg.className = "report-status-msg";
     }
 
-    // 1. Gửi báo cáo trực tiếp qua FormSubmit API (Tự động gửi thẳng về email tác giả)
-    if (reportSendEmailBtn) {
-      reportSendEmailBtn.addEventListener("click", async () => {
-        const data = getReportData();
-        const origBtnText = reportSendBtnText ? reportSendBtnText.textContent : "Gửi báo cáo trực tiếp";
-
-        try {
-          reportSendEmailBtn.classList.add("loading");
-          if (reportSendBtnText) reportSendBtnText.textContent = "Đang gửi báo cáo...";
-          hideReportStatus();
-
-          const payload = {
-            _subject: `[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`,
-            "Trang_web": reportedDomain,
-            "Dia_chi_URL": reportedUrl,
-            "Loai_su_co": data.issueType,
-            "Mo_ta_chi_tiet": data.userDesc || "Quảng cáo lọt lưới hoặc lỗi hiển thị trên trang",
-            "Phien_ban": `WebShield v${data.version}`,
-            "Trinh_duyet": `${data.browserShort} (${navigator.platform || "PC"})`,
-            "Thoi_gian": data.now,
-            _template: "table"
-          };
-
-          const response = await fetch("https://formsubmit.co/ajax/huytran1002.dev@gmail.com", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json"
-            },
-            body: JSON.stringify(payload)
-          });
-
-          const result = await response.json();
-
-          reportSendEmailBtn.classList.remove("loading");
-
-          if (result.success === "true" || result.success === true) {
-            reportSendEmailBtn.classList.add("success");
-            if (reportSendBtnText) reportSendBtnText.textContent = "✓ Đã gửi thành công!";
-            showReportStatus("✓ Báo cáo sự cố đã được gửi trực tiếp tới email tác giả.", "success");
-            setTimeout(() => {
-              reportSendEmailBtn.classList.remove("success");
-              if (reportSendBtnText) reportSendBtnText.textContent = origBtnText;
-            }, 3500);
-          } else if (result.message && result.message.toLowerCase().includes("activation")) {
-            reportSendEmailBtn.classList.add("success");
-            if (reportSendBtnText) reportSendBtnText.textContent = "✓ Đã gửi thư kích hoạt!";
-            showReportStatus("FormSubmit đã gửi email xác nhận. Vui lòng mở hộp thư huytran1002.dev@gmail.com bấm 'Activate Form' để kích hoạt nhận báo cáo tự động.", "info");
-            setTimeout(() => {
-              reportSendEmailBtn.classList.remove("success");
-              if (reportSendBtnText) reportSendBtnText.textContent = origBtnText;
-            }, 6000);
-          } else {
-            throw new Error(result.message || "Gửi không thành công");
-          }
-        } catch (err) {
-          console.error("Lỗi gửi báo cáo qua API:", err);
-          reportSendEmailBtn.classList.remove("loading");
-          reportSendEmailBtn.classList.add("error");
-          if (reportSendBtnText) reportSendBtnText.textContent = "Mở Web Gmail để gửi...";
-          showReportStatus("Không thể kết nối máy chủ gửi tự động. Đang chuyển hướng sang Web Gmail...", "error");
-
-          setTimeout(() => {
-            const subject = encodeURIComponent(`[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`);
-            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=huytran1002.dev@gmail.com&su=${subject}&body=${encodeURIComponent(data.fullText)}`;
-            chrome.tabs.create({ url: gmailUrl });
-            reportSendEmailBtn.classList.remove("error");
-            if (reportSendBtnText) reportSendBtnText.textContent = origBtnText;
-          }, 1500);
-        }
-      });
-    }
-
-    // 2. Mở trực tiếp giao diện Web Gmail soạn sẵn nội dung
+    // 1. Mở trực tiếp giao diện Web Gmail soạn sẵn nội dung (Khuyên dùng - 100% không lỗi token)
     if (reportSendGmailBtn) {
       reportSendGmailBtn.addEventListener("click", () => {
         const data = getReportData();
@@ -812,6 +739,21 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) { }
 
         chrome.tabs.create({ url: gmailUrl });
+      });
+    }
+
+    // 2. Gửi qua ứng dụng Email mặc định trên máy (mailto:)
+    if (reportSendEmailBtn) {
+      reportSendEmailBtn.addEventListener("click", () => {
+        const data = getReportData();
+        const subject = encodeURIComponent(`[Báo cáo WebShield v${data.version}] ${reportedDomain} - ${data.issueType}`);
+        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subject}&body=${encodeURIComponent(data.fullText)}`;
+
+        try {
+          navigator.clipboard.writeText(data.fullText);
+        } catch (e) { }
+
+        chrome.tabs.create({ url: mailtoUrl });
       });
     }
 
