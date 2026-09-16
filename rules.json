@@ -1812,5 +1812,22 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 9999,
+    "priority": 100,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://huytran1002.github.io" },
+        { "header": "Referer", "operation": "set", "value": "https://huytran1002.github.io/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||formsubmit.co",
+      "resourceTypes": [
+        "xmlhttprequest"
+      ]
+    }
   }
 ]

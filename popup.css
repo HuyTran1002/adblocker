@@ -1214,6 +1214,53 @@ input:not(:checked) ~ .pulse-indicator,
   box-shadow: 0 4px 12px var(--accent-glow);
 }
 
+.report-submit-btn.email-btn.loading {
+  opacity: 0.85;
+  cursor: wait;
+  pointer-events: none;
+}
+
+.report-submit-btn.email-btn.success {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4) !important;
+}
+
+.report-submit-btn.email-btn.error {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4) !important;
+}
+
+.report-status-msg {
+  display: none;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.report-status-msg.success {
+  display: block;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.report-status-msg.info {
+  display: block;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.report-status-msg.error {
+  display: block;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
 .report-secondary-actions {
   display: flex;
   gap: 6px;
