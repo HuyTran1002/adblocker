@@ -373,6 +373,8 @@ function injectAdBlockCSS() {
 
   /* Tự động ẩn con trỏ chuột khi người dùng không di chuột trong lúc xem phim (inactive / fullscreen) */
   /* Nằm sau các quy tắc cursor ở trên để override thành công khi inactive trên PC */
+  .webshield-cursor-hidden,
+  .webshield-cursor-hidden *,
   .jwplayer.jw-flag-user-inactive,
   .jwplayer.jw-flag-user-inactive *,
   .video-js.vjs-user-inactive,

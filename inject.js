@@ -971,6 +971,7 @@
       const style = document.createElement('style');
       style.id = 'webshield-player-styles';
       style.textContent = `
+        /* Hiển thị cưỡng chế thanh điều khiển và thanh tiến trình */
         .webshield-controls-show .art-controls,
         .webshield-controls-show .vjs-control-bar,
         .webshield-controls-show .jw-controlbar,
@@ -987,7 +988,7 @@
           bottom: 0 !important;
           transform: none !important;
           z-index: 99999 !important;
-          transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s ease !important;
+          transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s ease !important;
         }
 
         .webshield-controls-show .art-control-progress,
@@ -1000,6 +1001,12 @@
           opacity: 1 !important;
           visibility: visible !important;
           pointer-events: auto !important;
+        }
+
+        /* Tự động ẩn con trỏ chuột trên PC sau 2.5s khi video đang phát */
+        .webshield-cursor-hidden,
+        .webshield-cursor-hidden * {
+          cursor: none !important;
         }
 
         /* Chặn triệt để banner quảng cáo popup và catfish */
@@ -1019,14 +1026,11 @@
     document.addEventListener('DOMContentLoaded', injectPlayerStyles);
   }
 
-  function arePlayerControlsHidden(container) {
+  // Helper kiểm tra chính xác xem thanh điều khiển thực tế đang ẨN hay HIỆN
+  function areControlsActuallyVisible(container) {
     try {
-      // Nếu container hoặc trang đang có class webshield-controls-show thì thanh điều khiển ĐANG HIỆN
-      if (container && container.classList && container.classList.contains('webshield-controls-show')) {
-        return false;
-      }
-      if (document.querySelector('.webshield-controls-show')) {
-        return false;
+      if (!container) {
+        container = document.querySelector('.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]') || document.body;
       }
 
       if (container && container.classList) {
@@ -1039,46 +1043,72 @@
           container.classList.contains('autohide') ||
           container.classList.contains('user-inactive')
         ) {
-          return true;
+          return false;
         }
-        if (container.classList.contains('jwplayer') && !container.classList.contains('jw-flag-user-active')) {
-          return true;
-        }
-        if (container.classList.contains('video-js') && !container.classList.contains('vjs-user-active')) {
-          return true;
-        }
-        if (container.classList.contains('artplayer') && !container.classList.contains('art-control-show')) {
-          return true;
-        }
-      }
-
-      const anyInactive = document.querySelector(
-        '.jw-flag-user-inactive, .vjs-user-inactive, .art-hide-cursor, .plyr--hide-controls, .dplayer-hide-controller, [class*="user-inactive"], [class*="autohide"]'
-      );
-      if (anyInactive) return true;
-
-      const edgeControls = (container && container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
-      if (edgeControls && edgeControls.classList && !edgeControls.classList.contains('show')) {
-        return true;
+        if (container.classList.contains('jwplayer') && !container.classList.contains('jw-flag-user-active')) return false;
+        if (container.classList.contains('video-js') && !container.classList.contains('vjs-user-active')) return false;
+        if (container.classList.contains('artplayer') && !container.classList.contains('art-control-show')) return false;
       }
 
       const ctrlBar = (container && container.querySelector && container.querySelector(
-        '.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls'
+        '.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls, [class*="control-bar"], [class*="controls-bar"], [class*="bottom-controls"]'
       )) || document.querySelector('.art-controls, .vjs-control-bar, .jw-controlbar, .plyr__controls, .dplayer-controller, .edge-custom-controls');
 
       if (ctrlBar) {
         const style = window.getComputedStyle(ctrlBar);
-        if (style.opacity === '0' || style.visibility === 'hidden' || style.display === 'none') {
-          return true;
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const opacity = parseFloat(style.opacity);
+        if (!isNaN(opacity) && opacity < 0.2) return false;
+        const transform = style.transform;
+        if (transform && transform !== 'none' && transform.includes('matrix')) {
+          const match = transform.match(/matrix.*\((.+)\)/);
+          if (match && match[1]) {
+            const parts = match[1].split(',').map(s => parseFloat(s.trim()));
+            if (parts.length === 6 && parts[5] > 20) return false;
+          }
         }
+        return true;
       }
     } catch (e) { }
-    return true; // Mặc định khi đang phát video, thanh điều khiển thường tự ẩn
+    return false;
   }
 
   let controlsHideTimeout = null;
 
-  function wakeUpPlayerControls(target) {
+  function clearAllControlsShow() {
+    try {
+      document.querySelectorAll('.webshield-controls-show').forEach(el => {
+        el.classList.remove('webshield-controls-show');
+      });
+    } catch (e) { }
+  }
+
+  function scheduleControlsAutoHide(container, delayMs = 5000) {
+    if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
+    controlsHideTimeout = setTimeout(() => {
+      try {
+        const video = (container && container.querySelector && container.querySelector('video')) || document.querySelector('video');
+        // Khi video đang tạm dừng (paused), KHÔNG tự ẩn controls để người dùng quan sát và thao tác
+        if (video && video.paused) return;
+
+        clearAllControlsShow();
+
+        // Đồng bộ với API của các thư viện player
+        try {
+          const art = window.art || (container && container.__artplayer);
+          if (art && art.controls) art.controls.show = false;
+
+          const vjs = (container && container.player) || (window.videojs && window.videojs.players && (window.videojs.players[container?.id] || Object.values(window.videojs.players)[0]));
+          if (vjs && vjs.userActive) vjs.userActive(false);
+
+          const dp = window.dp || (container && container.dp);
+          if (dp && dp.controller && dp.controller.hide) dp.controller.hide();
+        } catch (e) { }
+      } catch (e) { }
+    }, delayMs);
+  }
+
+  function wakeUpPlayerControls(target, autoHide = true) {
     if (!target) return;
     try {
       injectPlayerStyles();
@@ -1086,7 +1116,6 @@
         '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
       )) || target.parentElement || target;
 
-      // 1. Cưỡng chế bật hiển thị thanh điều khiển và thanh tiến trình bằng class đặc biệt webshield-controls-show
       if (container && container.classList) {
         container.classList.add('webshield-controls-show');
         container.classList.add('art-control-show');
@@ -1100,17 +1129,16 @@
         );
       }
 
-      // 2. Kích hoạt trực tiếp các API của các thư viện player phổ biến & kéo dài thời gian hiển thị lên 6 giây
       try {
         const art = window.art || (container && container.__artplayer);
         if (art) {
           if (art.controls) art.controls.show = true;
-          art.autoHide = 6000;
+          art.autoHide = 5000;
         }
 
-        const vjs = (container && container.player) || (window.videojs && window.videojs.players && (window.videojs.players[container.id] || Object.values(window.videojs.players)[0]));
+        const vjs = (container && container.player) || (window.videojs && window.videojs.players && (window.videojs.players[container?.id] || Object.values(window.videojs.players)[0]));
         if (vjs) {
-          if (vjs.options_) vjs.options_.inactivityTimeout = 6000;
+          if (vjs.options_) vjs.options_.inactivityTimeout = 5000;
           if (vjs.userActive) {
             vjs.userActive(true);
             if (vjs.reportUserActivity) vjs.reportUserActivity();
@@ -1125,106 +1153,199 @@
         if (dp && dp.controller && dp.controller.show) dp.controller.show();
       } catch (e) { }
 
-      // 3. EdgePlayer specific wake-up
       const edgeControls = (container && container.querySelector && container.querySelector('.edge-custom-controls')) || document.querySelector('.edge-custom-controls');
       if (edgeControls && edgeControls.classList) {
         edgeControls.classList.add('show');
       }
 
-      // 4. Dispatch synthetic mousemove on container to reset native player idle timers
-      if (container && container.dispatchEvent) {
-        const moveEvt = new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window });
-        container.dispatchEvent(moveEvt);
+      if (autoHide) {
+        scheduleControlsAutoHide(container, 5000);
       }
-
-      // 5. Tự động ẩn lại thanh điều khiển sau 6 giây (delay đủ lâu để người dùng nhìn thời lượng và thao tác)
-      if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
-      controlsHideTimeout = setTimeout(() => {
-        try {
-          if (container && container.classList) {
-            container.classList.remove('webshield-controls-show');
-          }
-        } catch (e) { }
-      }, 6000);
     } catch (e) { }
   }
 
-  // Ensure clicking/tapping on any video player screen naturally wakes up controls and toggles play/pause
-  if (!isYouTube) {
-    let isDraggingPointer = false;
-    let pointerStartX = 0;
-    let pointerStartY = 0;
-    let lastTouchTime = 0;
-    let lastControlsWakeTime = 0;
-    let justWokeUpControls = false;
+  // Quản lý ẩn/hiện chuột tự động trên PC
+  let mouseIdleTimeout = null;
 
-    function handlePointerDown(x, y, target, isTouch) {
-      pointerStartX = x;
-      pointerStartY = y;
-      isDraggingPointer = false;
-      if (isTouch) lastTouchTime = Date.now();
+  function restoreCursor() {
+    if (mouseIdleTimeout) {
+      clearTimeout(mouseIdleTimeout);
+      mouseIdleTimeout = null;
+    }
+    try {
+      document.documentElement.classList.remove('webshield-cursor-hidden');
+      if (document.body) document.body.classList.remove('webshield-cursor-hidden');
+      document.querySelectorAll('.webshield-cursor-hidden').forEach(el => {
+        el.classList.remove('webshield-cursor-hidden');
+      });
+    } catch (e) { }
+  }
 
-      const container = target ? ((target.closest && target.closest(
-        '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
-      )) || target.parentElement || target) : null;
+  function handlePcMouseMove(e) {
+    restoreCursor();
 
-      // Kiểm tra xem thanh điều khiển lúc này ĐANG ẨN hay ĐANG HIỆN
-      const controlsWereHidden = arePlayerControlsHidden(container);
+    const target = e.target;
+    if (!target) return;
 
-      if (isTouch && controlsWereHidden) {
-        // Cú chạm này bắt đầu khi thanh đang ẩn: đây là thao tác WAKE UP!
-        justWokeUpControls = true;
-        lastControlsWakeTime = Date.now();
-        wakeUpPlayerControls(target);
-      } else {
-        justWokeUpControls = false;
-      }
+    const isInsidePlayer = isPlayerOrPlayButton(target) || document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isInsidePlayer) return;
 
-      // Nếu đang chạm hoặc chuẩn bị kéo trên thanh tua, giữ nguyên thanh điều khiển không cho ẩn
-      if (target && isSeekBarOrControlButton(target) && controlsHideTimeout) {
+    const container = (target.closest && target.closest(
+      '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
+    )) || target.parentElement || target;
+
+    wakeUpPlayerControls(target, true);
+
+    const video = findVideoElement(target);
+    if (video && !video.paused && !video.ended) {
+      mouseIdleTimeout = setTimeout(() => {
+        try {
+          if (video && !video.paused && !video.ended) {
+            if (container && container.classList) {
+              container.classList.add('webshield-cursor-hidden');
+            }
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+              document.documentElement.classList.add('webshield-cursor-hidden');
+            }
+          }
+        } catch (e) { }
+      }, 2500);
+    }
+  }
+
+  // Lắng nghe trạng thái Play / Pause của video trên toàn trang
+  document.addEventListener('pause', (e) => {
+    if (e.target && e.target.tagName === 'VIDEO') {
+      restoreCursor();
+      if (controlsHideTimeout) {
         clearTimeout(controlsHideTimeout);
+        controlsHideTimeout = null;
       }
     }
+  }, { capture: true, passive: true });
 
-    function handlePointerMove(x, y, isMoving, target) {
-      if (isMoving) {
-        const dx = Math.abs(x - pointerStartX);
-        const dy = Math.abs(y - pointerStartY);
-        if (dx > 8 || dy > 8) {
-          isDraggingPointer = true;
-          // Khi đang kéo/vuốt tua, hủy bỏ bộ đếm tự ẩn để thanh điều khiển không bị biến mất
-          if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
-        }
-      }
+  document.addEventListener('play', (e) => {
+    if (e.target && e.target.tagName === 'VIDEO') {
+      scheduleControlsAutoHide(e.target.parentElement, 5000);
     }
+  }, { capture: true, passive: true });
 
-    document.addEventListener('pointerdown', (e) => {
-      handlePointerDown(e.clientX, e.clientY, e.target, e.pointerType === 'touch');
-    }, { capture: true, passive: true });
+  // Bộ điều khiển tương tác Video cho PC và Thiết bị di động
+  if (!isYouTube) {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let touchIntent = null; // 'WAKE_UP' | 'TOGGLE_PLAY' | 'DRAG' | 'CONTROL_INTERACTION'
+    let isDraggingPointer = false;
+    let lastWakeUpTime = 0;
 
+    // 1. Theo dõi chuyển động chuột trên PC (bỏ qua touch)
     document.addEventListener('pointermove', (e) => {
-      handlePointerMove(e.clientX, e.clientY, e.buttons > 0 || e.pointerType === 'touch', e.target);
+      if (e.pointerType === 'mouse') {
+        handlePcMouseMove(e);
+      }
     }, { capture: true, passive: true });
 
-    // Touch events fallback for all mobile browsers (ensures dragging seekbar never triggers click pause)
+    document.addEventListener('mousemove', (e) => {
+      handlePcMouseMove(e);
+    }, { capture: true, passive: true });
+
+    // 2. TOUCHSTART: Xác định chính xác ý định thao tác của người dùng
     document.addEventListener('touchstart', (e) => {
-      if (e.touches && e.touches.length > 0) {
-        handlePointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target, true);
-      }
-    }, { capture: true, passive: true });
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      if (!e.touches || e.touches.length === 0) return;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = Date.now();
+      isDraggingPointer = false;
 
+      const target = e.target;
+      if (!target) return;
+
+      const isPlayer = isPlayerOrPlayButton(target);
+      if (!isPlayer) {
+        touchIntent = null;
+        return;
+      }
+
+      // 2.1. Chạm vào thanh tua (seekbar) hoặc nút bấm điều khiển
+      if (isSeekBarOrControlButton(target)) {
+        touchIntent = 'CONTROL_INTERACTION';
+        if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
+        return;
+      }
+
+      // 2.2. Chạm vào bề mặt xem phim: kiểm tra trạng thái thực tế của controls
+      const container = (target.closest && target.closest(
+        '.jwplayer, .artplayer, .video-js, .plyr, .dplayer, #edgeplayer-root, [class*="player"], [id*="player"]'
+      )) || target.parentElement || target;
+
+      const currentlyVisible = areControlsActuallyVisible(container);
+
+      if (!currentlyVisible) {
+        // TAP 1: Thanh điều khiển đang ẩn -> Đánh thức hiển thị ổn định 5 giây!
+        touchIntent = 'WAKE_UP';
+        lastWakeUpTime = Date.now();
+        wakeUpPlayerControls(target, true);
+      } else {
+        // TAP 2: Thanh điều khiển đã hiển thị -> Thao tác chuyển đổi Play/Pause
+        touchIntent = 'TOGGLE_PLAY';
+      }
+    }, { capture: true, passive: false });
+
+    // 3. TOUCHMOVE: Nhận diện thao tác cuộn trang hoặc kéo thanh tua
     document.addEventListener('touchmove', (e) => {
-      if (e.touches && e.touches.length > 0) {
-        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY, true, e.target);
+      if (!e.touches || e.touches.length === 0) return;
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartX);
+      const dy = Math.abs(touch.clientY - touchStartY);
+      if (dx > 10 || dy > 10) {
+        isDraggingPointer = true;
+        if (touchIntent === 'WAKE_UP') {
+          touchIntent = 'DRAG';
+        }
+        if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
       }
     }, { capture: true, passive: true });
 
+    // 4. TOUCHEND (Capture phase, passive: false để ngăn chặn click và pause ở Tap 1)
+    document.addEventListener('touchend', (e) => {
+      if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      const target = e.target;
+
+      // 4.1. Vừa thao tác kéo tua xong: buông tay -> khởi động lại bộ đếm 5s tự ẩn
+      if (touchIntent === 'CONTROL_INTERACTION' || (target && isSeekBarOrControlButton(target))) {
+        touchIntent = null;
+        isDraggingPointer = false;
+        scheduleControlsAutoHide(target?.parentElement, 5000);
+        return;
+      }
+
+      // 4.2. TAP 1 (WAKE_UP): CHẶN ĐỨNG 100% touchend & synthetic click để KHÔNG BAO GIỜ pause video!
+      if (touchIntent === 'WAKE_UP') {
+        touchIntent = null;
+        lastWakeUpTime = Date.now();
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        scheduleControlsAutoHide(target?.parentElement, 5000);
+        return;
+      }
+
+      // 4.3. TAP 2 (TOGGLE_PLAY): Để sự kiện tiếp tục chuyển sang xử lý Play/Pause
+      if (touchIntent === 'TOGGLE_PLAY') {
+        touchIntent = null;
+      }
+    }, { capture: true, passive: false });
+
+    // 5. CLICK: Xử lý tương tác click trên PC và Tap 2 trên Mobile
     document.addEventListener('click', function (e) {
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       const target = e.target;
       if (!target) return;
 
-      // 1. Nếu người dùng vừa KÉO (drag/scrubbing thanh tua bằng chuột hoặc ngón tay), bỏ qua và chặn sự kiện click!
+      // 5.1. Nếu vừa kéo/tua (drag seekbar), hủy bỏ sự kiện click phát sinh
       if (isDraggingPointer) {
         isDraggingPointer = false;
         e.preventDefault();
@@ -1233,47 +1354,34 @@
         return;
       }
 
-      // 2. Không can thiệp nếu click hoặc tương tác vào thanh tua (seekbar, slider, progress), nút bấm, control bar
+      // 5.2. Không can thiệp click vào thanh tua hoặc nút điều khiển
       if (isSeekBarOrControlButton(target)) {
+        scheduleControlsAutoHide(target?.parentElement, 5000);
         return;
       }
 
-      // 3. EdgePlayer (phimhdcss / tiktok.phimhdc) đã tự xử lý click/double-tap
+      // 5.3. EdgePlayer đã tự quản lý click
       if (document.getElementById('edgeplayer-root') || (target.closest && target.closest('#edgeplayer-root, .edge-custom-controls'))) {
-        wakeUpPlayerControls(target);
+        wakeUpPlayerControls(target, true);
         return;
       }
 
-      // 4. Nếu là thao tác chạm trên điện thoại (touch) và cú chạm này vừa đánh thức thanh điều khiển:
-      // CHẶN ĐỨNG 100% SỰ KIỆN CLICK (stopPropagation & preventDefault) để cả extension lẫn trình phát web KHÔNG THỂ pause phim!
-      const isTouch = (Date.now() - lastTouchTime < 800) || (e.pointerType === 'touch');
-      const recentlyWoken = (Date.now() - lastControlsWakeTime < 800);
-
-      if (isTouch && (justWokeUpControls || recentlyWoken)) {
-        justWokeUpControls = false;
-        wakeUpPlayerControls(target);
+      // 5.4. Nếu vừa được đánh thức controls (< 650ms), chặn đứng click không cho pause video
+      if (Date.now() - lastWakeUpTime < 650) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         return;
       }
 
-      // 5. Nếu click vào bề mặt trình phát video (khi thanh điều khiển đã hiển thị sẵn hoặc trên PC)
+      // 5.5. Click trên bề mặt video (PC click hoặc Mobile Tap 2 khi controls đã hiện sẵn)
       if (isPlayerOrPlayButton(target)) {
-        // Nếu đã click/chạm lần 2 để pause, xóa timer tự ẩn để thanh điều khiển giữ nguyên trạng thái hiển thị
-        if (controlsHideTimeout) clearTimeout(controlsHideTimeout);
-        wakeUpPlayerControls(target);
-
         const video = findVideoElement(target);
         if (video) {
-          // Nếu video đang trong trạng thái tua (seeking), tuyệt đối không can thiệp pause!
           if (video.seeking) return;
-
           const wasPaused = video.paused;
-          // Sử dụng setTimeout(50) để chạy sau khi sự kiện của trang hoàn tất
           setTimeout(() => {
             if (video.seeking) return;
-
             if (video.paused === wasPaused) {
               if (wasPaused) {
                 if (video.ended || (video.duration > 0 && video.currentTime >= video.duration)) {
@@ -1281,24 +1389,17 @@
                 }
                 const p = video.play();
                 if (p && p.catch) p.catch(() => { });
+                wakeUpPlayerControls(target, true);
               } else {
                 video.pause();
+                restoreCursor();
+                wakeUpPlayerControls(target, false); // Khi pause, giữ thanh điều khiển hiển thị
               }
             }
-            wakeUpPlayerControls(target);
           }, 50);
         }
       }
     }, true);
-
-    // Mobile touch wake-up listener: chạm vào video player sẽ lập tức làm hiện lại thanh tiến trình
-    document.addEventListener('touchend', function (e) {
-      if (!isEnabled() || isCurrentPageWhitelisted()) return;
-      const target = e.target;
-      if (target && isPlayerOrPlayButton(target) && !isSeekBarOrControlButton(target)) {
-        wakeUpPlayerControls(target);
-      }
-    }, { capture: true, passive: true });
   }
 
   if (!isYouTube) {
