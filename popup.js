@@ -13,12 +13,12 @@ if (typeof chrome === "undefined" || !chrome.storage) {
             blockedCount: 142,
             lastFiltersUpdateTimestamp: Date.now() - 300000,
             onlineFilterStats: {
-              staticDnrRules: 91,
+              staticDnrRules: 99,
               appliedAdDomains: 25420,
               appliedDnrRules: 508,
               appliedCosmetics: 2000,
               appliedRegionalRules: 1076,
-              totalAppliedRules: 28587
+              totalAppliedRules: 28595
             }
           });
         },
@@ -397,7 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Static Core Rules (rules.json)
     const staticCountEl = document.getElementById("rules-static-count");
     if (staticCountEl) {
-      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 91;
+      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 99;
       staticCountEl.textContent = `${staticCount.toLocaleString()} quy tắc cốt lõi`;
     }
 

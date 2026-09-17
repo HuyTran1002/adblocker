@@ -299,12 +299,12 @@ async function updateOnlineFilters() {
     const appliedRegionalRules = domainCosmeticsCount + (counts.abpvn || 1076);
 
     const stats = {
-      staticDnrRules: 91,
+      staticDnrRules: 99,
       appliedAdDomains: appliedAdDomains,
       appliedDnrRules: appliedDnrRules,
       appliedCosmetics: appliedCosmetics,
       appliedRegionalRules: appliedRegionalRules,
-      totalAppliedRules: 91 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
+      totalAppliedRules: 99 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
       lastUpdated: Date.now()
     };
 
@@ -393,12 +393,12 @@ chrome.runtime.onInstalled.addListener(() => {
     if (res.onlineFilterStats === undefined) {
       chrome.storage.local.set({
         onlineFilterStats: {
-          staticDnrRules: 91,
+          staticDnrRules: 99,
           appliedAdDomains: 25420,
           appliedDnrRules: 508,
           appliedCosmetics: 2000,
           appliedRegionalRules: 1076,
-          totalAppliedRules: 28587,
+          totalAppliedRules: 28595,
           lastUpdated: Date.now()
         }
       });
