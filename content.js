@@ -211,7 +211,7 @@ function injectAdBlockCSS() {
   video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"],
   video[src*="vast"], video[src*="vpaid"], video[src*="/ads/"], video[src*="preroll"],
   video[src*="midroll"], video[src*="postroll"], video[src*="streamux.top"],
-  video[src*="/static/media/pc-"], video[src*="/static/media/"] {
+  video[src*="/static/media/pc-"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -585,16 +585,26 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     }
 
-    // Helper nhận diện ranh giới tuyệt đối của video player DOM
-    // Standard 1: Strict Boundary Check
-    function isInsideVideoPlayer(el) {
+    /**
+     * ============================================================================
+     * MODULE 1: ĐỊNH NGHĨA RANH GIỚI BẢO VỆ TUYỆT ĐỐI (CORE MEDIA WHITELIST)
+     * Thẩm định ranh giới bất khả xâm phạm của Video Player & Nội dung phim.
+     * Mọi logic: xóa DOM, ẩn CSS, intercept event, observe mutation
+     * TUYỆT ĐỐI BỎ QUA nếu isSafeCoreZone(node) === true.
+     * ============================================================================
+     */
+    function isSafeCoreZone(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
-        // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
-        if (tag === 'video' || tag === 'audio' || tag === 'source' || tag === 'track') return true;
 
-        // 2. Bản thân là <iframe> chứa player (youtube, drive, stream, embed, v.v.)
+        // 1. Thẻ Media HTML5 & Canvas
+        if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
+          if (tag === 'video' && isAdVideo(el)) return false; // Chỉ loại trừ nếu bản thân video là video quảng cáo đích thực
+          return true;
+        }
+
+        // 2. <iframe> chứa player (YouTube, Google Drive, stream servers, embed players)
         if (tag === 'iframe') {
           const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
           if (/youtube|youtu\.be|youtube-nocookie|drive\.google|player|embed|stream|video|watch|film|movie|vids|hls|m3u8|mp4|halim|hotp|2embed|vidsrc|superembed|play|media/i.test(src)) {
@@ -602,10 +612,9 @@ if (window.location.hostname.includes('youtube.com')) {
           }
         }
 
-        // 3. Nằm bên trong bất kỳ container nào có class/id/thuộc tính chứa:
-        // "player", "video", "jwplayer", "vjs", "plyr", "artplayer", "dplayer", "xgplayer", "fluid_player", "media"
+        // 3. Container Player UI (.ytp-*, [class*="player"], [id*="player"], video-js, jwplayer, plyr, artplayer, dplayer, xgplayer, halim-movie)
         if (el.closest) {
-          const inPlayerContainer = el.closest(
+          const inPlayer = el.closest(
             'video, audio, ' +
             '[class*="player" i], [id*="player" i], [data-player], ' +
             '[class*="video" i], [id*="video" i], ' +
@@ -618,13 +627,12 @@ if (window.location.hostname.includes('youtube.com')) {
             '[class*="fluid_player" i], [id*="fluid_player" i], ' +
             '[class*="media" i], [id*="media" i], ' +
             '.html5-video-player, [class*="ytp-" i], #movie_player, #edgeplayer-root, ' +
-            '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i]'
+            '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i], [class*="halim-movie" i]'
           );
-          if (inPlayerContainer) return true;
+          if (inPlayer) return true;
         }
 
-        // 4. Hoặc là sibling trực tiếp nằm chung container cha với thẻ <video>
-        // hoặc bất kỳ cha nào (depth < 5) có chứa thẻ <video> hoặc có class/id liên quan player
+        // 4. Sibling trực tiếp hoặc nằm chung container cha (depth < 5) với thẻ <video>
         let p = el.parentElement;
         let depth = 0;
         while (p && p !== document.body && p !== document.documentElement && depth < 5) {
@@ -633,63 +641,15 @@ if (window.location.hostname.includes('youtube.com')) {
           }
           const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
           const pId = (p.id || '').toLowerCase();
-          if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pClass) ||
-              /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pId)) {
+          if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|halim/i.test(pClass) ||
+              /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|halim/i.test(pId)) {
             return true;
           }
           p = p.parentElement;
           depth++;
         }
-      } catch (e) {}
-      return false;
-    }
 
-    // Helper to check if element is a video player, video control bar, or time/progress display
-    function isVideoPlayerOrControls(el) {
-      if (isInsideVideoPlayer(el)) return true;
-      if (!el || el === document || el === document.body || el === document.documentElement) return false;
-      try {
-        const tag = el.tagName ? el.tagName.toLowerCase() : '';
-        if (['audio', 'canvas', 'source', 'track'].includes(tag)) return true;
-        if (tag === 'video' && !isAdVideo(el)) return true;
-        
-        if (el.querySelector) {
-          const videos = el.querySelectorAll('video');
-          if (videos.length > 0) {
-            for (let i = 0; i < videos.length; i++) {
-              if (!isAdVideo(videos[i])) return true;
-            }
-          } else if (el.querySelector('audio, canvas')) {
-            return true;
-          }
-        }
-
-        const elId = (el.id || '').toLowerCase();
-        const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-        
-        const keywords = [
-          'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'media', 'vp-', 'ytp-',
-          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track', 'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen'
-        ];
-
-        if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
-          // If it is inside or near a player container
-          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]')) {
-            return true;
-          }
-          if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('time') || elClass.includes('progress') || elClass.includes('duration')) {
-            return true;
-          }
-        }
-      } catch(e) {}
-      return false;
-    }
-
-    // Helper to check and guarantee absolute protection for movie banners, posters, carousels, and thumbs
-    function isMovieBannerOrPoster(el) {
-      if (!el || el === document || el === document.body || el === document.documentElement) return false;
-      try {
-        // 1. Content Class / ID Whitelist
+        // 5. Poster, Thumbnail, Banner phim, Danh sách tập & Server
         const elId = (el.id || '').toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         const contentKeywords = ['poster', 'thumb', 'cover', 'movie', 'film', 'episode', 'server', 'play-list', 'list-ep', 'tap', 'halim', 'tray', 'swiper', 'carousel', 'slider', 'trailer', 'detail'];
@@ -715,29 +675,19 @@ if (window.location.hostname.includes('youtube.com')) {
           return true;
         }
 
-        // 2. <img> Tag Protection: relative src, same-origin, blob/data, or valid movie image CDNs / metadata
-        const tag = el.tagName ? el.tagName.toUpperCase() : '';
-        if (tag === 'IMG') {
-          const src = (el.src || '').toLowerCase();
+        // 6. Thẻ <img> chứa poster/ảnh phim hoặc link nội bộ
+        if (tag === 'img') {
+          const src = (el.currentSrc || el.src || el.getAttribute('data-src') || el.getAttribute('data-original') || '').toLowerCase();
+          if (src.startsWith('data:') || src.startsWith('blob:')) return true;
           const alt = (el.getAttribute('alt') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
-
-          // Data / Blob images are internal UI/poster assets
-          if (src.startsWith('data:') || src.startsWith('blob:')) return true;
-
-          // Alt / Title metadata protection
           if (alt.includes('phim') || alt.includes('film') || alt.includes('movie') || alt.includes('tập') || alt.includes('season') || alt.includes('episode') ||
               title.includes('phim') || title.includes('film') || title.includes('movie') || title.includes('tập') || title.includes('season') || title.includes('episode')) {
             return true;
           }
-
-          // Known legitimate movie CDN domains
-          if (src.includes('animevietsub') || src.includes('phim') || src.includes('film') || src.includes('movie') || src.includes('poster') || src.includes('thumb') || src.includes('cover') || src.includes('cdn77') ||
-              src.includes('tmdb.org') || src.includes('wsrv.nl') || src.includes('nguonc.com') || src.includes('phimimg.com') || src.includes('ophim') || src.includes('vsmov') || src.includes('themoviedb')) {
+          if (/tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov/i.test(src)) {
             return true;
           }
-
-          // Same-origin image
           try {
             const imgHost = new URL(src, window.location.href).hostname.toLowerCase();
             const curHost = window.location.hostname.toLowerCase();
@@ -747,8 +697,8 @@ if (window.location.hostname.includes('youtube.com')) {
           } catch(e) {}
         }
 
-        // 3. <a> Tag Protection: same-origin links or internal movie pathnames
-        if (tag === 'A') {
+        // 7. Thẻ <a> điều hướng nội bộ hoặc xem phim
+        if (tag === 'a') {
           const href = (el.getAttribute('href') || '').toLowerCase();
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return true;
           try {
@@ -762,17 +712,23 @@ if (window.location.hostname.includes('youtube.com')) {
           } catch(e) {}
         }
 
-        // 4. Container query for movie images or internal links
+        // 8. Chứa media con hợp lệ
         if (el.querySelector && el.querySelector(
+          'video, audio, ' +
           'img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"], img[src*="cdn77"], ' +
           'img[src*="tmdb.org"], img[src*="wsrv.nl"], img[src*="nguonc.com"], img[src*="phimimg.com"], img[src*="ophim"], img[src*="vsmov"], img[src*="themoviedb"], ' +
           '[class*="poster"], [class*="thumb"], [class*="cover"], [class*="episode"], [class*="server"]'
         )) {
           return true;
         }
-      } catch(e) {}
+      } catch (e) {}
       return false;
     }
+
+    // Aliases đảm bảo tương thích ngược 100% với các vị trí gọi hiện tại
+    const isInsideVideoPlayer = isSafeCoreZone;
+    const isVideoPlayerOrControls = isSafeCoreZone;
+    const isMovieBannerOrPoster = isSafeCoreZone;
 
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
@@ -993,18 +949,12 @@ if (window.location.hostname.includes('youtube.com')) {
       // Helper to verify and hide an ad video tag
       const checkVideo = (video) => {
         if (video.hasAttribute('data-ad-blocked')) return;
-        if (isMovieBannerOrPoster(video)) return;
+        if (isSafeCoreZone(video)) return;
         try {
           if (isAdVideo(video)) {
-            // Immediately neutralize the ad video stream playback
+            // Neutralize standalone ad video playback without touching volume or dispatching events
             try {
-              video.muted = true;
-              video.volume = 0;
-              if (isFinite(video.duration) && video.duration > 0) {
-                video.currentTime = video.duration;
-              }
               video.pause();
-              video.dispatchEvent(new Event('ended'));
             } catch (err) { }
 
             let elementToHide = video;
@@ -1013,7 +963,7 @@ if (window.location.hostname.includes('youtube.com')) {
             
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
+              if (isSafeCoreZone(curr)) break;
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
@@ -1327,10 +1277,23 @@ if (window.location.hostname.includes('youtube.com')) {
             return;
           }
 
-          // 5. TIÊU DIỆT LỚP PHỦ QUẢNG CÁO & PHỤC HỒI CUỘN TRANG
-          el.setAttribute('data-ad-blocked', 'true');
-          el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; width: 0 !important; height: 0 !important;');
-          console.log('[Anti Pop-Under] Blocked full-screen ad overlay/backdrop:', el);
+          // 5. TIÊU DIỆT LỚP PHỦ QUẢNG CÁO & PHỤC HỒI CUỘN TRANG (WRAPPER-LEVEL PURGE)
+          let topWrapper = el;
+          let p = el.parentElement;
+          let wDepth = 0;
+          while (p && p !== document.body && p !== document.documentElement && wDepth < 3) {
+            if (isSafeCoreZone(p)) break;
+            const pStyle = window.getComputedStyle(p);
+            if (pStyle.position === 'fixed' || pStyle.position === 'absolute') {
+              topWrapper = p;
+            }
+            p = p.parentElement;
+            wDepth++;
+          }
+
+          topWrapper.setAttribute('data-ad-blocked', 'true');
+          topWrapper.remove();
+          console.log('[Anti Pop-Under] Blocked & removed full-screen ad overlay wrapper:', topWrapper);
 
           safeSendMessage({
             type: 'AD_BLOCKED',
@@ -1357,11 +1320,12 @@ if (window.location.hostname.includes('youtube.com')) {
 
     /**
      * ============================================================================
-     * MODULE: ORPHAN OVERLAY & ANTI-SCROLL JANITOR (WebShield v3.6.7)
+     * MODULE: ORPHAN OVERLAY & ANTI-SCROLL JANITOR (WebShield v3.6.8 - uBlock Standard)
      * Dọn dẹp triệt để các tàn dư sau khi quảng cáo bị chặn:
-     * 1. Khung mờ tồn dư (Empty / Orphan Backdrop Overlays) che chắn viewport.
+     * 1. Khung mờ tồn dư (Empty / Orphan Backdrop Overlays) - Xóa trọn vẹn wrapper.
      * 2. Nút đóng 'X' mồ côi (Orphan Close Buttons) trôi nổi ngoài player.
-     * 3. Mở khóa cuộn trang tự động (Automatic Page Scroll Restoration).
+     * 3. Bẫy click trong suốt (Transparent Click-Hijack Traps).
+     * 4. Mở khóa cuộn trang tự động (Automatic Page Scroll Restoration).
      * Tuyệt đối bảo vệ Video Player DOM và chế độ Video Fullscreen.
      * ============================================================================
      */
@@ -1381,7 +1345,7 @@ if (window.location.hostname.includes('youtube.com')) {
           const d = dialogs[i];
           if (!d || !d.isConnected) continue;
           if (d.hasAttribute('data-ad-blocked')) continue;
-          if (isInsideVideoPlayer(d) || isVideoPlayerOrControls(d) || isMovieBannerOrPoster(d)) continue;
+          if (isSafeCoreZone(d)) continue;
 
           // Nếu modal có chứa trường nhập liệu hợp lệ hoặc danh sách tập phim / giỏ hàng
           if (d.querySelector('input:not([type="hidden"]), select, textarea, [class*="login" i], [class*="auth" i], [class*="episode" i], [class*="server" i], [class*="cart" i]')) {
@@ -1408,7 +1372,7 @@ if (window.location.hostname.includes('youtube.com')) {
         if (vw === 0 || vh === 0) return;
 
         // ----------------------------------------------------------------------
-        // 1. EMPTY / ORPHAN BACKDROP OVERLAY PURGE
+        // 1. EMPTY / ORPHAN BACKDROP OVERLAY PURGE (WRAPPER-LEVEL)
         // ----------------------------------------------------------------------
         const backdropCandidates = document.querySelectorAll(
           'body > div, body > section, body > aside, body > dialog, ' +
@@ -1421,7 +1385,7 @@ if (window.location.hostname.includes('youtube.com')) {
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bỏ qua video player và nội dung phim
-          if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return;
+          if (isSafeCoreZone(el)) return;
 
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
           if (['video', 'audio', 'nav', 'header', 'footer', 'main', 'form'].includes(tag)) return;
@@ -1445,7 +1409,7 @@ if (window.location.hostname.includes('youtube.com')) {
           // Kiểm tra tính chất làm mờ / sương đen (translucency hoặc backdrop-filter)
           let bgAlpha = 1;
           const bg = style.backgroundColor;
-          const bgMatch = bg.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+          const bgMatch = bg.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
           if (bgMatch && bgMatch[1]) {
             bgAlpha = parseFloat(bgMatch[1]);
           } else if (bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') {
@@ -1475,9 +1439,21 @@ if (window.location.hostname.includes('youtube.com')) {
           const isEmptyOrphan = text.length === 0 || (text.length <= 15 && /^[✕×X\s\dCloseĐóngBỏquaSkip]+$/i.test(text)) || hasOnlyCloseButton;
 
           if (isEmptyOrphan) {
-            el.setAttribute('data-ad-blocked', 'true');
-            el.remove();
-            console.log('[Janitor] Đã dọn dẹp khung mờ tồn dư (orphan backdrop):', el);
+            let topWrapper = el;
+            let p = el.parentElement;
+            let wDepth = 0;
+            while (p && p !== document.body && p !== document.documentElement && wDepth < 3) {
+              if (isSafeCoreZone(p)) break;
+              const pStyle = window.getComputedStyle(p);
+              if (pStyle.position === 'fixed' || pStyle.position === 'absolute') {
+                topWrapper = p;
+              }
+              p = p.parentElement;
+              wDepth++;
+            }
+            topWrapper.setAttribute('data-ad-blocked', 'true');
+            topWrapper.remove();
+            console.log('[Janitor] Đã dọn dẹp khung mờ tồn dư (wrapper level):', topWrapper);
           }
         });
 
@@ -1496,7 +1472,7 @@ if (window.location.hostname.includes('youtube.com')) {
           if (btn.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bảo vệ video player và controls
-          if (isInsideVideoPlayer(btn) || isVideoPlayerOrControls(btn) || isMovieBannerOrPoster(btn)) return;
+          if (isSafeCoreZone(btn)) return;
 
           // Bỏ qua nếu thuộc cấu trúc hợp lệ của trang
           if (btn.closest('form, nav, header, footer, [class*="login" i], [class*="auth" i], [class*="search" i], [class*="episode" i], [class*="server" i], [class*="menu" i]')) {
@@ -1532,6 +1508,40 @@ if (window.location.hostname.includes('youtube.com')) {
             btn.remove();
             console.log('[Janitor] Đã xóa nút đóng mồ côi:', btn);
           }
+        });
+
+        // ----------------------------------------------------------------------
+        // 2b. TRANSPARENT CLICK-HIJACK TRAP CLEANER (uBlock Scriptlet Style)
+        // ----------------------------------------------------------------------
+        const transparentTraps = document.querySelectorAll('body > a, body > div, body > * > a, body > * > div');
+        transparentTraps.forEach(el => {
+          if (!el || !el.isConnected) return;
+          if (el.hasAttribute('data-ad-blocked')) return;
+          if (isSafeCoreZone(el)) return;
+
+          const style = window.getComputedStyle(el);
+          if (style.position !== 'fixed' && style.position !== 'absolute') return;
+
+          const zIndex = parseInt(style.zIndex, 10);
+          if (isNaN(zIndex) || zIndex < 999) return;
+
+          const opacity = parseFloat(style.opacity);
+          const bg = style.backgroundColor;
+          const bgMatch = bg.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+          const bgAlpha = bgMatch && bgMatch[1] ? parseFloat(bgMatch[1]) : (bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)' ? 0 : 1);
+
+          const isTransparent = opacity <= 0.05 || bgAlpha <= 0.05;
+          if (!isTransparent) return;
+
+          const rect = el.getBoundingClientRect();
+          const isLargeArea = (rect.width >= vw * 0.4 && rect.height >= vh * 0.4) || (rect.width >= 250 && rect.height >= 250);
+          if (!isLargeArea) return;
+
+          if (el.querySelector('video, audio, input, select, textarea, [class*="player" i]')) return;
+
+          el.setAttribute('data-ad-blocked', 'true');
+          el.remove();
+          console.log('[Janitor] Đã xóa transparent click-hijack trap:', el);
         });
 
         // ----------------------------------------------------------------------
@@ -1640,43 +1650,49 @@ if (window.location.hostname.includes('youtube.com')) {
 
     function queueNodeCheck(node) {
       if (!node || node.nodeType !== 1) return;
-      if (isInsideVideoPlayer(node) || isVideoPlayerOrControls(node)) return;
+      if (isSafeCoreZone(node)) return;
       pendingNodes.add(node);
       if (!batchScheduled) {
         batchScheduled = true;
-        // Standard 4: requestAnimationFrame + debounce (~80ms) for high mobile performance
+        // Standard 5: requestAnimationFrame + debounce 150ms for 60fps mobile performance
         requestAnimationFrame(() => {
-          setTimeout(processPendingNodes, 80);
+          setTimeout(processPendingNodes, 150);
         });
       }
     }
 
     try {
       const observer = new MutationObserver((mutations) => {
-        const isEnabled = currentEnabledState;
-        if (!isEnabled) return;
-
-        // Skip dynamic ad checks on YouTube to prevent hiding core UI elements
+        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
         if (window.location.hostname.includes('youtube.com')) return;
 
         for (let i = 0; i < mutations.length; i++) {
-          const mutation = mutations[i];
-          if (isInsideVideoPlayer(mutation.target)) continue;
-          const added = mutation.addedNodes;
+          const added = mutations[i].addedNodes;
           for (let j = 0; j < added.length; j++) {
             const node = added[j];
-            if (node.nodeType === 1 && !isInsideVideoPlayer(node)) {
+            if (node.nodeType === 1 && !isSafeCoreZone(node)) {
               queueNodeCheck(node);
             }
           }
         }
       });
 
-      // Observe early document parsing
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
+      const attachObserver = () => {
+        if (document.body) {
+          // Standard 5: CHỈ observe document.body ở mức childList: true, subtree: false
+          // Ngăn chặn hoàn toàn việc theo dõi hay đào sâu vào subtree của Video Player
+          observer.observe(document.body, {
+            childList: true,
+            subtree: false
+          });
+        }
+      };
+
+      if (document.body) {
+        attachObserver();
+      } else {
+        document.addEventListener('DOMContentLoaded', attachObserver, { once: true });
+      }
     } catch (e) {
       console.error('[Anti Pop-Under] MutationObserver setup failed:', e);
     }
@@ -2572,9 +2588,9 @@ if (window.location.hostname.includes('youtube.com')) {
           min-width: 1px !important;
           min-height: 1px !important;
         }
-        video:not([muted]):not([loop]),
+        video, audio,
         .jwplayer, .artplayer, .video-js, .plyr,
-        [class*="player"] video, [id*="player"] video {
+        [class*="player"], [id*="player"], [class*="video"], [id*="video"] {
           visibility: visible !important;
           pointer-events: auto !important;
         }

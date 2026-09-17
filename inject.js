@@ -873,16 +873,23 @@
     return;
   }
 
-  // Helper nhận diện ranh giới tuyệt đối của video player DOM
-  // Standard 1: Strict Boundary Check
-  function isInsideVideoPlayer(el) {
+  /**
+   * ============================================================================
+   * MODULE 1: ĐỊNH NGHĨA RANH GIỚI BẢO VỆ TUYỆT ĐỐI (CORE MEDIA WHITELIST)
+   * Thẩm định ranh giới bất khả xâm phạm của Video Player & Nội dung phim.
+   * ============================================================================
+   */
+  function isSafeCoreZone(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
-      if (tag === 'video' || tag === 'audio' || tag === 'source' || tag === 'track') return true;
 
-      // 2. Bản thân là <iframe> chứa player (youtube, drive, stream, embed, v.v.)
+      // 1. Thẻ Media HTML5 & Canvas
+      if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
+        return true;
+      }
+
+      // 2. <iframe> chứa player (YouTube, Google Drive, stream servers, embed players)
       if (tag === 'iframe') {
         const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
         if (/youtube|youtu\.be|youtube-nocookie|drive\.google|player|embed|stream|video|watch|film|movie|vids|hls|m3u8|mp4|halim|hotp|2embed|vidsrc|superembed|play|media/i.test(src)) {
@@ -890,10 +897,9 @@
         }
       }
 
-      // 3. Nằm bên trong bất kỳ container nào có class/id/thuộc tính chứa:
-      // "player", "video", "jwplayer", "vjs", "plyr", "artplayer", "dplayer", "xgplayer", "fluid_player", "media"
+      // 3. Container Player UI (.ytp-*, [class*="player"], [id*="player"], video-js, jwplayer, plyr, artplayer, dplayer, xgplayer, halim-movie)
       if (el.closest) {
-        const inPlayerContainer = el.closest(
+        const inPlayer = el.closest(
           'video, audio, ' +
           '[class*="player" i], [id*="player" i], [data-player], ' +
           '[class*="video" i], [id*="video" i], ' +
@@ -906,13 +912,12 @@
           '[class*="fluid_player" i], [id*="fluid_player" i], ' +
           '[class*="media" i], [id*="media" i], ' +
           '.html5-video-player, [class*="ytp-" i], #movie_player, #edgeplayer-root, ' +
-          '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i]'
+          '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i], [class*="halim-movie" i]'
         );
-        if (inPlayerContainer) return true;
+        if (inPlayer) return true;
       }
 
-      // 4. Hoặc là sibling trực tiếp nằm chung container cha với thẻ <video>
-      // hoặc bất kỳ cha nào (depth < 5) có chứa thẻ <video> hoặc có class/id liên quan player
+      // 4. Sibling trực tiếp hoặc nằm chung container cha (depth < 5) với thẻ <video>
       let p = el.parentElement;
       let depth = 0;
       while (p && p !== document.body && p !== document.documentElement && depth < 5) {
@@ -921,21 +926,22 @@
         }
         const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
         const pId = (p.id || '').toLowerCase();
-        if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pClass) ||
-            /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pId)) {
+        if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|halim/i.test(pClass) ||
+            /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|halim/i.test(pId)) {
           return true;
         }
         p = p.parentElement;
         depth++;
       }
-    } catch (e) {}
-    return false;
-  }
 
-  // Helper nhận diện và bảo vệ tuyệt đối poster, thumbnail, banner phim, nút tập/server
-  function isMovieBannerOrPoster(el) {
-    if (!el || el === document || el === document.body || el === document.documentElement) return false;
-    try {
+      // 5. Poster, Thumbnail, Banner phim, Danh sách tập & Server
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      const contentKeywords = ['poster', 'thumb', 'cover', 'movie', 'film', 'episode', 'server', 'play-list', 'list-ep', 'tap', 'halim', 'tray', 'swiper', 'carousel', 'slider', 'trailer', 'detail'];
+      if (contentKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
+        return true;
+      }
+
       if (el.closest && el.closest(
         '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
         '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
@@ -952,32 +958,56 @@
       )) {
         return true;
       }
-      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+
+      // 6. Thẻ <img> chứa poster/ảnh phim hoặc link nội bộ
       if (tag === 'img') {
         const src = (el.currentSrc || el.src || el.getAttribute('data-src') || el.getAttribute('data-original') || '').toLowerCase();
-        if (src) {
-          const isKnownMovieCDN = /tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov/i.test(src);
-          if (isKnownMovieCDN) return true;
-          try {
-            const imgHost = new URL(src, window.location.href).hostname.toLowerCase();
-            const curHost = window.location.hostname.toLowerCase();
-            if (imgHost === curHost || imgHost.endsWith('.' + curHost) || curHost.endsWith('.' + imgHost)) {
-              return true;
-            }
-          } catch(e) {}
-        }
+        if (src.startsWith('data:') || src.startsWith('blob:')) return true;
+        if (/tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov/i.test(src)) return true;
+        try {
+          const imgHost = new URL(src, window.location.href).hostname.toLowerCase();
+          const curHost = window.location.hostname.toLowerCase();
+          if (imgHost === curHost || imgHost.endsWith('.' + curHost) || curHost.endsWith('.' + imgHost)) {
+            return true;
+          }
+        } catch(e) {}
         const alt = (el.alt || el.title || '').toLowerCase();
         if (alt && (/phim|tập|season|episode|trailer|movie|film/i.test(alt))) return true;
       }
+
+      // 7. Thẻ <a> điều hướng nội bộ hoặc xem phim
       if (tag === 'a') {
         const href = (el.getAttribute('href') || '').toLowerCase();
-        if (href && (/^\/(phim|tap-|movie|film|watch|xem-phim)/i.test(href) || /[\/\?](tap-|episode|phim-)/i.test(href))) {
+        if (!href || href.startsWith('javascript:') || href.startsWith('#')) return true;
+        if (/^\/(phim|tap-|movie|film|watch|xem-phim)/i.test(href) || /[\/\?](tap-|episode|phim-)/i.test(href)) {
           return true;
         }
+        try {
+          const urlObj = new URL(href, window.location.href);
+          const aHost = urlObj.hostname.toLowerCase();
+          const curHost = window.location.hostname.toLowerCase();
+          if (aHost === curHost || aHost.endsWith('.' + curHost) || curHost.endsWith('.' + aHost)) {
+            return true;
+          }
+        } catch(e) {}
       }
-    } catch(e) {}
+
+      // 8. Chứa media con hợp lệ
+      if (el.querySelector && el.querySelector(
+        'video, audio, ' +
+        'img[src*="animevietsub"], img[src*="phim"], img[src*="film"], img[src*="movie"], img[src*="poster"], img[src*="thumb"], img[src*="cover"], img[src*="cdn77"], ' +
+        'img[src*="tmdb.org"], img[src*="wsrv.nl"], img[src*="nguonc.com"], img[src*="phimimg.com"], img[src*="ophim"], img[src*="vsmov"], img[src*="themoviedb"], ' +
+        '[class*="poster"], [class*="thumb"], [class*="cover"], [class*="episode"], [class*="server"]'
+      )) {
+        return true;
+      }
+    } catch (e) {}
     return false;
   }
+
+  const isInsideVideoPlayer = isSafeCoreZone;
+  const isVideoPlayerOrControls = isSafeCoreZone;
+  const isMovieBannerOrPoster = isSafeCoreZone;
 
   function injectPlayerStyles() {
     try {
@@ -1544,12 +1574,25 @@
     }
 
     // Nếu thao tác phát sinh từ bên trong video player nội bộ (toggle fullscreen / external video provider)
-    if (lastInteractionEvent && lastInteractionEvent.target && isInsideVideoPlayer(lastInteractionEvent.target)) {
+    if (lastInteractionEvent && lastInteractionEvent.target && isSafeCoreZone(lastInteractionEvent.target)) {
       // Chỉ chặn nếu URL đích là domain quảng cáo rác/cờ bạc đã biết
       if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
         return originalOpen.apply(this, arguments);
       }
     }
+
+    // Cho phép same-origin window.open hợp lệ
+    try {
+      if (url) {
+        const targetUrl = new URL(url, window.location.href);
+        const curHost = window.location.hostname.toLowerCase();
+        const targetHost = targetUrl.hostname.toLowerCase();
+        const isSameOrigin = targetHost === curHost || targetHost.endsWith('.' + curHost) || curHost.endsWith('.' + targetHost);
+        if (isSameOrigin && !gamblingRegex.test(url) && !adUrlRegex.test(url)) {
+          return originalOpen.apply(this, arguments);
+        }
+      }
+    } catch (e) {}
 
     const targetLower = String(target || '').toLowerCase();
     if (['_self', '_top', '_parent'].includes(targetLower)) {
