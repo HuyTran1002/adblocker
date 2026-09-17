@@ -906,6 +906,53 @@
     return false;
   }
 
+  // Helper nhận diện và bảo vệ tuyệt đối poster, thumbnail, banner phim, nút tập/server
+  function isMovieBannerOrPoster(el) {
+    if (!el || el === document || el === document.body || el === document.documentElement) return false;
+    try {
+      if (el.closest && el.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, ' +
+        '[class*="episode"], [class*="server"], [class*="play-list"], [class*="list-ep"], [class*="tap-"], ' +
+        '[id*="episode"], [id*="server"], .module-info-play, .module-mobile-play, .module-play-list, ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
+        '[class*="detail"], [class*="trailer"]'
+      )) {
+        return true;
+      }
+      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      if (tag === 'img') {
+        const src = (el.currentSrc || el.src || el.getAttribute('data-src') || el.getAttribute('data-original') || '').toLowerCase();
+        if (src) {
+          const isKnownMovieCDN = /tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov/i.test(src);
+          if (isKnownMovieCDN) return true;
+          try {
+            const imgHost = new URL(src, window.location.href).hostname.toLowerCase();
+            const curHost = window.location.hostname.toLowerCase();
+            if (imgHost === curHost || imgHost.endsWith('.' + curHost) || curHost.endsWith('.' + imgHost)) {
+              return true;
+            }
+          } catch(e) {}
+        }
+        const alt = (el.alt || el.title || '').toLowerCase();
+        if (alt && (/phim|tập|season|episode|trailer|movie|film/i.test(alt))) return true;
+      }
+      if (tag === 'a') {
+        const href = (el.getAttribute('href') || '').toLowerCase();
+        if (href && (/^\/(phim|tap-|movie|film|watch|xem-phim)/i.test(href) || /[\/\?](tap-|episode|phim-)/i.test(href))) {
+          return true;
+        }
+      }
+    } catch(e) {}
+    return false;
+  }
+
   function injectPlayerStyles() {
     try {
       if (document.getElementById('webshield-player-styles')) return;
@@ -947,19 +994,7 @@
       if (isInsideVideoPlayer(target)) return;
 
       // Never block or destroy movie banner, poster, or legitimate play/episode buttons
-      if (target.closest && target.closest(
-        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
-        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
-        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
-        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
-        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
-        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
-      )) {
-        return;
-      }
+      if (isMovieBannerOrPoster(target)) return;
 
       // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
@@ -1155,24 +1190,13 @@
     // Inside embedded player iframes, never flag player masks as clickjack overlays
     if (window.self !== window.top) return false;
 
+    // Standard 1: Protect video player DOM and film content
+    if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) return false;
+    if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) return false;
+
     try {
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
       if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object', 'svg', 'path', 'i', 'img', 'picture', 'button', 'input', 'select', 'textarea', 'form', 'label', 'summary', 'option'].includes(tagName)) {
-        return false;
-      }
-
-      // Protect movie banners, posters, carousels, sliders, and film items from clickjack overlay detection
-      if (el.closest && el.closest(
-        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
-        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
-        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
-        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
-        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
-        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
-      )) {
         return false;
       }
 
