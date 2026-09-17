@@ -1044,6 +1044,27 @@
           pointer-events: none !important;
           height: 0 !important;
         }
+
+        /* === BẢO VỆ TUYỆT ĐỐI JW PLAYER (MAIN WORLD - document_start) ===
+         * Filter list (EasyList/uBlock/ABPVN) có thể match .jw-display, .jw-controls...
+         * và set pointer-events: none khiến click-to-pause không hoạt động.
+         * CSS này inject từ Main World với độ ưu tiên cao nhất, luôn override mọi filter CSS. */
+        .jwplayer, [class*="jw-"] {
+          pointer-events: auto !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+        /* Vùng click chính của JW Player để Play/Pause */
+        .jw-display, .jw-display-container, .jw-display-icon-container,
+        .jw-media, .jw-video, .jw-controls, .jw-controls-backdrop,
+        .jw-wrapper, .jw-preview, .jw-button-container,
+        .jw-slider-time, .jw-rail, .jw-buffer, .jw-progress, .jw-knob,
+        .jw-icon-playback, .jw-icon-rewind, .jw-icon-volume, .jw-icon-fullscreen {
+          pointer-events: auto !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          display: block !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }

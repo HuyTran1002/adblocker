@@ -342,6 +342,27 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
+  /* === BẢO VỆ TUYỆT ĐỐI JW PLAYER - KHÔNG ĐỂ FILTER LIST PHÁ VỠ CLICK-TO-PAUSE === */
+  /* JW Player container và tất cả các element con jw-* */
+  .jwplayer, [class*="jw-"] {
+    visibility: visible !important;
+    pointer-events: auto !important;
+    display: block !important;
+    opacity: 1 !important;
+  }
+  /* JW Player click/display areas - đây là vùng user click để pause */
+  .jw-display, .jw-display-container, .jw-display-icon-container,
+  .jw-display-icon-display, .jw-media, .jw-video, .jw-controls,
+  .jw-controls-backdrop, .jw-button-container, .jw-slider-time,
+  .jw-rail, .jw-buffer, .jw-progress, .jw-knob,
+  .jw-icon-rewind, .jw-icon-playback, .jw-icon-volume,
+  .jw-icon-fullscreen, .jw-icon-settings, .jw-icon-cast,
+  .jw-time-tip, .jw-nextup-container, .jw-preview {
+    visibility: visible !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+  }
+
   .swiper, .swiper-wrapper {
     visibility: visible !important;
   }
@@ -2778,6 +2799,19 @@ if (window.location.hostname.includes('youtube.com')) {
         [class*="player"], [id*="player"], [class*="video"], [id*="video"] {
           visibility: visible !important;
           pointer-events: auto !important;
+        }
+        /* BẢO VỆ ĐẶC BIỆT JW PLAYER: [class*="jw-"] bao phủ tất cả element con của JW Player */
+        /* Đây là FIX quan trọng nhất: filter list online có thể match .jw-display, .jw-controls... */
+        [class*="jw-"],
+        .jw-display, .jw-display-container, .jw-display-icon-container,
+        .jw-media, .jw-video, .jw-controls, .jw-controls-backdrop,
+        .jw-slider-time, .jw-rail, .jw-buffer, .jw-progress, .jw-knob,
+        .jw-button-container, .jw-icon-playback, .jw-icon-rewind,
+        .jw-icon-volume, .jw-icon-fullscreen, .jw-preview, .jw-wrapper,
+        .jw-nextup-container, .jw-captions, .jw-related {
+          visibility: visible !important;
+          pointer-events: auto !important;
+          opacity: 1 !important;
         }
         iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
           visibility: visible !important;
