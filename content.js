@@ -572,8 +572,11 @@ if (window.location.hostname.includes('youtube.com')) {
     // Helper to safely hide elements with CSS without breaking React / Next.js Virtual DOM reconciliation
     function safeHideElement(el) {
       if (!el || el.nodeType !== 1) return;
-      // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT, CẤU TRÚC LAYOUT CHÍNH, LINK NỘI BỘ & POPUP XEM TIẾP
+      // BẢO VỆ TUYỆT ĐỐI TRÌNH PHÁT VIDEO, MEDIA, NEXT.JS ROOT, LAYOUT CHÍNH, LINK NỘI BỘ & POPUP XEM TIẾP
       if (
+        el.tagName === 'VIDEO' || el.tagName === 'AUDIO' ||
+        (el.querySelector && el.querySelector('video, audio')) ||
+        isVideoPlayerOrControls(el) || isInsideVideoPlayer(el) ||
         el.id === '__next' ||
         (el.getAttribute && el.getAttribute('id') === '__next') ||
         el.tagName === 'BODY' || el.tagName === 'HTML' ||
@@ -752,9 +755,8 @@ if (window.location.hostname.includes('youtube.com')) {
         // BẢO VỆ TUYỆT ĐỐI POPUP XEM TIẾP / TIẾP TỤC XEM (RESUME PLAYBACK CONFIRMATION)
         if (isResumeOrPlaybackDialog(el)) return true;
 
-        // 1. Thẻ Media HTML5 & Canvas
+        // 1. Thẻ Media HTML5 & Canvas: 100% BẢO VỆ BẤT KHẢ XÂM PHẠM (KHÔNG CAN THIỆP VIDEO PLAYER)
         if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
-          if (tag === 'video' && isAdVideo(el)) return false; // Chỉ loại trừ nếu bản thân video là video quảng cáo đích thực
           return true;
         }
 
@@ -786,21 +788,18 @@ if (window.location.hostname.includes('youtube.com')) {
           if (inPlayer) return true;
         }
 
-        // 4. Sibling trực tiếp hoặc nằm chung container cha (depth < 5) với thẻ <video> THẬT (không phải video quảng cáo)
+        // 4. Sibling trực tiếp hoặc nằm chung container cha (depth < 5) với thẻ <video> hoặc <audio>
         let p = el.parentElement;
         let depth = 0;
         while (p && p !== document.body && p !== document.documentElement && depth < 5) {
-          if (hasRealMedia(p)) {
+          if (p.querySelector && p.querySelector('video, audio')) {
             return true;
           }
           const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
           const pId = (p.id || '').toLowerCase();
           if (/player|video-js|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|halim/i.test(pClass) ||
               /player|video-js|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|halim/i.test(pId)) {
-            if (!pClass.includes('ad-') && !pClass.includes('popup') && !pClass.includes('popunder') &&
-                !pId.includes('ad-') && !pId.includes('popup') && !pId.includes('popunder')) {
-              return true;
-            }
+            return true;
           }
           p = p.parentElement;
           depth++;
@@ -1120,72 +1119,10 @@ if (window.location.hostname.includes('youtube.com')) {
         } catch(e) {}
       };
 
-      // Helper to verify and hide an ad video tag
+      // Helper to verify and hide an ad video tag -> BỎ QUA HOÀN TOÀN ĐỂ TRÁNH LỖI TRÌNH PHÁT
       const checkVideo = (video) => {
-        if (video.hasAttribute('data-ad-blocked')) return;
-        if (isSafeCoreZone(video)) return;
-        try {
-          if (isAdVideo(video)) {
-            // Neutralize standalone ad video playback without touching volume or dispatching events
-            try {
-              video.pause();
-            } catch (err) { }
-
-            let elementToHide = video;
-            let curr = video.parentElement;
-            let depth = 0;
-            
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              if (curr.id === '__next' || curr.tagName === 'MAIN' || curr.tagName === 'HEADER' || curr.tagName === 'NAV') {
-                break;
-              }
-              if (isSafeCoreZone(curr)) break;
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb')) {
-                break;
-              }
-
-              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb');
-              if (isMediaOrThumb) break;
-
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || currClass.includes('popunder') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper || (isFloating && (curr.innerText || '').trim().length < 200)) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
-            }
-
-            safeHideElement(video);
-            if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              safeHideElement(elementToHide);
-              console.log('[Anti Pop-Under] Hide Ad Video & Wrapper:', video.src, elementToHide);
-              
-              safeSendMessage({
-                type: 'AD_BLOCKED',
-                url: video.src || 'video-ad',
-                reason: 'Ẩn video quảng cáo & lớp mờ'
-              });
-
-              // Restore scroll lock if body/html was locked
-              if (document.body) {
-                if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
-                if (document.body.style.position === 'fixed') document.body.style.position = '';
-              }
-              if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
-                document.documentElement.style.overflow = '';
-              }
-            }
-          }
-        } catch (e) {}
+        // Tuyệt đối không can thiệp, không pause, không ẩn bất kỳ thẻ video nào của web
+        return;
       };
 
       // Helper to verify and hide an img tag (safely ignores base64/blob)
@@ -1378,6 +1315,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
           // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM VỚI VIDEO PLAYER, PHIM & POPUP XEM TIẾP
           if (isVideoPlayerOrControls(el) || isInsideVideoPlayer(el)) return;
+          if (el.querySelector && el.querySelector('video, audio')) return;
           if (isMovieBannerOrPoster(el)) return;
           if (isResumeOrPlaybackDialog(el) || isSafeCoreZone(el)) return;
 
@@ -1587,7 +1525,8 @@ if (window.location.hostname.includes('youtube.com')) {
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bỏ qua video player, nội dung phim và popup xem tiếp
-          if (isSafeCoreZone(el) || isResumeOrPlaybackDialog(el)) return;
+          if (isSafeCoreZone(el) || isResumeOrPlaybackDialog(el) || isInsideVideoPlayer(el)) return;
+          if (el.querySelector && el.querySelector('video, audio')) return;
 
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
           if (['video', 'audio', 'nav', 'header', 'footer', 'main', 'form'].includes(tag)) return;

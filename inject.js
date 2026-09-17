@@ -148,64 +148,8 @@
       } catch (e) { }
     });
 
-    try {
-      window.funcGetvastAdx = function () { return []; };
-      window.funcJWonReadyVAST = function () { };
-      window.COUNT_VAST = 0;
-      window.show_adx = 0;
-
-      // Safety stub for JWPlayer telemetry (jwpsrv)
-      if (!window.jwpsrv) {
-        const dummyJwpsrv = function () {
-          return {
-            track: function () { },
-            event: function () { },
-            send: function () { }
-          };
-        };
-        dummyJwpsrv.track = function () { };
-        dummyJwpsrv.event = function () { };
-        dummyJwpsrv.send = function () { };
-        dummyJwpsrv.setTracker = function () { };
-        window.jwpsrv = dummyJwpsrv;
-      }
-    } catch (e) { }
-
-    // Neutralize VideoJS preroll ad hijackings on video tube sites (e.g. 91porn, adult tube sites)
-    try {
-      const overrideVideoJsPreroll = (vjs) => {
-        if (!vjs || vjs._prerollNeutralized) return;
-        vjs._prerollNeutralized = true;
-        try {
-          if (vjs.Player && vjs.Player.prototype) {
-            vjs.Player.prototype.preroll = function () {
-              console.log('[Anti Pop-Under] Neutralized videojs preroll ad injection');
-              return this;
-            };
-          }
-          if (vjs.prototype) {
-            vjs.prototype.preroll = function () {
-              return this;
-            };
-          }
-        } catch (err) { }
-      };
-
-      if (window.videojs) {
-        overrideVideoJsPreroll(window.videojs);
-      } else {
-        let realVideoJs = window.videojs;
-        Object.defineProperty(window, 'videojs', {
-          configurable: true,
-          enumerable: true,
-          get() { return realVideoJs; },
-          set(val) {
-            realVideoJs = val;
-            overrideVideoJsPreroll(val);
-          }
-        });
-      }
-    } catch (e) { }
+    // Video Player Protection: Tuyệt đối không can thiệp hoặc ghi đè JWPlayer, Video.js hay VAST callbacks
+    // để tránh làm hỏng tiến trình khởi tạo và phát phim của player.
 
     try {
       const dummyAdProvider = { push: function () { } };
