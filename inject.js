@@ -2317,7 +2317,8 @@
       }
     } catch (e) { }
 
-    // 9. Neutralize Anti-Adblock Warning Modals, Interruption Toasts & Auto-Unpause Video (Ultra-Smooth Debounced)
+    // 9. Neutralize Anti-Adblock Warning Modals & Interruption Toasts
+    // CRITICAL: NEVER call video.play() here — it prevents users from pausing/seeking!
     let clearScheduled = false;
     function scheduleClear() {
       if (clearScheduled) return;
@@ -2333,7 +2334,7 @@
       try {
         const targetSelectors = 'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, ytd-mealbar-promo-renderer, #feedback.ytd-enforcement-message-view-model';
         const targets = document.querySelectorAll(targetSelectors);
-        let removed = false;
+        let removedEnforcement = false;
 
         targets.forEach(el => {
           const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
@@ -2342,7 +2343,7 @@
             dialog.style.setProperty('visibility', 'hidden', 'important');
             dialog.style.setProperty('pointer-events', 'none', 'important');
           } catch (e) {}
-          removed = true;
+          removedEnforcement = true;
         });
 
         // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
@@ -2364,7 +2365,6 @@
               toast.style.setProperty('visibility', 'hidden', 'important');
               toast.style.setProperty('pointer-events', 'none', 'important');
             } catch (e) {}
-            removed = true;
           }
         });
 
@@ -2372,10 +2372,12 @@
         const errorScreen = document.querySelector('#error-screen.ytd-watch-flexy');
         if (errorScreen && errorScreen.style.display !== 'none') {
           errorScreen.style.setProperty('display', 'none', 'important');
-          removed = true;
+          removedEnforcement = true;
         }
 
-        if (removed) {
+        // Only restore body pointer-events/overflow if an enforcement dialog was actually hidden
+        // NEVER call video.play() — this breaks user's ability to pause & seek!
+        if (removedEnforcement) {
           const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
           backdrops.forEach(b => {
             try {
@@ -2393,24 +2395,58 @@
             document.documentElement.style.setProperty('overflow', 'auto', 'important');
             document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
           }
-
-          const video = document.querySelector('video');
-          if (video && video.paused) {
-            video.play().catch(() => { });
-          }
         }
       } catch (e) { }
     }
 
+    // Only observe enforcement-related elements, NOT the entire subtree (to avoid triggering on every UI interaction)
     try {
-      const observer = new MutationObserver(scheduleClear);
-      observer.observe(document.documentElement || document.body, {
+      const enforcementObserver = new MutationObserver((mutations) => {
+        for (const mut of mutations) {
+          const target = mut.target;
+          if (!target) continue;
+          const tag = (target.tagName || '').toLowerCase();
+          // Only react to enforcement/dialog/backdrop elements being added
+          if (
+            tag === 'ytd-enforcement-message-view-model' ||
+            tag === 'ytd-enforcement-message-renderer' ||
+            tag === 'ytd-mealbar-promo-renderer' ||
+            tag === 'tp-yt-paper-dialog' ||
+            tag === 'tp-yt-paper-toast' ||
+            tag === 'tp-yt-iron-overlay-backdrop' ||
+            (target.id && target.id === 'error-screen')
+          ) {
+            scheduleClear();
+            return;
+          }
+          // Also check newly added nodes
+          for (const node of mut.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            const nodeTag = (node.tagName || '').toLowerCase();
+            if (
+              nodeTag === 'ytd-enforcement-message-view-model' ||
+              nodeTag === 'ytd-enforcement-message-renderer' ||
+              nodeTag === 'ytd-mealbar-promo-renderer' ||
+              nodeTag === 'tp-yt-paper-dialog' ||
+              nodeTag === 'tp-yt-iron-overlay-backdrop'
+            ) {
+              scheduleClear();
+              return;
+            }
+          }
+        }
+      });
+      enforcementObserver.observe(document.documentElement || document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: false,
+        characterData: false
       });
     } catch (e) { }
 
-    setInterval(scheduleClear, 2000);
+    // Sparse interval: only scan every 10s to catch edge cases, not every 2s
+    // This is safe because the MutationObserver above handles real-time detection
+    setInterval(clearYouTubeEnforcementDialogs, 10000);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
