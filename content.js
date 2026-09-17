@@ -564,6 +564,57 @@ if (window.location.hostname.includes('youtube.com')) {
     const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
     const adUrlRegex = new RegExp(adUrlKeywords.join('|'), 'i');
 
+    // Helper to safely hide elements with CSS without breaking React / Next.js Virtual DOM reconciliation
+    function safeHideElement(el) {
+      if (!el || el.nodeType !== 1) return;
+      // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT & CẤU TRÚC LAYOUT CHÍNH & LINK NỘI BỘ
+      if (
+        el.id === '__next' ||
+        (el.getAttribute && el.getAttribute('id') === '__next') ||
+        el.tagName === 'BODY' || el.tagName === 'HTML' ||
+        el.tagName === 'MAIN' || el.tagName === 'HEADER' ||
+        el.tagName === 'NAV' || el.tagName === 'FOOTER' ||
+        isInternalNavigationLink(el) ||
+        isSafeCoreZone(el)
+      ) {
+        return;
+      }
+      try {
+        el.setAttribute('data-ad-blocked', 'true');
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+      } catch(e) {
+        try {
+          el.style.cssText += ';display:none !important;visibility:hidden !important;pointer-events:none !important;opacity:0 !important;';
+        } catch(err) {}
+      }
+    }
+
+    // Helper to determine if an element is or is inside an internal client-side navigation link (Next.js / React Router)
+    function isInternalNavigationLink(node) {
+      if (!node || node === document || node === document.body || node === document.documentElement) return false;
+      try {
+        const anchor = node.tagName && node.tagName.toLowerCase() === 'a' ? node : (node.closest ? node.closest('a') : null);
+        if (!anchor) return false;
+        const rawHref = anchor.getAttribute('href');
+        if (!rawHref) return false;
+        const href = rawHref.trim();
+        if (!href || href === '#' || href.startsWith('javascript:')) return false;
+        // Bắt đầu bằng "/", "./", "../", "?" hoặc "#" -> 100% Client-side route trong Next.js / React Router
+        if (href.startsWith('/') || href.startsWith('./') || href.startsWith('../') || href.startsWith('?') || href.startsWith('#')) {
+          return true;
+        }
+        const curHost = window.location.hostname.toLowerCase().replace(/^www\./i, '');
+        const aHost = new URL(anchor.href, window.location.href).hostname.toLowerCase().replace(/^www\./i, '');
+        if (aHost === curHost || aHost.endsWith('.' + curHost) || curHost.endsWith('.' + aHost)) {
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
     // Helper to check if a video is actually an ad
     function isAdVideo(video) {
       if (!video) return false;
@@ -630,7 +681,14 @@ if (window.location.hostname.includes('youtube.com')) {
     function isSafeCoreZone(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
+        // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT CONTAINER & LAYOUT CHÍNH
+        if (el.id === '__next' || (el.getAttribute && el.getAttribute('id') === '__next')) return true;
+
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        if (['main', 'header', 'footer', 'nav'].includes(tag)) return true;
+
+        // BẢO VỆ TUYỆT ĐỐI CÁC THẺ ĐIỀU HƯỚNG NỘI BỘ (NEXT.JS / REACT ROUTER LINKS)
+        if (isInternalNavigationLink(el)) return true;
 
         // 1. Thẻ Media HTML5 & Canvas
         if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
@@ -772,6 +830,7 @@ if (window.location.hostname.includes('youtube.com')) {
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
+      if (el.id === '__next' || isInternalNavigationLink(el)) return;
       if (isInsideVideoPlayer(el)) return;
       if (isMovieBannerOrPoster(el)) return;
 
@@ -818,7 +877,7 @@ if (window.location.hostname.includes('youtube.com')) {
           const anchorId = (anchor.id || '').toLowerCase();
           const anchorStyle = anchor.getAttribute('style') || '';
           if (anchorId.startsWith('bb') || anchorStyle.includes('opacity:0') || anchorStyle.includes('opacity: 0') || (anchorStyle.includes('1px') && anchorStyle.includes('height'))) {
-            try { anchor.remove(); } catch (e) {}
+            safeHideElement(anchor);
             return;
           }
 
@@ -866,6 +925,10 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
+              // STOP parent traversal immediately at Next.js root or main layout!
+              if (curr.id === '__next' || curr.tagName === 'MAIN' || curr.tagName === 'HEADER' || curr.tagName === 'NAV') {
+                break;
+              }
               // STOP parent traversal immediately if we reach a video player or movie banner!
               if (isSafeCoreZone(curr)) {
                 break;
@@ -894,16 +957,7 @@ if (window.location.hostname.includes('youtube.com')) {
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              try {
-                // If it's a floating modal/backdrop wrapper, remove it from DOM to purge backdrop and close button
-                const eStyle = window.getComputedStyle(elementToHide);
-                if (elementToHide !== anchor && (eStyle.position === 'fixed' || eStyle.position === 'absolute')) {
-                  elementToHide.remove();
-                }
-              } catch (e) {}
-
+              safeHideElement(elementToHide);
               console.log('[Anti Pop-Under] Hide Ad & Outer Overlay Container:', href, elementToHide);
 
               safeSendMessage({
@@ -960,6 +1014,9 @@ if (window.location.hostname.includes('youtube.com')) {
             // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
+              if (curr.id === '__next' || curr.tagName === 'MAIN' || curr.tagName === 'HEADER' || curr.tagName === 'NAV') {
+                break;
+              }
               // STOP parent traversal immediately if we reach a video player or movie banner!
               if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) {
                 break;
@@ -988,8 +1045,7 @@ if (window.location.hostname.includes('youtube.com')) {
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              safeHideElement(elementToHide);
               console.log('[Anti Pop-Under] Hide Iframe & Outer Overlay Container:', src, elementToHide);
 
               safeSendMessage({
@@ -1019,6 +1075,9 @@ if (window.location.hostname.includes('youtube.com')) {
             
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
+              if (curr.id === '__next' || curr.tagName === 'MAIN' || curr.tagName === 'HEADER' || curr.tagName === 'NAV') {
+                break;
+              }
               if (isSafeCoreZone(curr)) break;
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
@@ -1043,18 +1102,9 @@ if (window.location.hostname.includes('youtube.com')) {
               curr = curr.parentElement;
             }
 
-            video.setAttribute('data-ad-blocked', 'true');
+            safeHideElement(video);
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              try {
-                // If it's a floating modal/backdrop wrapper, remove it from DOM to purge backdrop and close button
-                const eStyle = window.getComputedStyle(elementToHide);
-                if (elementToHide !== video && (eStyle.position === 'fixed' || eStyle.position === 'absolute')) {
-                  elementToHide.remove();
-                }
-              } catch (e) {}
-
+              safeHideElement(elementToHide);
               console.log('[Anti Pop-Under] Hide Ad Video & Wrapper:', video.src, elementToHide);
               
               safeSendMessage({
@@ -1099,7 +1149,13 @@ if (window.location.hostname.includes('youtube.com')) {
             
             while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
               depth++;
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
+              if (curr.id === '__next' || curr.tagName === 'MAIN' || curr.tagName === 'HEADER' || curr.tagName === 'NAV') {
+                break;
+              }
+              // STOP parent traversal immediately if we reach a video player or movie banner!
+              if (isMovieBannerOrPoster(curr)) {
+                break;
+              }
 
               const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
               const currId = (curr.id || '').toLowerCase();
@@ -1124,8 +1180,7 @@ if (window.location.hostname.includes('youtube.com')) {
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
-              elementToHide.setAttribute('data-ad-blocked', 'true');
-              elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+              safeHideElement(elementToHide);
               console.log('[Anti Pop-Under] Hide Ad Image & Wrapper:', src, elementToHide);
             }
           }
@@ -1134,21 +1189,20 @@ if (window.location.hostname.includes('youtube.com')) {
 
       // Helper to hide explicit ad elements by aria-label
       const hideExplicitAd = (el) => {
-        if (!el || el.hasAttribute('data-ad-blocked')) return;
+        if (!el || el.hasAttribute('data-ad-blocked') || el.id === '__next' || isInternalNavigationLink(el)) return;
         try {
           if (isVideoPlayerOrControls(el)) return;
           const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
           const title = (el.getAttribute('title') || '').toLowerCase();
           if (ariaLabel === 'quảng cáo' || ariaLabel.includes('quảng cáo ') || ariaLabel.includes('sponsor') || title === 'quảng cáo' || title.includes('quảng cáo ') || title.includes('sponsor')) {
-            el.setAttribute('data-ad-blocked', 'true');
-            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+            safeHideElement(el);
           }
         } catch(e) {}
       };
 
       // Heuristic Visual Ad Inspector (detects IAB standard banner dimensions with external redirect links)
       const checkHeuristicAdBanner = (el) => {
-        if (!el || el.nodeType !== 1 || el.hasAttribute('data-ad-blocked')) return;
+        if (!el || el.nodeType !== 1 || el.hasAttribute('data-ad-blocked') || el.id === '__next' || isInternalNavigationLink(el)) return;
         if (isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return;
 
         try {
@@ -1196,8 +1250,7 @@ if (window.location.hostname.includes('youtube.com')) {
           }
 
           if (hasSuspiciousLink) {
-            el.setAttribute('data-ad-blocked', 'true');
-            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+            safeHideElement(el);
             console.log('[Heuristic Inspector] Blocked IAB display banner:', `${w}x${h}`, el);
           }
         } catch(e) {}
@@ -1356,7 +1409,8 @@ if (window.location.hostname.includes('youtube.com')) {
           let topWrapper = el;
           let p = el.parentElement;
           let wDepth = 0;
-          while (p && p !== document.body && p !== document.documentElement && wDepth < 3) {
+          while (p && p !== document.body && p !== document.documentElement && wDepth < 5) {
+            if (p.id === '__next' || p.tagName === 'MAIN' || p.tagName === 'HEADER' || p.tagName === 'NAV') break;
             if (isSafeCoreZone(p)) break;
             const pStyle = window.getComputedStyle(p);
             if (pStyle.position === 'fixed' || pStyle.position === 'absolute') {
@@ -1366,9 +1420,8 @@ if (window.location.hostname.includes('youtube.com')) {
             wDepth++;
           }
 
-          topWrapper.setAttribute('data-ad-blocked', 'true');
-          topWrapper.remove();
-          console.log('[Anti Pop-Under] Blocked & removed full-screen ad overlay wrapper:', topWrapper);
+          safeHideElement(topWrapper);
+          console.log('[Anti Pop-Under] Blocked & safely hidden full-screen ad overlay wrapper:', topWrapper);
 
           safeSendMessage({
             type: 'AD_BLOCKED',
@@ -1518,7 +1571,8 @@ if (window.location.hostname.includes('youtube.com')) {
             let topWrapper = el;
             let p = el.parentElement;
             let wDepth = 0;
-            while (p && p !== document.body && p !== document.documentElement && wDepth < 3) {
+            while (p && p !== document.body && p !== document.documentElement && wDepth < 5) {
+              if (p.id === '__next' || p.tagName === 'MAIN' || p.tagName === 'HEADER' || p.tagName === 'NAV') break;
               if (isSafeCoreZone(p)) break;
               const pStyle = window.getComputedStyle(p);
               if (pStyle.position === 'fixed' || pStyle.position === 'absolute') {
@@ -1527,9 +1581,8 @@ if (window.location.hostname.includes('youtube.com')) {
               p = p.parentElement;
               wDepth++;
             }
-            topWrapper.setAttribute('data-ad-blocked', 'true');
-            topWrapper.remove();
-            console.log('[Janitor] Đã dọn dẹp khung mờ tồn dư (wrapper level):', topWrapper);
+            safeHideElement(topWrapper);
+            console.log('[Janitor] Đã ẩn an toàn khung mờ tồn dư (wrapper level):', topWrapper);
           }
         });
 
@@ -1574,15 +1627,14 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (contextContainer.querySelector('input:not([type="hidden"]), select, textarea')) return;
 
-          // Xóa nút đóng và container cha mồ côi
+          // Ẩn an toàn nút đóng và container cha mồ côi
           btn.setAttribute('data-ad-blocked', 'true');
           if (parentFloating && parent !== document.body && (parent.children.length <= 3 || !hasRealMedia(parent))) {
-            parent.setAttribute('data-ad-blocked', 'true');
-            parent.remove();
-            console.log('[Janitor] Đã xóa nút đóng và wrapper mồ côi:', parent);
+            safeHideElement(parent);
+            console.log('[Janitor] Đã ẩn nút đóng và wrapper mồ côi:', parent);
           } else {
-            btn.remove();
-            console.log('[Janitor] Đã xóa nút đóng mồ côi:', btn);
+            safeHideElement(btn);
+            console.log('[Janitor] Đã ẩn nút đóng mồ côi:', btn);
           }
         });
 
@@ -1593,7 +1645,7 @@ if (window.location.hostname.includes('youtube.com')) {
         transparentTraps.forEach(el => {
           if (!el || !el.isConnected) return;
           if (el.hasAttribute('data-ad-blocked')) return;
-          if (isSafeCoreZone(el)) return;
+          if (el.id === '__next' || isInternalNavigationLink(el) || isSafeCoreZone(el)) return;
 
           const style = window.getComputedStyle(el);
           if (style.position !== 'fixed' && style.position !== 'absolute') return;
@@ -1615,9 +1667,8 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (el.querySelector('video, audio, input, select, textarea, [class*="player" i]')) return;
 
-          el.setAttribute('data-ad-blocked', 'true');
-          el.remove();
-          console.log('[Janitor] Đã xóa transparent click-hijack trap:', el);
+          safeHideElement(el);
+          console.log('[Janitor] Đã ẩn transparent click-hijack trap:', el);
         });
 
         // ----------------------------------------------------------------------
@@ -1806,6 +1857,13 @@ if (window.location.hostname.includes('youtube.com')) {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
+        // BẢO VỆ TUYỆT ĐỐI NEXT.JS / REACT ROUTER CLIENT-SIDE NAVIGATION
+        // Nếu click phát sinh từ thẻ <a> nội bộ hoặc bất kỳ phần tử con nào của <a> (poster phim, tiêu đề phim):
+        // RETURN NGAY LẬP TỨC! Không can thiệp, không capture, không chặn sự kiện!
+        if (target.id === '__next' || isInternalNavigationLink(target)) {
+          return;
+        }
+
         // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
         // BẮT BUỘC: Nếu target hoặc bất kỳ phần tử cha nào thuộc về video player hay poster/nội dung phim:
         // RETURN NGAY LẬP TỨC! Tuyệt đối không gọi preventDefault, stopPropagation hay xóa phần tử!
@@ -1833,7 +1891,7 @@ if (window.location.hostname.includes('youtube.com')) {
         }
 
         if (anchor) {
-          if (isInsideVideoPlayer(anchor) || isVideoPlayerOrControls(anchor) || isMovieBannerOrPoster(anchor)) {
+          if (isInsideVideoPlayer(anchor) || isVideoPlayerOrControls(anchor) || isMovieBannerOrPoster(anchor) || isInternalNavigationLink(anchor)) {
             return;
           }
 
@@ -2767,9 +2825,9 @@ if (window.location.hostname.includes('youtube.com')) {
           '[class*="z-[9998]"], [class*="z-[9999]"], [role="dialog"], [aria-modal="true"]'
         );
         candidates.forEach(el => {
-          if (!isInsideVideoPlayer(el) && isPopupOrOverlay(el)) {
-            el.remove();
-            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
+          if (!isInsideVideoPlayer(el) && isPopupOrOverlay(el) && el.id !== '__next' && !isInternalNavigationLink(el)) {
+            safeHideElement(el);
+            console.log('[Anti Pop-Under] Safely hidden popup overlay:', el.className || el.tagName);
             scheduleJanitorSweep();
           }
         });
@@ -2782,9 +2840,9 @@ if (window.location.hostname.includes('youtube.com')) {
           if (isInsideVideoPlayer(mut.target)) continue;
           for (const node of mut.addedNodes) {
             if (node.nodeType === 1) {
-              if (isInsideVideoPlayer(node)) continue;
+              if (isInsideVideoPlayer(node) || node.id === '__next' || isInternalNavigationLink(node)) continue;
               if (isPopupOrOverlay(node)) {
-                node.remove();
+                safeHideElement(node);
                 scheduleJanitorSweep();
               } else {
                 // Check children of added node

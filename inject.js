@@ -873,6 +873,29 @@
     return;
   }
 
+  // Helper to determine if an element is or is inside an internal client-side navigation link (Next.js / React Router)
+  function isInternalNavigationLink(node) {
+    if (!node || node === document || node === document.body || node === document.documentElement) return false;
+    try {
+      const anchor = node.tagName && node.tagName.toLowerCase() === 'a' ? node : (node.closest ? node.closest('a') : null);
+      if (!anchor) return false;
+      const rawHref = anchor.getAttribute('href');
+      if (!rawHref) return false;
+      const href = rawHref.trim();
+      if (!href || href === '#' || href.startsWith('javascript:')) return false;
+      // Bắt đầu bằng "/", "./", "../", "?" hoặc "#" -> 100% Client-side route trong Next.js / React Router
+      if (href.startsWith('/') || href.startsWith('./') || href.startsWith('../') || href.startsWith('?') || href.startsWith('#')) {
+        return true;
+      }
+      const curHost = window.location.hostname.toLowerCase().replace(/^www\./i, '');
+      const aHost = new URL(anchor.href, window.location.href).hostname.toLowerCase().replace(/^www\./i, '');
+      if (aHost === curHost || aHost.endsWith('.' + curHost) || curHost.endsWith('.' + aHost)) {
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   /**
    * ============================================================================
    * MODULE 1: ĐỊNH NGHĨA RANH GIỚI BẢO VỆ TUYỆT ĐỐI (CORE MEDIA WHITELIST)
@@ -882,7 +905,11 @@
   function isSafeCoreZone(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
+      // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT CONTAINER & CẤU TRÚC LAYOUT
+      if (el.id === '__next' || (el.getAttribute && el.getAttribute('id') === '__next')) return true;
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      if (['main', 'header', 'footer', 'nav'].includes(tag)) return true;
+      if (isInternalNavigationLink(el)) return true;
 
       // 1. Thẻ Media HTML5 & Canvas
       if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
@@ -1055,6 +1082,9 @@
       const target = e.target;
       if (!target) return;
 
+      // BẢO VỆ TUYỆT ĐỐI NEXT.JS / REACT ROUTER CLIENT-SIDE NAVIGATION
+      if (target.id === '__next' || isInternalNavigationLink(target)) return;
+
       // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
       // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
       // TUYỆT ĐỐI KHÔNG gọi preventDefault(), stopPropagation() hay can thiệp DOM!
@@ -1078,7 +1108,7 @@
       }
 
       if (anchor && anchor.href) {
-        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor)) return;
+        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor) || isInternalNavigationLink(anchor)) return;
 
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
@@ -1472,6 +1502,9 @@
       let isHiddenExternalLink = false;
 
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
+        if (curr.id === '__next' || isInternalNavigationLink(curr)) {
+          break; // Stop overlay check at Next.js root or internal link!
+        }
         if (isClickjackOverlay(curr)) {
           overlay = curr;
           break;
@@ -1508,10 +1541,14 @@
         curr = curr.parentElement;
       }
 
-      // If clicked on an overlay, block it
+      // If clicked on an overlay, safely hide it with CSS without breaking React / Next.js Virtual DOM
       if (overlay) {
         reportBlocked(url || 'blank', `Blocked ${context} via clickjack overlay`);
-        try { overlay.remove(); } catch (e) { }
+        try {
+          overlay.style.setProperty('display', 'none', 'important');
+          overlay.style.setProperty('visibility', 'hidden', 'important');
+          overlay.style.setProperty('pointer-events', 'none', 'important');
+        } catch (e) { }
         return false;
       }
       if (isHiddenExternalLink) {
@@ -1573,24 +1610,28 @@
       return originalOpen.apply(this, arguments);
     }
 
-    // Nếu thao tác phát sinh từ bên trong video player nội bộ (toggle fullscreen / external video provider)
-    if (lastInteractionEvent && lastInteractionEvent.target && isSafeCoreZone(lastInteractionEvent.target)) {
-      // Chỉ chặn nếu URL đích là domain quảng cáo rác/cờ bạc đã biết
-      if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
-        return originalOpen.apply(this, arguments);
+    // Spec compliance: Nếu không có URL hoặc là about:blank, gọi originalOpen đúng spec
+    if (!url || url === 'about:blank' || url === '') {
+      return originalOpen.apply(this, arguments);
+    }
+
+    // Nếu thao tác phát sinh từ click link nội bộ Next.js hoặc vùng an toàn
+    if (lastInteractionEvent && lastInteractionEvent.target) {
+      if (isInternalNavigationLink(lastInteractionEvent.target) || isSafeCoreZone(lastInteractionEvent.target)) {
+        if (!gamblingRegex.test(url) && !adUrlRegex.test(url)) {
+          return originalOpen.apply(this, arguments);
+        }
       }
     }
 
     // Cho phép same-origin window.open hợp lệ
     try {
-      if (url) {
-        const targetUrl = new URL(url, window.location.href);
-        const curHost = window.location.hostname.toLowerCase();
-        const targetHost = targetUrl.hostname.toLowerCase();
-        const isSameOrigin = targetHost === curHost || targetHost.endsWith('.' + curHost) || curHost.endsWith('.' + targetHost);
-        if (isSameOrigin && !gamblingRegex.test(url) && !adUrlRegex.test(url)) {
-          return originalOpen.apply(this, arguments);
-        }
+      const targetUrl = new URL(url, window.location.href);
+      const curHost = window.location.hostname.toLowerCase().replace(/^www\./i, '');
+      const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\./i, '');
+      const isSameOrigin = targetHost === curHost || targetHost.endsWith('.' + curHost) || curHost.endsWith('.' + targetHost);
+      if (isSameOrigin && !gamblingRegex.test(url) && !adUrlRegex.test(url)) {
+        return originalOpen.apply(this, arguments);
       }
     } catch (e) {}
 
@@ -1813,7 +1854,7 @@
     try {
       Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
         value: function () {
-          if (!isEnabled() || isCurrentPageWhitelisted()) {
+          if (!isEnabled() || isCurrentPageWhitelisted() || isInternalNavigationLink(this)) {
             return originalClick.apply(this, arguments);
           }
 
@@ -1829,7 +1870,7 @@
       });
     } catch (err) {
       HTMLAnchorElement.prototype.click = function () {
-        if (!isEnabled() || isCurrentPageWhitelisted()) {
+        if (!isEnabled() || isCurrentPageWhitelisted() || isInternalNavigationLink(this)) {
           return originalClick.apply(this, arguments);
         }
 
@@ -1864,6 +1905,10 @@
               curr = curr.parentElement;
             }
 
+            if (anchor && isInternalNavigationLink(anchor)) {
+              return originalDispatchEvent.apply(this, arguments);
+            }
+
             if (anchor && anchor.href) {
               const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
               const anchorId = (anchor.id || '').toLowerCase();
@@ -1874,7 +1919,10 @@
 
               if (isDummyTrap || !checkNavigationOrPopup(anchor.href, isTargetBlank ? 'dispatchEvent.anchor._blank' : 'dispatchEvent.anchor')) {
                 console.log('[Anti Pop-Under] Blocked synthetic click dispatch on ad anchor:', anchor.href);
-                try { anchor.remove(); } catch (e) { }
+                try {
+                  anchor.style.setProperty('display', 'none', 'important');
+                  anchor.style.setProperty('pointer-events', 'none', 'important');
+                } catch (e) { }
                 if (event.preventDefault) event.preventDefault();
                 if (event.stopImmediatePropagation) event.stopImmediatePropagation();
                 return false;
@@ -2294,7 +2342,11 @@
 
         targets.forEach(el => {
           const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
-          dialog.remove();
+          try {
+            dialog.style.setProperty('display', 'none', 'important');
+            dialog.style.setProperty('visibility', 'hidden', 'important');
+            dialog.style.setProperty('pointer-events', 'none', 'important');
+          } catch (e) {}
           removed = true;
         });
 
@@ -2312,7 +2364,11 @@
             toast.querySelector('a[href*="answer"]') ||
             toast.querySelector('a[href*="support.google.com"]')
           ) {
-            toast.remove();
+            try {
+              toast.style.setProperty('display', 'none', 'important');
+              toast.style.setProperty('visibility', 'hidden', 'important');
+              toast.style.setProperty('pointer-events', 'none', 'important');
+            } catch (e) {}
             removed = true;
           }
         });
@@ -2326,7 +2382,13 @@
 
         if (removed) {
           const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
-          backdrops.forEach(b => b.remove());
+          backdrops.forEach(b => {
+            try {
+              b.style.setProperty('display', 'none', 'important');
+              b.style.setProperty('visibility', 'hidden', 'important');
+              b.style.setProperty('pointer-events', 'none', 'important');
+            } catch (e) {}
+          });
 
           if (document.body) {
             document.body.style.setProperty('overflow', 'auto', 'important');
@@ -2448,8 +2510,10 @@
           );
 
           if (matchesAdblockText) {
-            el.remove();
-            console.log('[Anti Pop-Under] Removed anti-adblock overlay element:', el);
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            console.log('[Anti Pop-Under] Safely hidden anti-adblock overlay element:', el);
 
             const html = document.documentElement;
             const body = document.body;
