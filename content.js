@@ -261,18 +261,23 @@ function injectAdBlockCSS() {
   div:has(> a[href*="cm88"]),
   div:has(> a[href*="vsbet"]),
   div:has(> a[href*="musicskins"]),
-  /* motphimc.app PopupAd - Radix UI Dialog overlay (z-[9998]) and modal (z-[9999]) */
-  [data-state="open"][class*="z-[9998]"],
-  [data-state="open"][class*="z-[9999]"],
-  [data-radix-popper-content-wrapper],
-  /* Popup dialog containing gambling/ad links */
+  /* Popup dialog containing gambling/ad links or ad videos (do NOT blanket block Radix dialogs or poppers) */
   [role="dialog"]:has(a[href*="rikvip"]),
   [role="dialog"]:has(a[href*="rikvipchinhhang"]),
   [role="dialog"]:has(a[href*="adcenter"]),
   [role="dialog"]:has(a[href*="78win"]),
   [role="dialog"]:has(img[src*="adcenter"]),
+  [role="dialog"]:has(video[src*="/ads/"]),
+  [role="dialog"]:has(video[data-ad-blocked]),
   [aria-modal="true"]:has(a[href*="rikvip"]),
   [aria-modal="true"]:has(a[href*="rikvipchinhhang"]),
+  [aria-modal="true"]:has(video[src*="/ads/"]),
+  [aria-modal="true"]:has(video[data-ad-blocked]),
+  [class*="z-[9999]"]:has(a[href*="rikvip"]),
+  [class*="z-[9999]"]:has(a[href*="bit.ly"]),
+  [class*="z-[9999]"]:has(video[src*="/ads/"]),
+  [class*="z-[9999]"]:has(video[data-ad-blocked]),
+  [class*="z-[9998]"]:has(+ [class*="z-[9999]"]:has(video[src*="/ads/"], a[href*="rikvip"], a[href*="bit.ly"])),
   /* Block adcenter.cx iframes */
   iframe[src*="adcenter.cx"],
   img[src*="adcenter.cx"],
@@ -567,7 +572,7 @@ if (window.location.hostname.includes('youtube.com')) {
     // Helper to safely hide elements with CSS without breaking React / Next.js Virtual DOM reconciliation
     function safeHideElement(el) {
       if (!el || el.nodeType !== 1) return;
-      // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT & CẤU TRÚC LAYOUT CHÍNH & LINK NỘI BỘ
+      // BẢO VỆ TUYỆT ĐỐI NEXT.JS ROOT, CẤU TRÚC LAYOUT CHÍNH, LINK NỘI BỘ & POPUP XEM TIẾP
       if (
         el.id === '__next' ||
         (el.getAttribute && el.getAttribute('id') === '__next') ||
@@ -575,6 +580,7 @@ if (window.location.hostname.includes('youtube.com')) {
         el.tagName === 'MAIN' || el.tagName === 'HEADER' ||
         el.tagName === 'NAV' || el.tagName === 'FOOTER' ||
         isInternalNavigationLink(el) ||
+        isResumeOrPlaybackDialog(el) ||
         isSafeCoreZone(el)
       ) {
         return;
@@ -610,6 +616,59 @@ if (window.location.hostname.includes('youtube.com')) {
         const aHost = new URL(anchor.href, window.location.href).hostname.toLowerCase().replace(/^www\./i, '');
         if (aHost === curHost || aHost.endsWith('.' + curHost) || curHost.endsWith('.' + aHost)) {
           return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    // Helper to identify resume/continue watching prompts or player playback confirmation dialogs
+    function isResumeOrPlaybackDialog(node) {
+      if (!node || node === document || node === document.body || node === document.documentElement) return false;
+      try {
+        const el = (node.nodeType === 1) ? node : node.parentElement;
+        if (!el) return false;
+
+        const resumeKeywordsRegex = /(?:xem\s*tiếp|tiếp\s*tục\s*(?:xem|phát)?|phát\s*tiếp|xem\s*lại|bắt\s*đầu\s*lại|vị\s*trí\s*(?:cũ|trước|đã\s*xem)|thời\s*gian\s*đã\s*xem|lần\s*trước|đoạn\s*trước|tập\s*trước|resume|continue\s*(?:watching|playback)?|start\s*over|replay|keep\s*watching|play\s*from)/i;
+
+        // 1. Text content matches resume/playback confirmation keywords
+        const text = (el.innerText || el.textContent || '').trim();
+        if (text.length > 0 && text.length < 600 && resumeKeywordsRegex.test(text)) {
+          if (!gamblingRegex.test(text) && !adUrlRegex.test(text)) {
+            return true;
+          }
+        }
+
+        // 2. Contains buttons with resume/continue text
+        const buttons = el.querySelectorAll ? el.querySelectorAll('button, a, [role="button"], .btn, input[type="button"]') : [];
+        for (let i = 0; i < buttons.length; i++) {
+          const btnText = (buttons[i].innerText || buttons[i].textContent || buttons[i].value || '').trim();
+          if (resumeKeywordsRegex.test(btnText) || /^(?:xem\s*tiếp|tiếp\s*tục|xem\s*lại|resume|continue|ok|đồng\s*ý)$/i.test(btnText)) {
+            return true;
+          }
+        }
+
+        // 3. Class or ID specific to resume/continue playback prompts
+        const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        const elId = (el.id || '').toLowerCase();
+        if (
+          elClass.includes('resume') || elId.includes('resume') ||
+          elClass.includes('continue-watching') || elId.includes('continue-watching') ||
+          elClass.includes('playback-confirm') || elId.includes('playback-confirm') ||
+          elClass.includes('player-prompt') || elId.includes('player-prompt') ||
+          elClass.includes('player-dialog') || elId.includes('player-dialog')
+        ) {
+          return true;
+        }
+
+        // 4. Closest parent dialog/modal has resume/playback keywords
+        if (el.closest) {
+          const dialog = el.closest('dialog, [role="dialog"], [aria-modal="true"], [class*="modal"], [class*="popup"], [class*="prompt"], [class*="alert"]');
+          if (dialog && dialog !== el) {
+            const dText = (dialog.innerText || dialog.textContent || '').trim();
+            if (dText.length > 0 && dText.length < 600 && resumeKeywordsRegex.test(dText)) {
+              return true;
+            }
+          }
         }
       } catch (e) {}
       return false;
@@ -689,6 +748,9 @@ if (window.location.hostname.includes('youtube.com')) {
 
         // BẢO VỆ TUYỆT ĐỐI CÁC THẺ ĐIỀU HƯỚNG NỘI BỘ (NEXT.JS / REACT ROUTER LINKS)
         if (isInternalNavigationLink(el)) return true;
+
+        // BẢO VỆ TUYỆT ĐỐI POPUP XEM TIẾP / TIẾP TỤC XEM (RESUME PLAYBACK CONFIRMATION)
+        if (isResumeOrPlaybackDialog(el)) return true;
 
         // 1. Thẻ Media HTML5 & Canvas
         if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
@@ -1314,9 +1376,10 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!el || !el.isConnected) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
-          // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM VỚI VIDEO PLAYER & PHIM
+          // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM VỚI VIDEO PLAYER, PHIM & POPUP XEM TIẾP
           if (isVideoPlayerOrControls(el) || isInsideVideoPlayer(el)) return;
           if (isMovieBannerOrPoster(el)) return;
+          if (isResumeOrPlaybackDialog(el) || isSafeCoreZone(el)) return;
 
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
           if (['video', 'audio', 'nav', 'header', 'footer', 'main', 'form', 'table', 'tbody'].includes(tag)) return;
@@ -1373,8 +1436,15 @@ if (window.location.hostname.includes('youtube.com')) {
             return;
           }
 
-          // Kiểm tra văn bản: thông báo thật (> 300 ký tự không có từ khóa QC)
+          // Tuyệt đối không xóa dialog hoặc nội dung có thông điệp xem tiếp / tiếp tục xem
+          if (isResumeOrPlaybackDialog(el)) return;
+
+          // Kiểm tra văn bản: thông báo thật (> 300 ký tự không có từ khóa QC) hoặc thông báo xem tiếp
           const text = (el.innerText || el.textContent || '').trim();
+          if (/(?:xem\s*tiếp|tiếp\s*tục|phát\s*tiếp|xem\s*lại|bắt\s*đầu\s*lại|resume|continue)/i.test(text)) {
+            if (!gamblingRegex.test(text) && !adUrlRegex.test(text)) return;
+          }
+
           const hasAdKeyword = /quảng cáo|quang cao|advertisement|sponsor|cá cược|nhà cái|tải game|đặt cược|casino|game bài|18\+|nohu|bắn cá/i.test(text) ||
                                elClass.includes('ad-') || elClass.includes('ad_') || elClass.includes('ads-') || elClass.includes('qc') || elId.includes('ad') || elId.includes('qc');
 
@@ -1473,10 +1543,14 @@ if (window.location.hostname.includes('youtube.com')) {
           const d = dialogs[i];
           if (!d || !d.isConnected) continue;
           if (d.hasAttribute('data-ad-blocked')) continue;
-          if (isSafeCoreZone(d)) continue;
+          if (isSafeCoreZone(d) || isResumeOrPlaybackDialog(d)) return true;
 
-          // Nếu modal có chứa trường nhập liệu hợp lệ hoặc danh sách tập phim / giỏ hàng
-          if (d.querySelector('input:not([type="hidden"]), select, textarea, [class*="login" i], [class*="auth" i], [class*="episode" i], [class*="server" i], [class*="cart" i]')) {
+          // Nếu modal có chứa trường nhập liệu hợp lệ hoặc danh sách tập phim / giỏ hàng hoặc xác nhận xem tiếp
+          if (
+            isResumeOrPlaybackDialog(d) ||
+            d.querySelector('input:not([type="hidden"]), select, textarea, [class*="login" i], [class*="auth" i], [class*="episode" i], [class*="server" i], [class*="cart" i]') ||
+            /(?:xem\s*tiếp|tiếp\s*tục|phát\s*tiếp|xem\s*lại|bắt\s*đầu\s*lại|resume|continue)/i.test(d.innerText || '')
+          ) {
             const style = window.getComputedStyle(d);
             if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
               return true;
@@ -1512,12 +1586,12 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!el || !el.isConnected) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
-          // Bắt buộc bỏ qua video player và nội dung phim
-          if (isSafeCoreZone(el)) return;
+          // Bắt buộc bỏ qua video player, nội dung phim và popup xem tiếp
+          if (isSafeCoreZone(el) || isResumeOrPlaybackDialog(el)) return;
 
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
           if (['video', 'audio', 'nav', 'header', 'footer', 'main', 'form'].includes(tag)) return;
-          if (el.closest('form, nav, header, footer, [class*="login" i], [class*="auth" i], [class*="server" i], [class*="episode" i], [class*="player" i]')) return;
+          if (el.closest('form, nav, header, footer, dialog, [role="dialog"], [class*="login" i], [class*="auth" i], [class*="server" i], [class*="episode" i], [class*="player" i], [class*="resume" i], [class*="prompt" i]')) return;
 
           const style = window.getComputedStyle(el);
           const pos = style.position;
@@ -1600,11 +1674,12 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!btn || !btn.isConnected) return;
           if (btn.hasAttribute('data-ad-blocked')) return;
 
-          // Bắt buộc bảo vệ video player và controls
-          if (isSafeCoreZone(btn)) return;
+          // Bắt buộc bảo vệ video player, controls & popup xem tiếp
+          if (isSafeCoreZone(btn) || isResumeOrPlaybackDialog(btn)) return;
+          if (btn.parentElement && (isSafeCoreZone(btn.parentElement) || isResumeOrPlaybackDialog(btn.parentElement))) return;
 
           // Bỏ qua nếu thuộc cấu trúc hợp lệ của trang
-          if (btn.closest('form, nav, header, footer, [class*="login" i], [class*="auth" i], [class*="search" i], [class*="episode" i], [class*="server" i], [class*="menu" i]')) {
+          if (btn.closest('form, nav, header, footer, dialog, [role="dialog"], [aria-modal="true"], [class*="login" i], [class*="auth" i], [class*="search" i], [class*="episode" i], [class*="server" i], [class*="menu" i], [class*="resume" i], [class*="prompt" i]')) {
             return;
           }
 
@@ -1732,10 +1807,45 @@ if (window.location.hostname.includes('youtube.com')) {
     }
 
     // Throttled & debounced scheduling using requestAnimationFrame for optimal 60fps performance
+    // Active Guardian: Ensure "Xem tiếp / Tiếp tục xem / Resume Playback" dialogs and prompts are ALWAYS visible and interactive
+    function ensureResumeDialogsVisible() {
+      try {
+        const dialogCandidates = document.querySelectorAll(
+          'dialog, [role="dialog"], [aria-modal="true"], [class*="modal" i], [class*="popup" i], [class*="prompt" i], [class*="confirm" i], [class*="dialog" i], [data-state="open"]'
+        );
+        for (let i = 0; i < dialogCandidates.length; i++) {
+          const el = dialogCandidates[i];
+          if (isResumeOrPlaybackDialog(el)) {
+            if (el.hasAttribute('data-ad-blocked')) {
+              el.removeAttribute('data-ad-blocked');
+            }
+            if (el.style.display === 'none') {
+              el.style.removeProperty('display');
+            }
+            if (el.style.visibility === 'hidden') {
+              el.style.removeProperty('visibility');
+            }
+            if (el.style.pointerEvents === 'none') {
+              el.style.removeProperty('pointer-events');
+            }
+            el.style.setProperty('pointer-events', 'auto', 'important');
+            el.style.setProperty('visibility', 'visible', 'important');
+
+            const btns = el.querySelectorAll('button, a, [role="button"], input[type="button"]');
+            btns.forEach(b => {
+              b.style.setProperty('pointer-events', 'auto', 'important');
+              b.style.setProperty('visibility', 'visible', 'important');
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
     let janitorScheduled = false;
     let lastJanitorRun = 0;
 
     function scheduleJanitorSweep() {
+      ensureResumeDialogsVisible();
       if (janitorScheduled) return;
       janitorScheduled = true;
 
@@ -1746,6 +1856,7 @@ if (window.location.hostname.includes('youtube.com')) {
           janitorScheduled = false;
           lastJanitorRun = Date.now();
           runOrphanOverlayAndScrollJanitor();
+          ensureResumeDialogsVisible();
         }, waitMs);
       });
     }
@@ -1754,6 +1865,7 @@ if (window.location.hostname.includes('youtube.com')) {
     function scanAndRemoveAds() {
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
+      ensureResumeDialogsVisible();
       scheduleJanitorSweep();
     }
 
@@ -2802,11 +2914,14 @@ if (window.location.hostname.includes('youtube.com')) {
 
       function isPopupOrOverlay(el) {
         if (!el || !el.classList) return false;
+        // BẢO VỆ TUYỆT ĐỐI POPUP XEM TIẾP / TIẾP TỤC PHÁT
+        if (isResumeOrPlaybackDialog(el)) return false;
+
         const cls = el.className || '';
-        // Radix Dialog overlay uses z-[9998], modal uses z-[9999]
-        if (cls.includes('z-[9998]') || cls.includes('z-[9999]')) return true;
-        // dialog role with gambling link inside
-        if (el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true') {
+        // CHỈ coi là popup rác nếu chứa video quảng cáo, link bit.ly hoặc link cờ bạc cụ thể
+        if (el.querySelector('video[src*="/ads/"], video[data-ad-blocked], a[href*="bit.ly"], a[rel*="sponsored"]')) return true;
+
+        if (el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true' || cls.includes('z-[9998]') || cls.includes('z-[9999]')) {
           const links = el.querySelectorAll('a[href]');
           for (const a of links) {
             if (GAMBLING_HREFS.some(kw => (a.href || '').toLowerCase().includes(kw))) return true;

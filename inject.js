@@ -896,6 +896,55 @@
     return false;
   }
 
+  // Helper to identify resume/continue watching prompts or player playback confirmation dialogs
+  function isResumeOrPlaybackDialog(node) {
+    if (!node || node === document || node === document.body || node === document.documentElement) return false;
+    try {
+      const el = (node.nodeType === 1) ? node : node.parentElement;
+      if (!el) return false;
+
+      const resumeKeywordsRegex = /(?:xem\s*tiếp|tiếp\s*tục\s*(?:xem|phát)?|phát\s*tiếp|xem\s*lại|bắt\s*đầu\s*lại|vị\s*trí\s*(?:cũ|trước|đã\s*xem)|thời\s*gian\s*đã\s*xem|lần\s*trước|đoạn\s*trước|tập\s*trước|resume|continue\s*(?:watching|playback)?|start\s*over|replay|keep\s*watching|play\s*from)/i;
+
+      const text = (el.innerText || el.textContent || '').trim();
+      if (text.length > 0 && text.length < 600 && resumeKeywordsRegex.test(text)) {
+        if (!gamblingRegex.test(text) && !adUrlRegex.test(text)) {
+          return true;
+        }
+      }
+
+      const buttons = el.querySelectorAll ? el.querySelectorAll('button, a, [role="button"], .btn, input[type="button"]') : [];
+      for (let i = 0; i < buttons.length; i++) {
+        const btnText = (buttons[i].innerText || buttons[i].textContent || buttons[i].value || '').trim();
+        if (resumeKeywordsRegex.test(btnText) || /^(?:xem\s*tiếp|tiếp\s*tục|xem\s*lại|resume|continue|ok|đồng\s*ý)$/i.test(btnText)) {
+          return true;
+        }
+      }
+
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      const elId = (el.id || '').toLowerCase();
+      if (
+        elClass.includes('resume') || elId.includes('resume') ||
+        elClass.includes('continue-watching') || elId.includes('continue-watching') ||
+        elClass.includes('playback-confirm') || elId.includes('playback-confirm') ||
+        elClass.includes('player-prompt') || elId.includes('player-prompt') ||
+        elClass.includes('player-dialog') || elId.includes('player-dialog')
+      ) {
+        return true;
+      }
+
+      if (el.closest) {
+        const dialog = el.closest('dialog, [role="dialog"], [aria-modal="true"], [class*="modal"], [class*="popup"], [class*="prompt"], [class*="alert"]');
+        if (dialog && dialog !== el) {
+          const dText = (dialog.innerText || dialog.textContent || '').trim();
+          if (dText.length > 0 && dText.length < 600 && resumeKeywordsRegex.test(dText)) {
+            return true;
+          }
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
   /**
    * ============================================================================
    * MODULE 1: ĐỊNH NGHĨA RANH GIỚI BẢO VỆ TUYỆT ĐỐI (CORE MEDIA WHITELIST)
@@ -910,6 +959,7 @@
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
       if (['main', 'header', 'footer', 'nav'].includes(tag)) return true;
       if (isInternalNavigationLink(el)) return true;
+      if (isResumeOrPlaybackDialog(el)) return true;
 
       // 1. Thẻ Media HTML5 & Canvas
       if (['video', 'audio', 'source', 'track', 'canvas'].includes(tag)) {
@@ -1082,17 +1132,17 @@
       const target = e.target;
       if (!target) return;
 
-      // BẢO VỆ TUYỆT ĐỐI NEXT.JS / REACT ROUTER CLIENT-SIDE NAVIGATION
-      if (target.id === '__next' || isInternalNavigationLink(target)) return;
+      // BẢO VỆ TUYỆT ĐỐI NEXT.JS / REACT ROUTER CLIENT-SIDE NAVIGATION & POPUP XEM TIẾP
+      if (target.id === '__next' || isInternalNavigationLink(target) || isResumeOrPlaybackDialog(target)) return;
 
       // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
       // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
       // TUYỆT ĐỐI KHÔNG gọi preventDefault(), stopPropagation() hay can thiệp DOM!
-      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
+      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target) || isResumeOrPlaybackDialog(target)) return;
 
       let check = target;
       while (check && check !== document && check !== document.body && check !== document.documentElement) {
-        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) return;
+        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check) || isResumeOrPlaybackDialog(check)) return;
         check = check.parentElement;
       }
 
@@ -1108,7 +1158,7 @@
       }
 
       if (anchor && anchor.href) {
-        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor) || isInternalNavigationLink(anchor)) return;
+        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor) || isInternalNavigationLink(anchor) || isResumeOrPlaybackDialog(anchor)) return;
 
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
@@ -1264,7 +1314,8 @@
       }
 
       // Never consider elements inside forms, navbars, headers, dialogs, modals, episode containers, or user containers as clickjack overlays
-      if (el.closest('form, nav, header, footer, dialog, [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"]')) {
+      if (isResumeOrPlaybackDialog(el)) return false;
+      if (el.closest('form, nav, header, footer, dialog, [role="dialog"], [aria-modal="true"], [class*="login"], [class*="auth"], [class*="user"], [class*="account"], [class*="modal"], [class*="popup"], [class*="btn"], [class*="button"], [id*="login"], [id*="auth"], [id*="no-link"], [class*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim"], [class*="list-ep"], [class*="tap"], [id*="tap"], [class*="resume"], [class*="prompt"]')) {
         return false;
       }
 
@@ -1502,8 +1553,8 @@
       let isHiddenExternalLink = false;
 
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
-        if (curr.id === '__next' || isInternalNavigationLink(curr)) {
-          break; // Stop overlay check at Next.js root or internal link!
+        if (curr.id === '__next' || isInternalNavigationLink(curr) || isResumeOrPlaybackDialog(curr)) {
+          break; // Stop overlay check at Next.js root, internal link or resume dialog!
         }
         if (isClickjackOverlay(curr)) {
           overlay = curr;
