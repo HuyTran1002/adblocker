@@ -873,32 +873,58 @@
     return;
   }
 
-  // Helper nhận diện và cách ly hoàn toàn video player DOM
+  // Helper nhận diện ranh giới tuyệt đối của video player DOM
+  // Standard 1: Strict Boundary Check
   function isInsideVideoPlayer(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'source', 'track'].includes(tag)) return true;
-      if (el.closest && el.closest(
-        'video, audio, ' +
-        '.jwplayer, [class*="jw-"], [id*="jwplayer"], ' +
-        '.video-js, [class*="vjs-"], [data-vjs-player], ' +
-        '.artplayer, [class*="art-"], [id*="artplayer"], ' +
-        '.plyr, [class*="plyr-"], [class*="plyr__"], ' +
-        '.dplayer, [class*="dplayer-"], [id*="dplayer"], ' +
-        '#edgeplayer-root, [class*="edge-"], ' +
-        '.flowplayer, [class*="fp-"], ' +
-        '.html5-video-player, [class*="ytp-"], #movie_player, ' +
-        '[data-player], [class*="player"], [id*="player"], ' +
-        '[class*="video-player"], [id*="video-player"], ' +
-        '[class*="screen-box"], [id*="playBox"], [class*="aspect-video"]'
-      )) {
-        return true;
+      // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
+      if (tag === 'video' || tag === 'audio' || tag === 'source' || tag === 'track') return true;
+
+      // 2. Bản thân là <iframe> chứa player (youtube, drive, stream, embed, v.v.)
+      if (tag === 'iframe') {
+        const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
+        if (/youtube|youtu\.be|youtube-nocookie|drive\.google|player|embed|stream|video|watch|film|movie|vids|hls|m3u8|mp4|halim|hotp|2embed|vidsrc|superembed|play|media/i.test(src)) {
+          return true;
+        }
       }
+
+      // 3. Nằm bên trong bất kỳ container nào có class/id/thuộc tính chứa:
+      // "player", "video", "jwplayer", "vjs", "plyr", "artplayer", "dplayer", "xgplayer", "fluid_player", "media"
+      if (el.closest) {
+        const inPlayerContainer = el.closest(
+          'video, audio, ' +
+          '[class*="player" i], [id*="player" i], [data-player], ' +
+          '[class*="video" i], [id*="video" i], ' +
+          '[class*="jwplayer" i], [id*="jwplayer" i], [class*="jw-" i], ' +
+          '[class*="vjs" i], [id*="vjs" i], [data-vjs-player], ' +
+          '[class*="plyr" i], [id*="plyr" i], ' +
+          '[class*="artplayer" i], [id*="artplayer" i], [class*="art-" i], ' +
+          '[class*="dplayer" i], [id*="dplayer" i], ' +
+          '[class*="xgplayer" i], [id*="xgplayer" i], [class*="xg-" i], ' +
+          '[class*="fluid_player" i], [id*="fluid_player" i], ' +
+          '[class*="media" i], [id*="media" i], ' +
+          '.html5-video-player, [class*="ytp-" i], #movie_player, #edgeplayer-root, ' +
+          '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i]'
+        );
+        if (inPlayerContainer) return true;
+      }
+
+      // 4. Hoặc là sibling trực tiếp nằm chung container cha với thẻ <video>
+      // hoặc bất kỳ cha nào (depth < 5) có chứa thẻ <video> hoặc có class/id liên quan player
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && depth < 5) {
-        if (p.querySelector && p.querySelector('video')) return true;
+      while (p && p !== document.body && p !== document.documentElement && depth < 5) {
+        if (p.querySelector && p.querySelector('video, audio')) {
+          return true;
+        }
+        const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
+        const pId = (p.id || '').toLowerCase();
+        if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pClass) ||
+            /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pId)) {
+          return true;
+        }
         p = p.parentElement;
         depth++;
       }
@@ -977,7 +1003,16 @@
   }
 
   if (!isYouTube) {
-    const handleUserInteraction = (e) => {
+    // Record user interaction timestamps passively without ever interfering with event flow
+    ['pointerdown', 'keydown'].forEach(eventName => {
+      window.addEventListener(eventName, (e) => {
+        lastInteractionTime = Date.now();
+        lastInteractionEvent = e;
+      }, { passive: true, capture: false });
+    });
+
+    // Handle user clicks in bubbling phase (capture: false)
+    window.addEventListener('click', (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
 
@@ -990,112 +1025,42 @@
       const target = e.target;
       if (!target) return;
 
-      // Standard 1: Completely isolate video player DOM from interaction handling
-      if (isInsideVideoPlayer(target)) return;
+      // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
+      // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
+      // TUYỆT ĐỐI KHÔNG gọi preventDefault(), stopPropagation() hay can thiệp DOM!
+      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
 
-      // Never block or destroy movie banner, poster, or legitimate play/episode buttons
-      if (isMovieBannerOrPoster(target)) return;
+      let check = target;
+      while (check && check !== document && check !== document.body && check !== document.documentElement) {
+        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) return;
+        check = check.parentElement;
+      }
 
-      // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+      // Check if click is on an anchor tag outside player
       let curr = target;
       let anchor = null;
-      let overlay = null;
-
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
         if (curr.tagName && curr.tagName.toLowerCase() === 'a') {
           anchor = curr;
-        }
-        if (isClickjackOverlay(curr)) {
-          overlay = curr;
+          break;
         }
         curr = curr.parentElement;
       }
 
-      // 1.5 Check if anchor is a dummy trap element (like #bb0, #bb1 with 1px / opacity 0)
-      if (anchor) {
-        const anchorId = (anchor.id || '').toLowerCase();
-        const aStyle = anchor.getAttribute('style') || '';
-        if (anchorId.startsWith('bb') || aStyle.includes('opacity:0') || aStyle.includes('opacity: 0') || (aStyle.includes('1px') && aStyle.includes('height'))) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          try { anchor.remove(); } catch (err) { }
-          return;
-        }
-      }
+      if (anchor && anchor.href) {
+        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor)) return;
 
-      // 2. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
-      if (overlay) {
-        if (anchor) {
-          try {
-            const href = anchor.getAttribute('href') || '';
-            if (!href || href.startsWith('javascript:') || href.startsWith('#') || href.trim() === '') {
-              return; // Allow clicks on episode/no-link anchors without external href
-            }
-            const targetHost = new URL(href, window.location.href).hostname.toLowerCase();
-            const isExternal = targetHost && targetHost !== window.location.hostname.toLowerCase();
-            if (!isExternal || isWhitelisted(href)) {
-              return;
-            }
-          } catch (err) {
-            return;
-          }
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        const adUrl = (anchor && anchor.href) || 'overlay';
-        reportBlocked(adUrl, `Blocked ${e.type} on clickjack overlay`);
-        console.log(`[Anti Pop-Under] Blocked ${e.type} on clickjack overlay & removed overlay:`, overlay);
-
-        try {
-          overlay.remove();
-        } catch (err) { }
-        return;
-      }
-
-      // 3. Check anchor link clicks pointing to popunder/ad URLs
-      if (e.type === 'click' && anchor && anchor.href) {
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
         if (!checkNavigationOrPopup(anchor.href, contextName)) {
           e.preventDefault();
           e.stopPropagation();
-          e.stopImmediatePropagation();
           reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
-
-          if (isInsideVideoPlayer(anchor)) {
-            console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor...');
-            try { anchor.remove(); } catch (e) { }
-
-            let isInternal = false;
-            try {
-              const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-              isInternal = targetHost === window.location.hostname.toLowerCase();
-            } catch (e) { }
-
-            if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
-              console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
-              window.location.assign(anchor.href);
-              return;
-            }
-          }
           return;
         }
       }
-
-      // 3. Fallback check for background click or non-interactive redirect
-      if (e.type === 'click') {
-        blockScriptedRedirects(e);
-      }
-    };
-
-    interactionEvents.forEach(eventName => {
-      window.addEventListener(eventName, handleUserInteraction, true);
-    });
+    }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
   }
 
   // Intercept natural form submissions (often used by popunder scripts on player clicks)
@@ -1193,6 +1158,15 @@
     // Standard 1: Protect video player DOM and film content
     if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) return false;
     if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) return false;
+
+    // Standard 3: Overlay chỉ nằm trực tiếp ở tầng nông dưới body (depth <= 3)
+    let depth = 0;
+    let pCheck = el;
+    while (pCheck && pCheck !== document.body && pCheck !== document.documentElement) {
+      depth++;
+      pCheck = pCheck.parentElement;
+    }
+    if (depth > 3) return false;
 
     try {
       const tagName = el.tagName ? el.tagName.toLowerCase() : '';
@@ -1567,6 +1541,14 @@
   function customOpen(url, target, features) {
     if (!isEnabled() || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) {
       return originalOpen.apply(this, arguments);
+    }
+
+    // Nếu thao tác phát sinh từ bên trong video player nội bộ (toggle fullscreen / external video provider)
+    if (lastInteractionEvent && lastInteractionEvent.target && isInsideVideoPlayer(lastInteractionEvent.target)) {
+      // Chỉ chặn nếu URL đích là domain quảng cáo rác/cờ bạc đã biết
+      if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
+        return originalOpen.apply(this, arguments);
+      }
     }
 
     const targetLower = String(target || '').toLowerCase();
