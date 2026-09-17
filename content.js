@@ -1355,10 +1355,269 @@ if (window.location.hostname.includes('youtube.com')) {
     // Tương thích ngược
     const cleanOrphanedBackdrops = detectAndCleanAdOverlays;
 
+    /**
+     * ============================================================================
+     * MODULE: ORPHAN OVERLAY & ANTI-SCROLL JANITOR (WebShield v3.6.7)
+     * Dọn dẹp triệt để các tàn dư sau khi quảng cáo bị chặn:
+     * 1. Khung mờ tồn dư (Empty / Orphan Backdrop Overlays) che chắn viewport.
+     * 2. Nút đóng 'X' mồ côi (Orphan Close Buttons) trôi nổi ngoài player.
+     * 3. Mở khóa cuộn trang tự động (Automatic Page Scroll Restoration).
+     * Tuyệt đối bảo vệ Video Player DOM và chế độ Video Fullscreen.
+     * ============================================================================
+     */
+    function isFullscreenActive() {
+      return !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+    }
+
+    function hasValidInteractiveModal() {
+      try {
+        const dialogs = document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"]');
+        for (let i = 0; i < dialogs.length; i++) {
+          const d = dialogs[i];
+          if (!d || !d.isConnected) continue;
+          if (d.hasAttribute('data-ad-blocked')) continue;
+          if (isInsideVideoPlayer(d) || isVideoPlayerOrControls(d) || isMovieBannerOrPoster(d)) continue;
+
+          // Nếu modal có chứa trường nhập liệu hợp lệ hoặc danh sách tập phim / giỏ hàng
+          if (d.querySelector('input:not([type="hidden"]), select, textarea, [class*="login" i], [class*="auth" i], [class*="episode" i], [class*="server" i], [class*="cart" i]')) {
+            const style = window.getComputedStyle(d);
+            if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+              return true;
+            }
+          }
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function runOrphanOverlayAndScrollJanitor() {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.location.hostname.includes('youtube.com')) return;
+
+      // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Nếu video đang toàn màn hình, không can thiệp
+      if (isFullscreenActive()) return;
+
+      try {
+        const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+        if (vw === 0 || vh === 0) return;
+
+        // ----------------------------------------------------------------------
+        // 1. EMPTY / ORPHAN BACKDROP OVERLAY PURGE
+        // ----------------------------------------------------------------------
+        const backdropCandidates = document.querySelectorAll(
+          'body > div, body > section, body > aside, body > dialog, ' +
+          'body > [class*="backdrop" i], body > [class*="overlay" i], body > [class*="modal" i], ' +
+          'body > * > [class*="backdrop" i], body > * > [class*="overlay" i]'
+        );
+
+        backdropCandidates.forEach(el => {
+          if (!el || !el.isConnected) return;
+          if (el.hasAttribute('data-ad-blocked')) return;
+
+          // Bắt buộc bỏ qua video player và nội dung phim
+          if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return;
+
+          const tag = el.tagName ? el.tagName.toLowerCase() : '';
+          if (['video', 'audio', 'nav', 'header', 'footer', 'main', 'form'].includes(tag)) return;
+          if (el.closest('form, nav, header, footer, [class*="login" i], [class*="auth" i], [class*="server" i], [class*="episode" i], [class*="player" i]')) return;
+
+          const style = window.getComputedStyle(el);
+          const pos = style.position;
+          if (pos !== 'fixed' && pos !== 'absolute') return;
+
+          const zIndex = parseInt(style.zIndex, 10);
+          if (isNaN(zIndex) || zIndex < 999) return;
+
+          // Kiểm tra kích thước bao phủ màn hình
+          const rect = el.getBoundingClientRect();
+          const coversFullViewport = (
+            (rect.width >= vw * 0.85 && rect.height >= vh * 0.85) ||
+            (rect.top <= 10 && rect.left <= 10 && rect.bottom >= (vh - 10) && rect.right >= (vw - 10))
+          );
+          if (!coversFullViewport) return;
+
+          // Kiểm tra tính chất làm mờ / sương đen (translucency hoặc backdrop-filter)
+          let bgAlpha = 1;
+          const bg = style.backgroundColor;
+          const bgMatch = bg.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+          if (bgMatch && bgMatch[1]) {
+            bgAlpha = parseFloat(bgMatch[1]);
+          } else if (bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') {
+            bgAlpha = 0;
+          }
+          const opacity = parseFloat(style.opacity);
+          const hasBackdropFilter = style.backdropFilter && style.backdropFilter !== 'none';
+          const isTranslucent = bgAlpha < 0.98 || opacity < 0.98 || hasBackdropFilter;
+          if (!isTranslucent) return;
+
+          // SUBTREE SAFE CHECK: Tuyệt đối không chứa video, iframe hoặc player UI
+          if (el.querySelector('video, audio, iframe, [class*="player" i], [id*="player" i], [class*="video" i], [id*="video" i], [class*="jw" i], [class*="vjs" i], [class*="art" i], [class*="plyr" i]')) {
+            return;
+          }
+
+          // Không chứa form tương tác hợp lệ
+          if (el.querySelector('input:not([type="hidden"]), select, textarea, button[type="submit"]')) {
+            return;
+          }
+
+          // KIỂM TRA TÍNH CHẤT "MỒ CÔI / RỖNG" (ORPHAN / EMPTY)
+          const text = (el.innerText || el.textContent || '').trim();
+          const hasOnlyCloseButton = (
+            el.children.length <= 2 &&
+            !!el.querySelector('button, [class*="close" i], [id*="close" i], [aria-label*="close" i], [class*="dismiss" i]')
+          );
+          const isEmptyOrphan = text.length === 0 || (text.length <= 15 && /^[✕×X\s\dCloseĐóngBỏquaSkip]+$/i.test(text)) || hasOnlyCloseButton;
+
+          if (isEmptyOrphan) {
+            el.setAttribute('data-ad-blocked', 'true');
+            el.remove();
+            console.log('[Janitor] Đã dọn dẹp khung mờ tồn dư (orphan backdrop):', el);
+          }
+        });
+
+        // ----------------------------------------------------------------------
+        // 2. ORPHAN CLOSE BUTTONS PURGE
+        // ----------------------------------------------------------------------
+        const closeBtnCandidates = document.querySelectorAll(
+          'button[class*="close" i], button[id*="close" i], button[aria-label*="close" i], ' +
+          'a[class*="close" i], a[id*="close" i], div[class*="close" i], span[class*="close" i], ' +
+          '[class*="btn-close" i], [class*="popup-close" i], [class*="ad-close" i], [class*="skip-ad" i], ' +
+          '[aria-label="Close" i], [aria-label="Đóng" i], [title="Close" i], [title="Đóng" i]'
+        );
+
+        closeBtnCandidates.forEach(btn => {
+          if (!btn || !btn.isConnected) return;
+          if (btn.hasAttribute('data-ad-blocked')) return;
+
+          // Bắt buộc bảo vệ video player và controls
+          if (isInsideVideoPlayer(btn) || isVideoPlayerOrControls(btn) || isMovieBannerOrPoster(btn)) return;
+
+          // Bỏ qua nếu thuộc cấu trúc hợp lệ của trang
+          if (btn.closest('form, nav, header, footer, [class*="login" i], [class*="auth" i], [class*="search" i], [class*="episode" i], [class*="server" i], [class*="menu" i]')) {
+            return;
+          }
+
+          const style = window.getComputedStyle(btn);
+          const pos = style.position;
+          const zIndex = parseInt(style.zIndex, 10);
+
+          const isFloating = (pos === 'fixed' || pos === 'absolute') && (!isNaN(zIndex) && zIndex >= 999);
+          const parent = btn.parentElement;
+          const parentStyle = parent ? window.getComputedStyle(parent) : null;
+          const parentFloating = parentStyle && (parentStyle.position === 'fixed' || parentStyle.position === 'absolute') && (parseInt(parentStyle.zIndex, 10) >= 999);
+
+          if (!isFloating && !parentFloating) return;
+
+          // Kiểm tra tính "mồ côi" của nút đóng
+          const contextContainer = (parentFloating && parent !== document.body) ? parent : btn;
+          const contextText = (contextContainer.innerText || contextContainer.textContent || '').trim();
+          const hasSubstantialText = contextText.length > 30 && !/quảng cáo|advertisement|sponsor/i.test(contextText);
+          if (hasSubstantialText) return;
+
+          if (contextContainer.querySelector('input:not([type="hidden"]), select, textarea')) return;
+
+          // Xóa nút đóng và container cha mồ côi
+          btn.setAttribute('data-ad-blocked', 'true');
+          if (parentFloating && parent !== document.body && parent.children.length <= 2) {
+            parent.setAttribute('data-ad-blocked', 'true');
+            parent.remove();
+            console.log('[Janitor] Đã xóa nút đóng và wrapper mồ côi:', parent);
+          } else {
+            btn.remove();
+            console.log('[Janitor] Đã xóa nút đóng mồ côi:', btn);
+          }
+        });
+
+        // ----------------------------------------------------------------------
+        // 3. AUTOMATIC PAGE SCROLL RESTORATION
+        // ----------------------------------------------------------------------
+        if (!hasValidInteractiveModal()) {
+          const body = document.body;
+          const html = document.documentElement;
+
+          const scrollLockClasses = [
+            'modal-open', 'no-scroll', 'overflow-hidden', 'popup-active',
+            'has-modal', 'dialog-open', 'noscroll', 'is-locked',
+            'disable-scroll', 'stop-scrolling', 'overflow-y-hidden'
+          ];
+
+          if (body) {
+            scrollLockClasses.forEach(cls => {
+              if (body.classList.contains(cls)) body.classList.remove(cls);
+            });
+
+            if (body.style.overflow === 'hidden' || body.style.overflowY === 'hidden') {
+              body.style.overflow = '';
+              body.style.overflowY = '';
+            }
+            if (body.style.position === 'fixed') {
+              body.style.position = '';
+              body.style.top = '';
+              body.style.width = '';
+            }
+
+            const bodyComputed = window.getComputedStyle(body);
+            if (bodyComputed.overflow === 'hidden' || bodyComputed.overflowY === 'hidden') {
+              body.style.setProperty('overflow', 'auto', 'important');
+              body.style.setProperty('overflow-y', 'auto', 'important');
+            }
+            if (bodyComputed.position === 'fixed') {
+              body.style.setProperty('position', 'static', 'important');
+            }
+          }
+
+          if (html) {
+            scrollLockClasses.forEach(cls => {
+              if (html.classList.contains(cls)) html.classList.remove(cls);
+            });
+
+            if (html.style.overflow === 'hidden' || html.style.overflowY === 'hidden') {
+              html.style.overflow = '';
+              html.style.overflowY = '';
+            }
+
+            const htmlComputed = window.getComputedStyle(html);
+            if (htmlComputed.overflow === 'hidden' || htmlComputed.overflowY === 'hidden') {
+              html.style.setProperty('overflow', 'auto', 'important');
+              html.style.setProperty('overflow-y', 'auto', 'important');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Janitor] Error during cleanup sweep:', err);
+      }
+    }
+
+    // Throttled & debounced scheduling using requestAnimationFrame for optimal 60fps performance
+    let janitorScheduled = false;
+    let lastJanitorRun = 0;
+
+    function scheduleJanitorSweep() {
+      if (janitorScheduled) return;
+      janitorScheduled = true;
+
+      requestAnimationFrame(() => {
+        const now = Date.now();
+        const waitMs = Math.max(0, 120 - (now - lastJanitorRun));
+        setTimeout(() => {
+          janitorScheduled = false;
+          lastJanitorRun = Date.now();
+          runOrphanOverlayAndScrollJanitor();
+        }, waitMs);
+      });
+    }
+
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
+      scheduleJanitorSweep();
     }
 
     // Set up batched MutationObserver using requestAnimationFrame + debounce to keep video playback smooth (no frame drops)
@@ -1376,6 +1635,7 @@ if (window.location.hostname.includes('youtube.com')) {
         }
       }
       detectAndCleanAdOverlays();
+      scheduleJanitorSweep();
     }
 
     function queueNodeCheck(node) {
@@ -1425,16 +1685,21 @@ if (window.location.hostname.includes('youtube.com')) {
     window.addEventListener('DOMContentLoaded', () => {
       if (window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
+      scheduleJanitorSweep();
     });
 
     if (document.readyState === 'interactive' || document.readyState === 'complete') {
       if (!window.location.hostname.includes('youtube.com')) {
         scanAndRemoveAds();
+        scheduleJanitorSweep();
       }
     }
     window.addEventListener('load', () => {
       if (window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
+      scheduleJanitorSweep();
+      setTimeout(scheduleJanitorSweep, 1500);
+      setTimeout(scheduleJanitorSweep, 3000);
     });
 
 
@@ -2413,12 +2678,11 @@ if (window.location.hostname.includes('youtube.com')) {
           if (!isInsideVideoPlayer(el) && isPopupOrOverlay(el)) {
             el.remove();
             console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
+            scheduleJanitorSweep();
           }
         });
         // Also reset body overflow if it was locked by the popup
-        if (document.body && document.body.style.overflow === 'hidden') {
-          document.body.style.overflow = '';
-        }
+        scheduleJanitorSweep();
       }
 
       const popupObserver = new MutationObserver((mutations) => {
@@ -2429,9 +2693,7 @@ if (window.location.hostname.includes('youtube.com')) {
               if (isInsideVideoPlayer(node)) continue;
               if (isPopupOrOverlay(node)) {
                 node.remove();
-                if (document.body && document.body.style.overflow === 'hidden') {
-                  document.body.style.overflow = '';
-                }
+                scheduleJanitorSweep();
               } else {
                 // Check children of added node
                 scanAndRemovePopups(node);

@@ -2388,6 +2388,7 @@
 
     function cleanOverlays() {
       if (!isEnabled()) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement) return;
       try {
         const dialogs = document.querySelectorAll('dialog, [class*="adblock"], [id*="adblock"], [class*="anti-ad"], [id*="anti-ad"], [class*="backdrop"]');
         dialogs.forEach(el => {
