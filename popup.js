@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.7.2" }),
+      getManifest: () => ({ version: "3.6.3" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -13,12 +13,12 @@ if (typeof chrome === "undefined" || !chrome.storage) {
             blockedCount: 142,
             lastFiltersUpdateTimestamp: Date.now() - 300000,
             onlineFilterStats: {
-              staticDnrRules: 99,
+              staticDnrRules: 91,
               appliedAdDomains: 25420,
               appliedDnrRules: 508,
               appliedCosmetics: 2000,
               appliedRegionalRules: 1076,
-              totalAppliedRules: 28595
+              totalAppliedRules: 28587
             }
           });
         },
@@ -397,7 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Static Core Rules (rules.json)
     const staticCountEl = document.getElementById("rules-static-count");
     if (staticCountEl) {
-      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 99;
+      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 91;
       staticCountEl.textContent = `${staticCount.toLocaleString()} quy tắc cốt lõi`;
     }
 
@@ -692,7 +692,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.7.2";
+      const version = manifest.version || "3.6.3";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
