@@ -2,6 +2,19 @@
 // @ts-nocheck
 console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
 
+// Cross-browser Main World Fallback (Kiwi Browser, Lemur, Firefox Mobile)
+(function ensureMainWorldScript() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      const s = document.createElement('script');
+      s.src = chrome.runtime.getURL('inject.js');
+      s.async = false;
+      (document.head || document.documentElement).appendChild(s);
+      s.onload = () => s.remove();
+    }
+  } catch (e) { }
+})();
+
 
 // Check whether this extension context is still alive
 function isContextValid() {
@@ -152,6 +165,7 @@ const adSelectors = [
   '#video_player > a', '#video_player a[target="_blank"]',
   '#flash > a', '.video-container > a',
   '.fluid_vpaid_slot', '.fluid_vpaid_iframe', '.fluid_nonLinear_ad', '.fluid_ad_playing',
+  '.vast_clickthrough_layer',
   '#kt_player > a[target="_blank"]', '#kt_player a[target="_blank"]',
   '[id*="player"] > a[target="_blank"]', '[class*="player"] > a[target="_blank"]',
   'iframe[src*="gssp.asia"]', 'img[src*="gssp.asia"]', 'a[href*="gssp.asia"]', '.ad-a1250486',
@@ -320,19 +334,29 @@ function injectAdBlockCSS() {
 
   /* Bảo đảm container và thanh điều khiển của Fluid Player và các trình phát web video hoạt động mượt mà trên cả Mobile & Desktop */
   .fluid_controls_container {
-    z-index: 20 !important;
+    z-index: 2147483640 !important;
   }
 
   .fluid_controls_container.fade_out {
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .fluid_controls_container.fade_in {
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+  }
+
+  /* Triệt tiêu hoàn toàn các lớp phủ quảng cáo clickjack/popunder tàng hình đè trên video player */
+  .vast_clickthrough_layer, #nuevoa, #anuevo, #aclose, .midroll_back,
+  .fluid_vpaid_slot, .fluid_vpaid_iframe {
+    display: none !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
   }
 
   .fluid_controls_progress_container,
@@ -658,10 +682,10 @@ if (window.location.hostname.includes('youtube.com')) {
     function isInsideVideoPlayer(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
 
-      // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank)
+      // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank, vast_clickthrough_layer)
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
+      if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('vast_clickthrough_layer') || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
         return false;
       }
 
@@ -2539,3 +2563,184 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     })();
     // === END motphimc.app PopupAd Guardian ===
+
+    // Universal Mobile & Desktop Video Player Controls & Touch Handler
+    // Ensures progress bar, play/pause, seeking, and wake-up gestures work 100% reliably across all mobile browsers
+    (function initUniversalPlayerControls() {
+      if (window.__webshield_player_controls_init__) return;
+      if (typeof window !== 'undefined' && window.location && window.location.hostname.includes('youtube.com')) return;
+      window.__webshield_player_controls_init__ = true;
+
+      const autoHideTimers = new WeakMap();
+      let currentTapState = null;
+
+      function isControlsHidden(ctrl) {
+        if (!ctrl) return true;
+        if (ctrl.classList.contains('fade_out')) return true;
+        try {
+          const cs = window.getComputedStyle(ctrl);
+          if (cs.visibility === 'hidden' || cs.opacity === '0' || cs.display === 'none') return true;
+        } catch (e) { }
+        return false;
+      }
+
+      function wakeControls(playerWrapper, vid) {
+        if (!playerWrapper) return;
+        const controlsList = playerWrapper.querySelectorAll('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
+        controlsList.forEach(ctrl => {
+          ctrl.style.setProperty('visibility', 'visible', 'important');
+          ctrl.style.setProperty('opacity', '1', 'important');
+          ctrl.style.setProperty('pointer-events', 'auto', 'important');
+          ctrl.classList.remove('fade_out');
+          ctrl.classList.add('fade_in');
+        });
+
+        // Triệt tiêu các lớp clickjack tàng hình đè trên player
+        const adLayers = playerWrapper.querySelectorAll('.vast_clickthrough_layer, #nuevoa, #anuevo, #aclose, .midroll_back');
+        adLayers.forEach(layer => {
+          try { layer.remove(); } catch (e) {
+            layer.setAttribute('style', 'display: none !important; pointer-events: none !important;');
+          }
+        });
+
+        if (vid) {
+          try { vid.dispatchEvent(new CustomEvent('userActive')); } catch (e) {}
+        }
+
+        // Tự động ẩn sau 4.5s không có thao tác NẾU video đang phát
+        const oldTimer = autoHideTimers.get(playerWrapper);
+        if (oldTimer) clearTimeout(oldTimer);
+
+        if (vid && !vid.paused) {
+          const newTimer = setTimeout(() => {
+            if (vid && !vid.paused) {
+              controlsList.forEach(ctrl => {
+                ctrl.style.removeProperty('visibility');
+                ctrl.style.removeProperty('opacity');
+                ctrl.style.removeProperty('pointer-events');
+                ctrl.classList.remove('fade_in');
+                ctrl.classList.add('fade_out');
+              });
+              try { vid.dispatchEvent(new CustomEvent('userInactive')); } catch (e) {}
+            }
+          }, 4500);
+          autoHideTimers.set(playerWrapper, newTimer);
+        }
+      }
+
+      function keepControlsAwake(playerWrapper, vid) {
+        if (!playerWrapper) return;
+        const oldTimer = autoHideTimers.get(playerWrapper);
+        if (oldTimer) clearTimeout(oldTimer);
+        wakeControls(playerWrapper, vid);
+      }
+
+      function onTouchStart(e) {
+        const target = e.target;
+        if (!target || target.nodeType !== 1) return;
+
+        const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
+        if (!container) return;
+        const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)') || container;
+        if (!playerWrapper) return;
+
+        const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
+        const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
+
+        // Chạm trực tiếp vào nút bấm hoặc thanh tiến trình tua (seekbar)
+        const isControlTouch = !!target.closest(
+          '.fluid_controls_container, .fluid_controls_progress_container, .fluid_controls_progress, ' +
+          '.fluid_button, .fluid_slider, .art-controls, .jw-controls, [class*="control-bar"], button, [role="button"]'
+        );
+
+        if (isControlTouch) {
+          currentTapState = { isControl: true, time: Date.now() };
+          keepControlsAwake(playerWrapper, vid);
+          return;
+        }
+
+        // Chạm vào màn hình video
+        const touch = e.touches && e.touches[0];
+        const hidden = isControlsHidden(ctrl);
+        currentTapState = {
+          isControl: false,
+          wasHidden: hidden,
+          startX: touch ? touch.clientX : 0,
+          startY: touch ? touch.clientY : 0,
+          time: Date.now()
+        };
+
+        if (hidden) {
+          // Thanh tiến trình đang ẩn -> Hiện lên ngay tức khắc khi chạm!
+          wakeControls(playerWrapper, vid);
+        }
+      }
+
+      function onTouchEnd(e) {
+        if (!currentTapState) return;
+        const tap = currentTapState;
+        currentTapState = null;
+
+        if (tap.isControl) {
+          return;
+        }
+
+        const target = e.target;
+        if (!target || target.nodeType !== 1) return;
+        const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
+        if (!container) return;
+        const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)') || container;
+        if (!playerWrapper) return;
+
+        const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
+        const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
+
+        // Xác thực chạm dứt khoát (tap), không phải lướt cuộn trang (scroll)
+        const touch = e.changedTouches && e.changedTouches[0];
+        const deltaX = touch ? Math.abs(touch.clientX - tap.startX) : 0;
+        const deltaY = touch ? Math.abs(touch.clientY - tap.startY) : 0;
+        const duration = Date.now() - tap.time;
+        const isCleanTap = deltaX < 20 && deltaY < 20 && duration < 500;
+
+        if (!isCleanTap) return;
+
+        if (tap.wasHidden) {
+          // Lần chạm này có mục đích đánh thức thanh điều khiển:
+          // GIỮ NGUYÊN thanh điều khiển hiển thị, KHÔNG ẩn đi, KHÔNG pause video.
+          wakeControls(playerWrapper, vid);
+        } else {
+          // Thanh điều khiển ĐANG hiển thị trước khi chạm:
+          // Chạm vào màn hình video sẽ bật / tắt Play - Pause!
+          if (vid) {
+            if (vid.paused) {
+              try { vid.play(); } catch (err) {}
+              wakeControls(playerWrapper, vid);
+            } else {
+              try { vid.pause(); } catch (err) {}
+              const oldTimer = autoHideTimers.get(playerWrapper);
+              if (oldTimer) clearTimeout(oldTimer);
+              if (ctrl) {
+                ctrl.style.setProperty('visibility', 'visible', 'important');
+                ctrl.style.setProperty('opacity', '1', 'important');
+              }
+            }
+          }
+        }
+      }
+
+      function onMouseMove(e) {
+        const target = e.target;
+        if (!target || target.nodeType !== 1) return;
+        const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
+        if (!container) return;
+        const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)');
+        if (playerWrapper) {
+          const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
+          wakeControls(playerWrapper, vid);
+        }
+      }
+
+      window.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+      window.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+      window.addEventListener('mousemove', onMouseMove, { passive: true });
+    })();

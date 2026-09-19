@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WebShield - Content & Popup Filter",
   "short_name": "WebShield",
-  "version": "3.7.0",
+  "version": "3.7.1",
   "author": "HuyTran1002",
   "description": "Công cụ hỗ trợ chặn cửa sổ bật lên tự động và quản lý quy tắc lọc mạng cục bộ.",
   "icons": {
@@ -47,6 +47,16 @@
       "run_at": "document_start",
       "all_frames": true,
       "world": "ISOLATED"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "inject.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "declarative_net_request": {

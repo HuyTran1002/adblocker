@@ -1,5 +1,7 @@
 (function () {
   // Developed by HuyTran1002
+  if (window.__webshield_inject_active__) return;
+  window.__webshield_inject_active__ = true;
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
 
@@ -885,10 +887,10 @@
   function isInsideVideoPlayer(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
 
-    // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank)
+    // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank, vast_clickthrough_layer)
     const elId = (el.id || '').toLowerCase();
     const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-    if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
+    if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('vast_clickthrough_layer') || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
       return false;
     }
 
@@ -987,19 +989,29 @@
         }
 
         .fluid_controls_container {
-          z-index: 20 !important;
+          z-index: 2147483640 !important;
         }
 
         .fluid_controls_container.fade_out {
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
+          visibility: hidden;
+          opacity: 0;
+          pointer-events: none;
         }
 
         .fluid_controls_container.fade_in {
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
+        }
+
+        /* Triệt tiêu hoàn toàn các lớp phủ quảng cáo clickjack/popunder tàng hình đè trên video player */
+        .vast_clickthrough_layer, #nuevoa, #anuevo, #aclose, .midroll_back,
+        .fluid_vpaid_slot, .fluid_vpaid_iframe {
+          display: none !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          opacity: 0 !important;
         }
 
         .fluid_controls_progress_container,
@@ -1037,120 +1049,183 @@
   }
 
   // Dedicated Mobile & Desktop Player Interaction Helper (TokyoMotion, Fluid Player, ArtPlayer, JWPlayer, etc.)
-  (function setupPlayerTouchAndControls() {
-    if (isYouTube) return;
-    const autoHideTimers = new WeakMap();
-    let touchStartedWhileVisible = false;
+  (function initUniversalPlayerControls() {
+    if (window.__webshield_player_controls_init__) return;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname.includes('youtube.com')) return;
+    window.__webshield_player_controls_init__ = true;
 
-    function showControls(playerWrapper, player) {
+    const autoHideTimers = new WeakMap();
+    let currentTapState = null;
+
+    function isControlsHidden(ctrl) {
+      if (!ctrl) return true;
+      if (ctrl.classList.contains('fade_out')) return true;
+      try {
+        const cs = window.getComputedStyle(ctrl);
+        if (cs.visibility === 'hidden' || cs.opacity === '0' || cs.display === 'none') return true;
+      } catch (e) { }
+      return false;
+    }
+
+    function wakeControls(playerWrapper, vid) {
       if (!playerWrapper) return;
       const controlsList = playerWrapper.querySelectorAll('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
       controlsList.forEach(ctrl => {
+        ctrl.style.setProperty('visibility', 'visible', 'important');
+        ctrl.style.setProperty('opacity', '1', 'important');
+        ctrl.style.setProperty('pointer-events', 'auto', 'important');
         ctrl.classList.remove('fade_out');
         ctrl.classList.add('fade_in');
       });
-      if (player) {
-        try {
-          player.dispatchEvent(new CustomEvent('userActive'));
-        } catch (e) {}
+
+      // Triệt tiêu các lớp clickjack tàng hình đè trên player
+      const adLayers = playerWrapper.querySelectorAll('.vast_clickthrough_layer, #nuevoa, #anuevo, #aclose, .midroll_back');
+      adLayers.forEach(layer => {
+        try { layer.remove(); } catch (e) {
+          layer.setAttribute('style', 'display: none !important; pointer-events: none !important;');
+        }
+      });
+
+      if (vid) {
+        try { vid.dispatchEvent(new CustomEvent('userActive')); } catch (e) {}
       }
 
-      // Auto-hide after 3.5s of inactivity if playing
-      if (player && !player.paused) {
-        const oldTimer = autoHideTimers.get(playerWrapper);
-        if (oldTimer) clearTimeout(oldTimer);
+      // Tự động ẩn sau 4.5s không có thao tác NẾU video đang phát
+      const oldTimer = autoHideTimers.get(playerWrapper);
+      if (oldTimer) clearTimeout(oldTimer);
+
+      if (vid && !vid.paused) {
         const newTimer = setTimeout(() => {
-          if (player && !player.paused) {
+          if (vid && !vid.paused) {
             controlsList.forEach(ctrl => {
+              ctrl.style.removeProperty('visibility');
+              ctrl.style.removeProperty('opacity');
+              ctrl.style.removeProperty('pointer-events');
               ctrl.classList.remove('fade_in');
               ctrl.classList.add('fade_out');
             });
-            try {
-              player.dispatchEvent(new CustomEvent('userInactive'));
-            } catch (e) {}
+            try { vid.dispatchEvent(new CustomEvent('userInactive')); } catch (e) {}
           }
-        }, 3500);
+        }, 4500);
         autoHideTimers.set(playerWrapper, newTimer);
       }
     }
 
-    function hideControls(playerWrapper, player) {
+    function keepControlsAwake(playerWrapper, vid) {
       if (!playerWrapper) return;
-      const controlsList = playerWrapper.querySelectorAll('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
-      controlsList.forEach(ctrl => {
-        ctrl.classList.remove('fade_in');
-        ctrl.classList.add('fade_out');
-      });
-      if (player) {
-        try {
-          player.dispatchEvent(new CustomEvent('userInactive'));
-        } catch (e) {}
-      }
+      const oldTimer = autoHideTimers.get(playerWrapper);
+      if (oldTimer) clearTimeout(oldTimer);
+      wakeControls(playerWrapper, vid);
     }
 
-    function handleTouchStart(e) {
+    function onTouchStart(e) {
       const target = e.target;
-      if (!target) return;
+      if (!target || target.nodeType !== 1) return;
+
       const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
       if (!container) return;
       const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)') || container;
       if (!playerWrapper) return;
 
       const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
-      const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"]');
+      const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
 
-      // Tapping on controls or seekbar directly keeps them awake
-      if (target.closest('.fluid_controls_container, .fluid_controls_progress_container, .art-controls, .jw-controls, [class*="control-bar"], button, [role="button"]')) {
-        touchStartedWhileVisible = true;
-        showControls(playerWrapper, vid);
+      // Chạm trực tiếp vào nút bấm hoặc thanh tiến trình tua (seekbar)
+      const isControlTouch = !!target.closest(
+        '.fluid_controls_container, .fluid_controls_progress_container, .fluid_controls_progress, ' +
+        '.fluid_button, .fluid_slider, .art-controls, .jw-controls, [class*="control-bar"], button, [role="button"]'
+      );
+
+      if (isControlTouch) {
+        currentTapState = { isControl: true, time: Date.now() };
+        keepControlsAwake(playerWrapper, vid);
         return;
       }
 
-      if (ctrl) {
-        const isHidden = ctrl.classList.contains('fade_out') || 
-                         (window.getComputedStyle(ctrl).visibility === 'hidden') ||
-                         (window.getComputedStyle(ctrl).opacity === '0');
-        if (isHidden) {
-          touchStartedWhileVisible = false;
-          showControls(playerWrapper, vid);
-        } else {
-          touchStartedWhileVisible = true;
-        }
-      } else if (vid) {
-        showControls(playerWrapper, vid);
+      // Chạm vào màn hình video
+      const touch = e.touches && e.touches[0];
+      const hidden = isControlsHidden(ctrl);
+      currentTapState = {
+        isControl: false,
+        wasHidden: hidden,
+        startX: touch ? touch.clientX : 0,
+        startY: touch ? touch.clientY : 0,
+        time: Date.now()
+      };
+
+      if (hidden) {
+        // Thanh tiến trình đang ẩn -> Hiện lên ngay tức khắc khi chạm!
+        wakeControls(playerWrapper, vid);
       }
     }
 
-    function handleTouchEndOrClick(e) {
+    function onTouchEnd(e) {
+      if (!currentTapState) return;
+      const tap = currentTapState;
+      currentTapState = null;
+
+      if (tap.isControl) {
+        return;
+      }
+
       const target = e.target;
-      if (!target) return;
+      if (!target || target.nodeType !== 1) return;
       const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
       if (!container) return;
       const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)') || container;
       if (!playerWrapper) return;
 
-      if (target.closest('.fluid_controls_container, .fluid_controls_progress_container, .art-controls, .jw-controls, [class*="control-bar"], button, [role="button"]')) {
-        const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
-        showControls(playerWrapper, vid);
-        return;
-      }
-
       const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
-      const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"]');
+      const ctrl = playerWrapper.querySelector('.fluid_controls_container, [class*="control-bar"], [class*="controls-bar"]');
 
-      if (ctrl) {
-        const isHidden = ctrl.classList.contains('fade_out');
-        if (!isHidden && touchStartedWhileVisible) {
-          if (vid && !vid.paused) {
-            hideControls(playerWrapper, vid);
+      // Xác thực chạm dứt khoát (tap), không phải lướt cuộn trang (scroll)
+      const touch = e.changedTouches && e.changedTouches[0];
+      const deltaX = touch ? Math.abs(touch.clientX - tap.startX) : 0;
+      const deltaY = touch ? Math.abs(touch.clientY - tap.startY) : 0;
+      const duration = Date.now() - tap.time;
+      const isCleanTap = deltaX < 20 && deltaY < 20 && duration < 500;
+
+      if (!isCleanTap) return;
+
+      if (tap.wasHidden) {
+        // Lần chạm này có mục đích đánh thức thanh điều khiển:
+        // GIỮ NGUYÊN thanh điều khiển hiển thị, KHÔNG ẩn đi, KHÔNG pause video.
+        wakeControls(playerWrapper, vid);
+      } else {
+        // Thanh điều khiển ĐANG hiển thị trước khi chạm:
+        // Chạm vào màn hình video sẽ bật / tắt Play - Pause!
+        if (vid) {
+          if (vid.paused) {
+            try { vid.play(); } catch (err) {}
+            wakeControls(playerWrapper, vid);
+          } else {
+            try { vid.pause(); } catch (err) {}
+            const oldTimer = autoHideTimers.get(playerWrapper);
+            if (oldTimer) clearTimeout(oldTimer);
+            if (ctrl) {
+              ctrl.style.setProperty('visibility', 'visible', 'important');
+              ctrl.style.setProperty('opacity', '1', 'important');
+            }
           }
         }
       }
     }
 
-    window.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true });
-    window.addEventListener('touchend', handleTouchEndOrClick, { passive: true, capture: true });
-    window.addEventListener('click', handleTouchEndOrClick, { passive: true, capture: true });
+    function onMouseMove(e) {
+      const target = e.target;
+      if (!target || target.nodeType !== 1) return;
+      const container = (target.tagName === 'VIDEO' ? target.parentElement : target);
+      if (!container) return;
+      const playerWrapper = container.closest('.fluid_video_wrapper, #video_player, #flash, .video-container, .art-video-player, .jwplayer, .video-js:not(video), [class*="player"]:not(video)');
+      if (playerWrapper) {
+        const vid = playerWrapper.querySelector('video') || (target.tagName === 'VIDEO' ? target : null);
+        wakeControls(playerWrapper, vid);
+      }
+    }
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
   })();
 
   function isFullscreenActive() {
