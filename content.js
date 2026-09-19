@@ -310,42 +310,12 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* === BẢO VỆ TUYỆT ĐỐI TRÌNH PHÁT VIDEO, CONTROLS, NÚT PAUSE Ở GIỮA & THANH TIẾN TRÌNH === */
+  /* === BẢO VỆ TUYỆT ĐỐI TRÌNH PHÁT VIDEO KHỎI BỊ BỘ LỌC ẨN NHẦM === */
   video,
   .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
-  .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
-  .vjs-control-bar, .plyr__controls, .dplayer-controller,
-  .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
-  .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
-  .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-  .fluid_controls_currentpos, .fluid_timeline_preview_container,
-  .fluid_button, .fluid_button_play, .fluid_button_pause,
-  .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-  .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
-  .fluid_control_duration,
-  [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
-  [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"],
+  .fluid_video_wrapper,
   .aspect-video, [class*="aspect-video"] {
-    visibility: visible !important;
-  }
-
-  /* Bảo đảm con trỏ và tương tác click/touch trên video và các nút bấm điều khiển */
-  /* TUYỆT ĐỐI KHÔNG gán pointer-events: auto lên .art-mask, .art-layers, .jw-overlays để click/touch xuyên thấu vào video */
-  video,
-  .art-video-player, .art-control, .art-control-progress, .art-control-fullscreen,
-  .jw-media, .jw-display, .jw-display-icon-container, .jw-icon-playback, .jw-slider-time, .jw-progress, .jw-button-container,
-  .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
-  .plyr__control, .plyr__progress,
-  .dplayer-mobile-play, .dplayer-bar-wrap,
-  .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
-  .fluid_controls_container, .fluid_controls_progress_container,
-  .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-  .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
-  .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-  button, [role="button"],
-  [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
-    pointer-events: auto !important;
-    cursor: pointer !important;
+    display: block !important;
   }
 
   /* Đảm bảo tất cả các nút xem phim, chọn tập, player control luôn có con trỏ pointer và nhận tương tác mượt mà */
@@ -2385,35 +2355,9 @@ if (window.location.hostname.includes('youtube.com')) {
         }
         video,
         .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
-        .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
-        .vjs-control-bar, .plyr__controls, .dplayer-controller,
-        .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
-        .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
-        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-        .fluid_controls_currentpos, .fluid_timeline_preview_container,
-        .fluid_button, .fluid_button_play, .fluid_button_pause,
-        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-        .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
-        .fluid_control_duration,
-        [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
-        [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
-          visibility: visible !important;
-        }
-        video,
-        .art-video-player, .art-control, .art-control-progress, .art-control-fullscreen,
-        .jw-media, .jw-display, .jw-display-icon-container, .jw-icon-playback, .jw-slider-time, .jw-progress, .jw-button-container,
-        .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
-        .plyr__control, .plyr__progress,
-        .dplayer-mobile-play, .dplayer-bar-wrap,
-        .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
-        .fluid_controls_container, .fluid_controls_progress_container,
-        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-        .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
-        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-        button, [role="button"],
-        [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
-          pointer-events: auto !important;
-          cursor: pointer !important;
+        .fluid_video_wrapper,
+        .aspect-video, [class*="aspect-video"] {
+          display: block !important;
         }
         iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
           visibility: visible !important;

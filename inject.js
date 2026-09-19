@@ -980,41 +980,9 @@
           width: 0 !important;
         }
 
-        /* Hiển thị rõ ràng cho trình phát video và thanh điều khiển */
-        video,
-        .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
-        .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
-        .vjs-control-bar, .plyr__controls, .dplayer-controller,
-        .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
-        .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
-        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-        .fluid_controls_currentpos, .fluid_timeline_preview_container,
-        .fluid_button, .fluid_button_play, .fluid_button_pause,
-        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-        .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
-        .fluid_control_duration,
-        [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
-        [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
-          visibility: visible !important;
-        }
-
-        /* Bảo đảm con trỏ và tương tác click/touch trên video và các nút bấm điều khiển */
-        /* TUYỆT ĐỐI KHÔNG gán pointer-events: auto lên .art-mask, .art-layers, .jw-overlays để click/touch xuyên thấu vào video */
-        video,
-        .art-video-player, .art-control, .art-control-progress, .art-control-fullscreen,
-        .jw-media, .jw-display, .jw-display-icon-container, .jw-icon-playback, .jw-slider-time, .jw-progress, .jw-button-container,
-        .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
-        .plyr__control, .plyr__progress,
-        .dplayer-mobile-play, .dplayer-bar-wrap,
-        .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
-        .fluid_controls_container, .fluid_controls_progress_container,
-        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
-        .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
-        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
-        button, [role="button"],
-        [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
-          pointer-events: auto !important;
-          cursor: pointer !important;
+        /* Bảo đảm container video không bị ẩn bởi bộ lọc quảng cáo bên thứ 3 */
+        video {
+          display: block !important;
         }
       `;
       (document.head || document.documentElement).appendChild(style);
@@ -1787,49 +1755,6 @@
     overrideWindowOpen(window.parent);
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
-
-    // Chặn đứng thủ thuật lách window.open bằng a.click() nhân tạo của mạng quảng cáo (Monetag / Clickadu)
-    try {
-      const origAnchorClick = HTMLAnchorElement.prototype.click;
-      HTMLAnchorElement.prototype.click = function () {
-        const href = this.href || this.getAttribute('href') || '';
-        const target = (this.target || this.getAttribute('target') || '').toLowerCase();
-        const isTargetBlank = target === '_blank';
-        const context = isTargetBlank ? 'anchor.programmatic.click._blank' : 'anchor.programmatic.click';
-
-        if (!checkNavigationOrPopup(href, context)) {
-          console.log('[Anti Pop-Under] Blocked programmatic anchor.click() to:', href);
-          reportBlocked(href || 'programmatic_anchor', 'Blocked programmatic anchor.click() ad redirect');
-          return;
-        }
-        return origAnchorClick.apply(this, arguments);
-      };
-    } catch (e) { }
-
-    try {
-      const origDispatchEvent = EventTarget.prototype.dispatchEvent;
-      EventTarget.prototype.dispatchEvent = function (event) {
-        if (event && (event.type === 'click' || event.type === 'mouseup')) {
-          let node = this;
-          while (node && node !== document && node !== document.documentElement) {
-            if (node.tagName && node.tagName.toLowerCase() === 'a') {
-              const href = node.href || node.getAttribute('href') || '';
-              const target = (node.target || node.getAttribute('target') || '').toLowerCase();
-              const isTargetBlank = target === '_blank';
-              const context = isTargetBlank ? 'anchor.dispatchEvent._blank' : 'anchor.dispatchEvent';
-              if (!checkNavigationOrPopup(href, context)) {
-                console.log('[Anti Pop-Under] Blocked programmatic dispatchEvent click on anchor:', href);
-                reportBlocked(href || 'dispatchEvent_anchor', 'Blocked programmatic dispatchEvent click on ad anchor');
-                return false;
-              }
-              break;
-            }
-            node = node.parentElement;
-          }
-        }
-        return origDispatchEvent.apply(this, arguments);
-      };
-    } catch (e) { }
 
     // Sanitize iframe attributes before DOM insertion to eliminate browser warnings
     function sanitizeIframeNode(node) {
