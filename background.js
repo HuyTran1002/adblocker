@@ -412,8 +412,10 @@ chrome.runtime.onInstalled.addListener(() => {
     });
   });
   
-  // Set badge background color
-  chrome.action.setBadgeBackgroundColor({ color: "#FF4757" });
+  // Set badge background color safely
+  if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+    chrome.action.setBadgeBackgroundColor({ color: "#FF4757" });
+  }
   
   // Setup context menu for manual ad blocking
   setupContextMenu();
@@ -449,8 +451,9 @@ chrome.runtime.onStartup.addListener(() => {
   });
 });
 
-// Update extension badge text
+// Update extension badge text safely
 function updateBadge(count) {
+  if (!chrome.action || !chrome.action.setBadgeText) return;
   if (count > 0) {
     chrome.action.setBadgeText({ text: count.toString() });
   } else {
@@ -598,8 +601,9 @@ if (chrome.runtime && chrome.runtime.onInstalled) {
 }
 
 // Handle context menu clicks (Launch Target Mode)
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "block_element") {
+if (chrome.contextMenus && chrome.contextMenus.onClicked) {
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === "block_element") {
     const sendToTab = (targetTabId) => {
       if (!targetTabId) return;
       const payload = {
@@ -649,4 +653,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
   }
 });
+}
+
+
 
