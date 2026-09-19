@@ -1816,6 +1816,81 @@
     }
   },
   {
+    "id": 313,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "gssp.asia",
+        "media.gssp.asia",
+        "gssp.jp",
+        "geniee.jp",
+        "geniee.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 314,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "reservedghettocrimpycrimpy.com",
+        "kettledroopingcontinuation.com",
+        "mamshirt.com",
+        "protrafficinspector.com",
+        "portalfluently.com",
+        "endowmentoverhangutmost.com",
+        "realsrv.com",
+        "syndication.realsrv.com",
+        "a.realsrv.com",
+        "magsrv.com",
+        "a.magsrv.com",
+        "vast.yomeno.xyz",
+        "winner-ch.com",
+        "generic.winner-ch.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 315,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*anyhtm3*",
+      "resourceTypes": [
+        "script",
+        "stylesheet",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
     "id": 9999,
     "priority": 100,
     "action": {

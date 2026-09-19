@@ -142,9 +142,20 @@ const adSelectors = [
   'img[src*="/ads/vip3250"]',
   'img[src*="/ads/shbet"]',
 
-  // Popup banners, overlays and catfish ads (qmhsexzc, phimmoi, stream sites)
+  // Popup banners, overlays and catfish ads (qmhsexzc, phimmoi, stream sites, tokyomotion)
   '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner',
   '#catfish-banner', '.catfish-banner',
+  '#nuevoa', '#anuevo', '#aclose', '#acnt', '#acenter',
+  '.nva-center', '.nva-midroll', '.midroll_back', '#nv_progress', '#countdiv',
+  '.adsbyexoclick', '.__clb-1963493', '[class*="__clb-"]',
+  '[id*="transpLayer"]', '[class*="transpLayer"]',
+  '#video_player > a', '#video_player a[target="_blank"]',
+  '#flash > a', '.video-container > a',
+  '.fluid_vpaid_slot', '.fluid_vpaid_iframe', '.fluid_nonLinear_ad', '.fluid_ad_playing',
+  '#kt_player > a[target="_blank"]', '#kt_player a[target="_blank"]',
+  '[id*="player"] > a[target="_blank"]', '[class*="player"] > a[target="_blank"]',
+  'iframe[src*="gssp.asia"]', 'img[src*="gssp.asia"]', 'a[href*="gssp.asia"]', '.ad-a1250486',
+  'a[href*="winner-ch.com"]', 'iframe[src*="winner-ch.com"]',
   '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
   '.banner-popup', '.popup_banner', '.banner_popup'
 ];
@@ -301,9 +312,17 @@ function injectAdBlockCSS() {
 
   /* === BẢO VỆ TUYỆT ĐỐI TRÌNH PHÁT VIDEO, CONTROLS, NÚT PAUSE Ở GIỮA & THANH TIẾN TRÌNH === */
   video,
-  .jwplayer, .artplayer, .video-js, .plyr, .dplayer,
+  .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
   .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
   .vjs-control-bar, .plyr__controls, .dplayer-controller,
+  .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
+  .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
+  .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+  .fluid_controls_currentpos, .fluid_timeline_preview_container,
+  .fluid_button, .fluid_button_play, .fluid_button_pause,
+  .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
+  .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
+  .fluid_control_duration,
   [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
   [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"],
   .aspect-video, [class*="aspect-video"] {
@@ -318,6 +337,11 @@ function injectAdBlockCSS() {
   .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
   .plyr__control, .plyr__progress,
   .dplayer-mobile-play, .dplayer-bar-wrap,
+  .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
+  .fluid_controls_container, .fluid_controls_progress_container,
+  .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+  .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
+  .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
   button, [role="button"],
   [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
     pointer-events: auto !important;
@@ -620,24 +644,34 @@ if (window.location.hostname.includes('youtube.com')) {
     // Helper nhận diện và cách ly hoàn toàn video player DOM (bảo vệ tuyệt đối controls, mask, nút pause giữa và thanh tiến trình)
     function isInsideVideoPlayer(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
+
+      // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank)
+      const elId = (el.id || '').toLowerCase();
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
+        return false;
+      }
+
       // Trong iframe player, mọi phần tử đều là bộ phận của trình phát video
       if (window.self !== window.top) return true;
       try {
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
-        if (['video', 'audio', 'source', 'track'].includes(tag)) return true;
+        if (['video', 'audio', 'source', 'track', 'media-player', 'video-player', 'media-control'].includes(tag)) return true;
         if (tag === 'iframe' && (el.src || '').match(/player|embed|stream|video|m3u8|hls/i)) return true;
 
         if (el.closest && el.closest(
           'video, audio, ' +
           '.jwplayer, [class*="jw-"], [id*="jwplayer"], ' +
-          '.video-js, [class*="vjs-"], [data-vjs-player], ' +
+          '.video-js, [class*="vjs-"], [data-vjs-player], #vjsplayer, ' +
           '.artplayer, [class*="art-"], [id*="artplayer"], ' +
           '.plyr, [class*="plyr-"], [class*="plyr__"], ' +
           '.dplayer, [class*="dplayer-"], [id*="dplayer"], ' +
+          '.fluid_video_wrapper, [class*="fluid_"], ' +
           '#edgeplayer-root, [class*="edge-"], ' +
           '.flowplayer, [class*="fp-"], ' +
           '.html5-video-player, [class*="ytp-"], ytm-progress-bar, #movie_player, ' +
           '[data-player], [class*="player"], [id*="player"], ' +
+          '#video_player, #flash, .video-container, ' +
           '[class*="video-player"], [id*="video-player"], ' +
           '[class*="screen-box"], [id*="playBox"], [class*="aspect-video"], .aspect-video, ' +
           '[class*="control-bar"], [class*="controls-bar"], [class*="player-control"], [class*="video-control"], ' +
@@ -646,21 +680,20 @@ if (window.location.hostname.includes('youtube.com')) {
           '.jw-display-icon-container, .jw-icon-display, .jw-overlays, .jw-controls, .jw-controlbar, .jw-slider-time, ' +
           '.vjs-big-play-button, .vjs-control-bar, .vjs-progress-control, ' +
           '.plyr__control--overlaid, .plyr__controls, .plyr__progress, ' +
+          '.fluid_controls_container, .fluid_controls_progress_container, .fluid_controls_progress, .fluid_slider, .fluid_controls_currentpos, ' +
           '.dplayer-mobile-play, .dplayer-mask, .dplayer-controller, .dplayer-bar-wrap'
         )) {
           return true;
         }
 
         // Kiểm tra thuộc tính id / class linh hoạt cho các nút pause, controls, seekbar
-        const elId = (el.id || '').toLowerCase();
-        const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         const playerKeywords = [
-          'player', 'video', 'art-', 'jw-', 'vjs-', 'plyr', 'dplayer', 'aspect-video',
+          'player', 'video', 'art-', 'jw-', 'vjs-', 'plyr', 'dplayer', 'fluid_', 'aspect-video',
           'control', 'progress', 'seekbar', 'slider', 'timeline', 'scrubber',
           'play', 'pause', 'state', 'mask', 'thumb', 'track', 'volume', 'fullscreen'
         ];
         if (playerKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
-          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [id*="playBox"], [class*="aspect-video"], .aspect-video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"]')) {
+          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, .fluid_video_wrapper, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [id*="playBox"], [class*="aspect-video"], .aspect-video, iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"]')) {
             return true;
           }
         }
@@ -1381,16 +1414,28 @@ if (window.location.hostname.includes('youtube.com')) {
 
 
     // --- GLOBAL CLICK INTERCEPTOR (ANTI-CLICKJACKING) ---
+    function isFullscreenActive() {
+      try {
+        if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+          return true;
+        }
+        const videos = document.getElementsByTagName('video');
+        for (let i = 0; i < videos.length; i++) {
+          if (videos[i].webkitDisplayingFullscreen) return true;
+        }
+      } catch (e) { }
+      return false;
+    }
+
     document.addEventListener('click', function(e) {
+      if (isFullscreenActive()) return; // Fullscreen: Bỏ qua 100% để player xử lý native
       if (window.location.hostname.includes('youtube.com')) return; // YouTube có player riêng, tuyệt đối không can thiệp sự kiện click
       if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
-      if (!e.isTrusted) return; // Standard 2: Ignore untrusted/synthetic clicks
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       if (window.self !== window.top) return; // Allow 100% native clicks inside embedded video player iframes
       try {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
-        if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target)) return; // Completely isolate video player and controls from click interception
 
         // 1. Detect if click is inside an anchor (<a>)
         let anchor = null;
@@ -1402,6 +1447,39 @@ if (window.location.hostname.includes('youtube.com')) {
           }
           curr = curr.parentElement;
         }
+
+        const inPlayer = isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || (anchor && (isInsideVideoPlayer(anchor) || isVideoPlayerOrControls(anchor)));
+
+        // If an anchor is on/inside the video player with target="_blank" or external redirect, it's a popunder trap
+        if (anchor && inPlayer) {
+          const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+          let isExternalAd = false;
+          try {
+            const h = anchor.href || '';
+            if (h && !h.startsWith('javascript:') && !h.startsWith('#')) {
+              const th = new URL(h, window.location.href).hostname.toLowerCase();
+              const ch = window.location.hostname.toLowerCase();
+              isExternalAd = th !== ch && !th.endsWith('.' + ch) && !ch.endsWith('.' + th);
+            }
+          } catch (err) { }
+
+          if (isTargetBlank || isExternalAd) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            anchor.remove();
+            console.log('[Anti Pop-Under] Intercepted and destroyed ad anchor on video player:', anchor);
+            safeSendMessage({
+              type: 'AD_BLOCKED',
+              url: anchor.href || 'player_ad_anchor',
+              reason: 'Chặn popunder đè trên trình phát video'
+            });
+            return;
+          }
+        }
+
+        // If click is on legitimate video player controls with NO ad anchor, isolate completely
+        if (inPlayer && !anchor) return;
 
         if (anchor) {
           // BẢO VỆ TUYỆT ĐỐI BANNER PHIM & POSTER PHIM:
@@ -1476,11 +1554,20 @@ if (window.location.hostname.includes('youtube.com')) {
               const text = (target.innerText || target.textContent || '').trim();
               const mediaCount = target.querySelectorAll('img, svg, canvas, video, picture').length;
               
-              if (isTransparent && text.length === 0 && mediaCount === 0) {
+              const targetId = (target.id || '').toLowerCase();
+              const targetClass = (typeof target.className === 'string') ? target.className.toLowerCase() : '';
+              const isAdOverlayId = targetId.includes('transplayer') || targetClass.includes('transplayer') || targetId === 'nuevoa' || targetId === 'anuevo';
+
+              if ((isTransparent && text.length === 0 && mediaCount === 0) || isAdOverlayId) {
                 // Before destroying, ensure it's NOT a legitimate video player overlay or movie container
                 let c = target;
                 let inPlayerOrMovie = false;
                 while (c && c !== document.body && c !== document.documentElement) {
+                  const cId = (c.id || '').toLowerCase();
+                  if (cId === 'nuevoa' || cId === 'anuevo' || cId.includes('transplayer')) {
+                    inPlayerOrMovie = false;
+                    break;
+                  }
                   if (isVideoPlayerOrControls(c) || isMovieBannerOrPoster(c)) {
                     inPlayerOrMovie = true;
                     break;
@@ -1488,7 +1575,7 @@ if (window.location.hostname.includes('youtube.com')) {
                   c = c.parentElement;
                 }
                 
-                if (!inPlayerOrMovie) {
+                if (!inPlayerOrMovie || isAdOverlayId) {
                   e.preventDefault();
                   e.stopPropagation();
                   target.remove();
@@ -2297,9 +2384,17 @@ if (window.location.hostname.includes('youtube.com')) {
           min-height: 1px !important;
         }
         video,
-        .jwplayer, .artplayer, .video-js, .plyr, .dplayer,
+        .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
         .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
         .vjs-control-bar, .plyr__controls, .dplayer-controller,
+        .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
+        .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
+        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+        .fluid_controls_currentpos, .fluid_timeline_preview_container,
+        .fluid_button, .fluid_button_play, .fluid_button_pause,
+        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
+        .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
+        .fluid_control_duration,
         [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
         [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
           visibility: visible !important;
@@ -2310,6 +2405,11 @@ if (window.location.hostname.includes('youtube.com')) {
         .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
         .plyr__control, .plyr__progress,
         .dplayer-mobile-play, .dplayer-bar-wrap,
+        .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
+        .fluid_controls_container, .fluid_controls_progress_container,
+        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+        .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
+        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
         button, [role="button"],
         [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
           pointer-events: auto !important;

@@ -72,6 +72,17 @@
       });
     } catch (e) { }
 
+    // Abort-on-property-write for __aaZoneid (TokyoMotion / KVS popunder scriptlet emulation)
+    try {
+      Object.defineProperty(window, '__aaZoneid', {
+        get() { return undefined; },
+        set(val) {
+          throw new ReferenceError('__aaZoneid execution aborted by WebShield');
+        },
+        configurable: false
+      });
+    } catch (e) { }
+
     // 2. Mock Classes for Anti-AdBlock libraries (FuckAdBlock, BlockAdBlock, Sniffer)
     const createAntiAdBlockInstance = () => {
       const inst = {
@@ -170,10 +181,48 @@
         configurable: true
       });
 
-      // Safety patch for jQuery .position() on movie sites (e.g. animevietsub home-v1.js:373)
-      // Prevents: "TypeError: Cannot read properties of undefined (reading 'top')" when active episode is not found
+      // Vô hiệu hóa biến cấu hình quảng cáo và khóa trình phát của anyhtm3.js trên TokyoMotion
+      const dummyNv = { delay: 99999, midroll_start: 99999, close_delay: 0, type: '', method: '', timeout: 0, displayonpause: 0, displayonload: 0 };
+      Object.defineProperty(window, 'nv', {
+        get() { return dummyNv; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+      const dummyNvcnf = { locked: 0, aplayer: null, aready: true, nuevo_ready: true, wasmidroll: true };
+      Object.defineProperty(window, 'nvcnf', {
+        get() { return dummyNvcnf; },
+        set(val) { /* ignore */ },
+        configurable: true
+      });
+
+      // Hook fluidPlayer: Làm sạch toàn bộ danh sách VAST Ads (preRoll, midRoll, postRoll)
+      // Giúp Fluid Player không bị rơi vào trạng thái isCurrentlyPlayingAd làm khóa thanh tua tiến trình!
+      let _origFluidPlayer = window.fluidPlayer;
+      Object.defineProperty(window, 'fluidPlayer', {
+        get() {
+          return function (targetId, options) {
+            if (options && options.vastOptions) {
+              options.vastOptions = {
+                allowVPAID: false,
+                adList: []
+              };
+            }
+            if (_origFluidPlayer) {
+              return _origFluidPlayer.call(this, targetId, options);
+            }
+            return null;
+          };
+        },
+        set(val) {
+          _origFluidPlayer = val;
+        },
+        configurable: true
+      });
+
+      // Safety patch for jQuery .position() and .data() on movie sites & TokyoMotion
       function patchJQuery(jq) {
-        if (jq && jq.fn && jq.fn.position && !jq.fn.position._safePatched) {
+        if (!jq || !jq.fn) return;
+        if (jq.fn.position && !jq.fn.position._safePatched) {
           const origPos = jq.fn.position;
           jq.fn.position = function () {
             if (!this[0]) {
@@ -182,6 +231,18 @@
             return origPos.apply(this, arguments) || { top: 0, left: 0 };
           };
           jq.fn.position._safePatched = true;
+        }
+
+        // Patch $.fn.data('vast') trả về adList rỗng để ngăn Fluid Player tải quảng cáo VAST
+        if (jq.fn.data && !jq.fn.data._vastPatched) {
+          const origData = jq.fn.data;
+          jq.fn.data = function (key) {
+            if (key === 'vast') {
+              return { allowVPAID: false, adList: [] };
+            }
+            return origData.apply(this, arguments);
+          };
+          jq.fn.data._vastPatched = true;
         }
       }
 
@@ -223,7 +284,10 @@
           'magsrv.com', 'mnaspm.com', 'mayzaent.com', 'prplad.com', 'monetag.com', 'smartpop',
           'ev-player.js', '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
           'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip',
-          'ima3.js', 'vast.js', 'vpaid.js', 'trafficjunky', 'tsyndicate', 'a-ads.com'
+          'ima3.js', 'vast.js', 'vpaid.js', 'trafficjunky', 'tsyndicate', 'a-ads.com',
+          'realsrv.com', 'reservedghettocrimpycrimpy.com', 'kettledroopingcontinuation.com',
+          'mamshirt.com', 'protrafficinspector.com', 'portalfluently.com', 'endowmentoverhangutmost.com',
+          'vast.yomeno.xyz', 'winner-ch.com', 'gssp.asia', 'media.gssp.asia', 'anyhtm3.js'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -820,24 +884,34 @@
   // Helper nhận diện và cách ly hoàn toàn video player DOM (bảo vệ tuyệt đối controls, mask, nút pause giữa và thanh tiến trình)
   function isInsideVideoPlayer(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
+
+    // Các phần tử quảng cáo chèn bên trong container của player (TokyoMotion #nuevoa, #anuevo, link target=_blank)
+    const elId = (el.id || '').toLowerCase();
+    const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+    if (elId === 'nuevoa' || elId === 'anuevo' || elId === 'aclose' || elClass.includes('adsbyexoclick') || elClass.includes('__clb-') || (el.tagName === 'A' && (el.getAttribute('target') || '').toLowerCase() === '_blank')) {
+      return false;
+    }
+
     // Trong iframe player, mọi phần tử đều là bộ phận của trình phát video
     if (window.self !== window.top) return true;
     try {
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (['video', 'audio', 'source', 'track'].includes(tag)) return true;
+      if (['video', 'audio', 'source', 'track', 'media-player', 'video-player', 'media-control'].includes(tag)) return true;
       if (tag === 'iframe' && (el.src || '').match(/player|embed|stream|video|m3u8|hls/i)) return true;
 
       if (el.closest && el.closest(
         'video, audio, ' +
         '.jwplayer, [class*="jw-"], [id*="jwplayer"], ' +
-        '.video-js, [class*="vjs-"], [data-vjs-player], ' +
+        '.video-js, [class*="vjs-"], [data-vjs-player], #vjsplayer, ' +
         '.artplayer, [class*="art-"], [id*="artplayer"], ' +
         '.plyr, [class*="plyr-"], [class*="plyr__"], ' +
         '.dplayer, [class*="dplayer-"], [id*="dplayer"], ' +
+        '.fluid_video_wrapper, [class*="fluid_"], ' +
         '#edgeplayer-root, [class*="edge-"], ' +
         '.flowplayer, [class*="fp-"], ' +
         '.html5-video-player, [class*="ytp-"], ytm-progress-bar, #movie_player, ' +
         '[data-player], [class*="player"], [id*="player"], ' +
+        '#video_player, #flash, .video-container, ' +
         '[class*="video-player"], [id*="video-player"], ' +
         '[class*="screen-box"], [id*="playBox"], [class*="aspect-video"], ' +
         '[class*="control-bar"], [class*="controls-bar"], [class*="player-control"], [class*="video-control"], ' +
@@ -846,21 +920,20 @@
         '.jw-display-icon-container, .jw-icon-display, .jw-overlays, .jw-controls, .jw-controlbar, .jw-slider-time, ' +
         '.vjs-big-play-button, .vjs-control-bar, .vjs-progress-control, ' +
         '.plyr__control--overlaid, .plyr__controls, .plyr__progress, ' +
+        '.fluid_controls_container, .fluid_controls_progress_container, .fluid_controls_progress, .fluid_slider, .fluid_controls_currentpos, ' +
         '.dplayer-mobile-play, .dplayer-mask, .dplayer-controller, .dplayer-bar-wrap'
       )) {
         return true;
       }
 
       // Kiểm tra thuộc tính id / class linh hoạt cho các nút pause, controls, seekbar
-      const elId = (el.id || '').toLowerCase();
-      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       const playerKeywords = [
-        'player', 'video', 'art-', 'jw-', 'vjs-', 'plyr', 'dplayer',
+        'player', 'video', 'art-', 'jw-', 'vjs-', 'plyr', 'dplayer', 'fluid_',
         'control', 'progress', 'seekbar', 'slider', 'timeline', 'scrubber',
         'play', 'pause', 'state', 'mask', 'thumb', 'track', 'volume', 'fullscreen'
       ];
       if (playerKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
-        if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [id*="playBox"], iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"]')) {
+        if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, .fluid_video_wrapper, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [id*="playBox"], iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"]')) {
           return true;
         }
       }
@@ -886,21 +959,40 @@
       const style = document.createElement('style');
       style.id = 'webshield-player-styles';
       style.textContent = `
-        /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
+        /* Chặn triệt để banner quảng cáo popup, catfish, và thẻ <a> quảng cáo tàng hình chèn đè lên player */
         #popup-overlay:not([class*="player"] *):not(video):not([class*="art-"] *):not([class*="jw-"] *):not([class*="vjs-"] *):not([class*="plyr"] *),
-        .popup-grid, .popup-banner, #catfish-banner {
+        .popup-grid, .popup-banner, #catfish-banner,
+        #nuevoa, #anuevo, #aclose, #acnt, #acenter,
+        .nva-center, .nva-midroll, .midroll_back, #nv_progress, #countdiv,
+        .adsbyexoclick, .__clb-1963493,
+        [id*="transpLayer"], [class*="transpLayer"],
+        #video_player > a, #video_player a[target="_blank"],
+        #flash > a, .video-container > a,
+        .fluid_vpaid_slot, .fluid_vpaid_iframe, .fluid_nonLinear_ad, .fluid_ad_playing,
+        #kt_player > a[target="_blank"], #kt_player a[target="_blank"],
+        [id*="player"] > a[target="_blank"], [class*="player"] > a[target="_blank"],
+        .ad-a1250486 {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
           pointer-events: none !important;
           height: 0 !important;
+          width: 0 !important;
         }
 
         /* Hiển thị rõ ràng cho trình phát video và thanh điều khiển */
         video,
-        .jwplayer, .artplayer, .video-js, .plyr, .dplayer,
+        .jwplayer, .artplayer, .video-js, .plyr, .dplayer, .flowplayer, #kt_player, #vjsplayer,
         .art-video-player, .jw-media, .jw-controls, .jw-controlbar,
         .vjs-control-bar, .plyr__controls, .dplayer-controller,
+        .fp-ui, .fp-controls, .fp-timeline, .fp-progress, .fp-buffer,
+        .fluid_video_wrapper, .fluid_controls_container, .fluid_controls_progress_container,
+        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+        .fluid_controls_currentpos, .fluid_timeline_preview_container,
+        .fluid_button, .fluid_button_play, .fluid_button_pause,
+        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
+        .fluid_control_volume_container, .fluid_controls_left, .fluid_controls_right,
+        .fluid_control_duration,
         [class*="player-control"], [class*="video-control"], [class*="control-bar"], [class*="controls-bar"],
         [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
           visibility: visible !important;
@@ -914,6 +1006,11 @@
         .vjs-big-play-button, .vjs-play-control, .vjs-progress-control, .vjs-fullscreen-control,
         .plyr__control, .plyr__progress,
         .dplayer-mobile-play, .dplayer-bar-wrap,
+        .fp-controls, .fp-timeline, .fp-progress, .fp-buffer, .fp-ui,
+        .fluid_controls_container, .fluid_controls_progress_container,
+        .fluid_controls_progress, .fluid_controls_currentprogress, .fluid_slider,
+        .fluid_controls_currentpos, .fluid_button, .fluid_button_play, .fluid_button_pause,
+        .fluid_initial_play, .fluid_initial_play_button, .fluid_button_fullscreen,
         button, [role="button"],
         [class*="progress-bar"], [class*="seekbar"], [class*="timeline"], [class*="scrubber"], [class*="play-pause"] {
           pointer-events: auto !important;
@@ -928,12 +1025,27 @@
     document.addEventListener('DOMContentLoaded', injectPlayerStyles);
   }
 
+  function isFullscreenActive() {
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+        return true;
+      }
+      const videos = document.getElementsByTagName('video');
+      for (let i = 0; i < videos.length; i++) {
+        if (videos[i].webkitDisplayingFullscreen) return true;
+      }
+    } catch (e) { }
+    return false;
+  }
+
   if (!isYouTube) {
     const handleUserInteraction = (e) => {
       lastInteractionTime = Date.now();
       lastInteractionEvent = e;
 
-      if (!e.isTrusted) return; // Standard 2: Validate isTrusted
+      // When browser or video player is in Fullscreen mode, completely bypass all interception
+      if (isFullscreenActive()) return;
+
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       // Never block interactions when Target Picker mode is active on page
       if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
@@ -942,25 +1054,52 @@
       const target = e.target;
       if (!target) return;
 
-      // Standard 1: Completely isolate video player DOM from interaction handling
-      if (isInsideVideoPlayer(target) || (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(target))) return;
+      // 1. FAST-PATH BẢO VỆ TUYỆT ĐỐI TRÌNH PHÁT VIDEO & THANH TIẾN TRÌNH TUA:
+      const isTargetInPlayer = isInsideVideoPlayer(target) || (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(target));
+      if (isTargetInPlayer) {
+        // Đối với mọi cử chỉ tua/kéo seekbar, nhấn giữ hoặc chạm màn hình (mousedown, pointerdown, mouseup, pointerup, touchend):
+        // Thoát ngay lập tức (0.01ms) để trình phát nhận tương tác 60fps native mượt mà, không bị trễ hay lag reflow.
+        if (e.type !== 'click') return;
 
-      // Never block or destroy movie banner, poster, or legitimate play/episode buttons
-      if (target.closest && target.closest(
-        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
-        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
-        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
-        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
-        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
-        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
-      )) {
+        // Đối với sự kiện click: kiểm tra xem có thẻ <a> quảng cáo tàng hình đè lên player hay không
+        let anchorOnPlayer = null;
+        let p = target;
+        while (p && p !== document.body && p !== document.documentElement) {
+          if (p.tagName && p.tagName.toLowerCase() === 'a') {
+            anchorOnPlayer = p;
+            break;
+          }
+          p = p.parentElement;
+        }
+
+        if (anchorOnPlayer) {
+          const isTargetBlank = (anchorOnPlayer.getAttribute('target') || '').toLowerCase() === '_blank';
+          let isExternalAd = false;
+          try {
+            const h = anchorOnPlayer.href || '';
+            if (h && !h.startsWith('javascript:') && !h.startsWith('#')) {
+              const targetHost = new URL(h, window.location.href).hostname.toLowerCase();
+              const currentHost = window.location.hostname.toLowerCase();
+              isExternalAd = targetHost !== currentHost && !targetHost.endsWith('.' + currentHost) && !currentHost.endsWith('.' + targetHost);
+            }
+          } catch (err) { }
+
+          if (isTargetBlank || isExternalAd || !checkNavigationOrPopup(anchorOnPlayer.href, 'anchor.click.player')) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            reportBlocked(anchorOnPlayer.href || 'player_ad_anchor', 'Blocked popunder ad anchor on video player');
+            console.log('[Anti Pop-Under] Blocked popunder ad anchor on video player & removing:', anchorOnPlayer);
+            try { anchorOnPlayer.remove(); } catch (err) { }
+            return;
+          }
+        }
+
+        // Click hợp lệ vào nút bấm, seekbar, âm lượng, toàn màn hình -> Thoát ngay lập tức!
         return;
       }
 
-      // 1. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
+      // 2. Find if the clicked element or any of its ancestors is an anchor tag or a clickjack overlay
       let curr = target;
       let anchor = null;
       let overlay = null;
@@ -975,7 +1114,7 @@
         curr = curr.parentElement;
       }
 
-      // 1.5 Check if anchor is a dummy trap element (like #bb0, #bb1 with 1px / opacity 0)
+      // 2.1 Check if anchor is a dummy trap element (like #bb0, #bb1 with 1px / opacity 0)
       if (anchor) {
         const anchorId = (anchor.id || '').toLowerCase();
         const aStyle = anchor.getAttribute('style') || '';
@@ -988,11 +1127,8 @@
         }
       }
 
-      // 2. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
+      // 3. If interaction is on a clickjack overlay -> block popunder immediately & remove overlay
       if (overlay) {
-        if (isInsideVideoPlayer(overlay) || (typeof isPlayerOrPlayButton === 'function' && isPlayerOrPlayButton(overlay))) {
-          return;
-        }
         if (anchor) {
           try {
             const href = anchor.getAttribute('href') || '';
@@ -1023,7 +1159,7 @@
         return;
       }
 
-      // 3. Check anchor link clicks pointing to popunder/ad URLs
+      // 4. Check anchor link clicks pointing to popunder/ad URLs
       if (e.type === 'click' && anchor && anchor.href) {
         const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
         const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
@@ -1033,25 +1169,23 @@
           e.stopImmediatePropagation();
           reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
           console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
-
-          if (isInsideVideoPlayer(anchor)) {
-            console.log('[Anti Pop-Under] Anchor was on video player. Removing anchor...');
-            try { anchor.remove(); } catch (e) { }
-
-            let isInternal = false;
-            try {
-              const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
-              isInternal = targetHost === window.location.hostname.toLowerCase();
-            } catch (e) { }
-
-            if (isInternal && !gamblingRegex.test(anchor.href) && !adUrlRegex.test(anchor.href)) {
-              console.log('[Anti Pop-Under] Redirecting current tab to internal player link:', anchor.href);
-              window.location.assign(anchor.href);
-              return;
-            }
-          }
           return;
         }
+      }
+
+      // 5. Never block or destroy movie banner, poster, or legitimate play/episode buttons
+      if (target.closest && target.closest(
+        '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
+        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
+        '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
+        '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
+        '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"], .module-info-play, .module-mobile-play, .module-play-list, ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"]'
+      )) {
+        return;
       }
 
       // 3. Fallback check for background click or non-interactive redirect
@@ -1197,6 +1331,12 @@
       // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
       const elId = (el.id || '').toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+
+      // Nhận diện tức thì các định dạng overlay tàng hình phổ biến của PropellerAds/Monetag và TokyoMotion
+      if (elId.includes('transplayer') || elClass.includes('transplayer') || elId === 'nuevoa' || elId === 'anuevo') {
+        return true;
+      }
+
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') || elId.includes('thumb') ||
         elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control') || elClass.includes('thumb')) {
         return false;
@@ -1218,7 +1358,7 @@
       }
 
       // Protect video player controls, seekbars, progress bars, timelines, fullscreen buttons, volume sliders
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="stream"], [id*="stream"], [class*="halim"], [id*="halim"], [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"], [class*="timeline"], [id*="timeline"], [class*="fullscreen"], [id*="fullscreen"]')) {
+      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, .fluid_video_wrapper, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="embed"], [id*="embed"], [class*="stream"], [id*="stream"], [class*="halim"], [id*="halim"], [class*="control"], [id*="control"], [class*="seekbar"], [id*="seekbar"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"], [class*="timeline"], [id*="timeline"], [class*="fullscreen"], [id*="fullscreen"]')) {
         if (tagName !== 'a') {
           return false;
         }
@@ -1242,9 +1382,19 @@
         }
       }
 
-      // If it contains genuine form controls, video media, images, or text-bearing children, skip
-      if (el.querySelector('img, picture, video, audio, canvas, iframe, embed, object, button, input, select, textarea, a, span, p, h1, h2, h3, h4, h5, h6')) {
+      // If it contains genuine form controls, video media, images, skip
+      if (el.querySelector('img, picture, video, audio, canvas, iframe, embed, object, button, input, select, textarea')) {
         return false;
+      }
+
+      // Nếu chứa thẻ <a> hoặc <span> bên trong nhưng thẻ con đó là rỗng (như PropellerAds transpLayerId), KHÔNG được coi là UI hợp lệ!
+      const childAnchor = el.querySelector('a');
+      if (childAnchor) {
+        const aText = (childAnchor.innerText || '').trim();
+        const hasMedia = childAnchor.querySelector('img, svg, video, picture');
+        if (aText.length > 0 || hasMedia) {
+          return false;
+        }
       }
 
       const rect = el.getBoundingClientRect();
@@ -1637,6 +1787,49 @@
     overrideWindowOpen(window.parent);
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
+
+    // Chặn đứng thủ thuật lách window.open bằng a.click() nhân tạo của mạng quảng cáo (Monetag / Clickadu)
+    try {
+      const origAnchorClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () {
+        const href = this.href || this.getAttribute('href') || '';
+        const target = (this.target || this.getAttribute('target') || '').toLowerCase();
+        const isTargetBlank = target === '_blank';
+        const context = isTargetBlank ? 'anchor.programmatic.click._blank' : 'anchor.programmatic.click';
+
+        if (!checkNavigationOrPopup(href, context)) {
+          console.log('[Anti Pop-Under] Blocked programmatic anchor.click() to:', href);
+          reportBlocked(href || 'programmatic_anchor', 'Blocked programmatic anchor.click() ad redirect');
+          return;
+        }
+        return origAnchorClick.apply(this, arguments);
+      };
+    } catch (e) { }
+
+    try {
+      const origDispatchEvent = EventTarget.prototype.dispatchEvent;
+      EventTarget.prototype.dispatchEvent = function (event) {
+        if (event && (event.type === 'click' || event.type === 'mouseup')) {
+          let node = this;
+          while (node && node !== document && node !== document.documentElement) {
+            if (node.tagName && node.tagName.toLowerCase() === 'a') {
+              const href = node.href || node.getAttribute('href') || '';
+              const target = (node.target || node.getAttribute('target') || '').toLowerCase();
+              const isTargetBlank = target === '_blank';
+              const context = isTargetBlank ? 'anchor.dispatchEvent._blank' : 'anchor.dispatchEvent';
+              if (!checkNavigationOrPopup(href, context)) {
+                console.log('[Anti Pop-Under] Blocked programmatic dispatchEvent click on anchor:', href);
+                reportBlocked(href || 'dispatchEvent_anchor', 'Blocked programmatic dispatchEvent click on ad anchor');
+                return false;
+              }
+              break;
+            }
+            node = node.parentElement;
+          }
+        }
+        return origDispatchEvent.apply(this, arguments);
+      };
+    } catch (e) { }
 
     // Sanitize iframe attributes before DOM insertion to eliminate browser warnings
     function sanitizeIframeNode(node) {
