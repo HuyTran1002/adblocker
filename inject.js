@@ -989,7 +989,8 @@
       style.id = 'webshield-player-styles';
       style.textContent = `
         /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
-        #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #catfish-banner {
+        #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #popup-container,
+        #catfish-banner, .catfish-banner, .ad-banner, .banner-item {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;

@@ -134,8 +134,8 @@ const adSelectors = [
   'a[aria-label*="Quảng cáo SC88" i]',
 
   // Popup banners, overlays and catfish ads (qmhsexzc, phimmoi, stream sites)
-  '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner',
-  '#catfish-banner', '.catfish-banner',
+  '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner', '#popup-container',
+  '#catfish-banner', '.catfish-banner', '.banner-item',
   '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
   '.banner-popup', '.popup_banner', '.banner_popup',
   // TokyoMotion & Tube Ad Overlays (anyhtm3 / VAST / clickjackers)
