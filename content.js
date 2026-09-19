@@ -318,6 +318,49 @@ function injectAdBlockCSS() {
     display: block !important;
   }
 
+  /* Bảo đảm container và thanh điều khiển của Fluid Player và các trình phát web video hoạt động mượt mà trên cả Mobile & Desktop */
+  .fluid_controls_container {
+    z-index: 20 !important;
+  }
+
+  .fluid_controls_container.fade_out {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .fluid_controls_container.fade_in {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .fluid_controls_progress_container,
+  .fluid_controls_progress,
+  .fluid_controls_currentprogress,
+  .fluid_slider,
+  .fluid_controls_currentpos,
+  .fluid_control_duration,
+  .fluid_controls_left,
+  .fluid_controls_right,
+  .fluid_button,
+  .fluid_button_play,
+  .fluid_button_pause,
+  .fluid_button_fullscreen {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  /* Bảo đảm thanh điều khiển và thanh tiến trình tua của các trình phát web video khác luôn nhận tương tác */
+  .art-controls, .art-control-progress, .art-control,
+  .jw-controls, .jw-controlbar, .jw-slider-time, .jw-progress,
+  .vjs-control-bar, .vjs-progress-control,
+  .plyr__controls, .plyr__progress,
+  .dplayer-controller, .dplayer-bar-wrap,
+  .fp-controls, .fp-timeline {
+    pointer-events: auto !important;
+  }
+
   /* Đảm bảo tất cả các nút xem phim, chọn tập, player control luôn có con trỏ pointer và nhận tương tác mượt mà */
   .watch-now-btn, .main-btn, .btn-episode, .module-play-list-link,
   .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"],
