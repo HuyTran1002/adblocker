@@ -878,6 +878,9 @@
   function isInsideVideoPlayer(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
+      // Known ad overlays that inject inside player containers must NOT be protected
+      if (el.closest && el.closest('#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot')) return false;
+
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
       // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
       if (tag === 'video' || tag === 'audio' || tag === 'source' || tag === 'track') return true;
@@ -993,6 +996,17 @@
           pointer-events: none !important;
           height: 0 !important;
         }
+
+        /* TokyoMotion & Tube Ad Overlays (anyhtm3 / VAST / clickjackers) */
+        #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll,
+        .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
@@ -1003,6 +1017,64 @@
   }
 
   if (!isYouTube) {
+    // --- UNIVERSAL PLAYER TAP-TO-WAKE (PASSIVE, NON-INVASIVE) ---
+    // Solves mobile player sleep/autoHide: tapping anywhere across the player area
+    // wakes the controls and progress bar via native 'userActive' and class reset.
+    function handlePlayerTap(e) {
+      // 1. Fullscreen bypass: In fullscreen mode, leave native player controls untouched
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
+
+      const target = e.target;
+      if (!target || target.nodeType !== 1) return;
+
+      // 2. Allow native control buttons, sliders, seekbar, volume, settings, links to process natively
+      if (target.closest && target.closest(
+        '.fluid_controls_container, [class*="controls" i], .fluid_button, ' +
+        'button, input, select, a, [role="button"], [class*="progress" i], [class*="slider" i]'
+      )) {
+        return;
+      }
+
+      // 3. Identify video and player wrapper
+      let video = null;
+      let wrapper = null;
+
+      if (target.tagName === 'VIDEO') {
+        video = target;
+        wrapper = target.parentElement;
+      } else if (target.closest) {
+        wrapper = target.closest('.fluid_video_wrapper, [class*="player" i], [id*="player" i], .video-js, .jwplayer, [data-player]');
+        if (wrapper) {
+          video = wrapper.querySelector('video');
+        }
+      }
+
+      if (!video) return;
+
+      // 4. Dispatch native 'userActive' to video element (wakes Fluid Player, JW Player, VideoJS)
+      try {
+        video.dispatchEvent(new CustomEvent('userActive', { bubbles: true }));
+      } catch (err) {}
+
+      // 5. Also ensure Fluid Player controls container transitions gracefully from fade_out to fade_in
+      try {
+        const parent = wrapper || video.parentElement;
+        if (parent) {
+          const controls = parent.querySelectorAll ? parent.querySelectorAll('.fluid_controls_container') : [];
+          controls.forEach(ctrl => {
+            if (ctrl.classList.contains('fade_out') || !ctrl.classList.contains('fade_in')) {
+              ctrl.classList.remove('fade_out');
+              ctrl.classList.add('fade_in');
+            }
+          });
+        }
+      } catch (err) {}
+    }
+
+    // Attach passively on pointerup and touchend (does not interfere with touch scrolling or dragging)
+    window.addEventListener('pointerup', handlePlayerTap, { passive: true, capture: false });
+    window.addEventListener('touchend', handlePlayerTap, { passive: true, capture: false });
+
     // Record user interaction timestamps passively without ever interfering with event flow
     ['pointerdown', 'keydown'].forEach(eventName => {
       window.addEventListener(eventName, (e) => {
