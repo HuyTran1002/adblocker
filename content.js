@@ -141,7 +141,11 @@ const adSelectors = [
   '.banner-popup', '.popup_banner', '.banner_popup',
   // TokyoMotion & Tube In-Player Ad Overlays
   '#nuevoa', '#anuevo', '#aclose', '.nva-center', '.nva-midroll',
-  '.vast_clickthrough_layer', '.midroll_back', '.fluid_vpaid_slot'
+  '.vast_clickthrough_layer', '.midroll_back', '.fluid_vpaid_slot',
+  // DPlayer & Video Pre-roll Ad Overlays (51cg1, tube players)
+  '.dplayer-pre-bg', '.dplayer-pre-countdown', '.dplayer-pre-img',
+  '[class*="dplayer-pre-"]', '.dplayer-pre-playing .dplayer-pre-bg',
+  '.dplayer-pre-playing .dplayer-pre-countdown', '.dplayer-pre-playing .dplayer-pre-img'
 ];
 
 function injectAdBlockCSS() {
@@ -190,7 +194,8 @@ function injectAdBlockCSS() {
   .video-ad-wrap, .sponsor .video-ad-wrap, .ad-container .video-ad-wrap,
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
-  .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper {
+  .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper,
+  .dplayer-pre-bg, .dplayer-pre-countdown, .dplayer-pre-img, [class*="dplayer-pre-"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;

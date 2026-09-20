@@ -207,6 +207,70 @@
       }
     } catch (e) { }
 
+    // Neutralize DPlayer pre-roll ad system (e.g. 51cg1.com and generic DPlayer video ads)
+    try {
+      const emptyAdConfig = () => null;
+      const noopAttach = (dp) => dp;
+      const noopFn = () => {};
+
+      let _dplayerPreroll = {
+        pickAdConfig: emptyAdConfig,
+        attachPreRollAd: noopAttach,
+        patchVideoInline: noopFn,
+        attachPauseAudioCleanup: noopFn
+      };
+
+      Object.defineProperty(window, 'DPLAYER_PREROLL_AD', {
+        get() { return _dplayerPreroll; },
+        set(val) {
+          if (val && typeof val === 'object') {
+            try {
+              val.pickAdConfig = emptyAdConfig;
+              val.attachPreRollAd = noopAttach;
+            } catch (e) { }
+          }
+        },
+        configurable: true,
+        enumerable: true
+      });
+
+      const sanitizeDPlayerOptions = (opts) => {
+        if (!opts || typeof opts !== 'object') return opts;
+        try {
+          opts.ads_skip = 1;
+          opts.ads_duration = 0;
+          opts.video_player_ads = [];
+          opts.video_ads_url = '';
+          opts.ads_jump_url = '';
+          opts.ads_jump_time = -1;
+        } catch (e) { }
+        return opts;
+      };
+
+      let _DPlayer = window.DPlayer;
+      const wrapDPlayer = (DP) => {
+        if (!DP || DP._webshieldWrapped) return DP;
+        const WrappedDP = function (options) {
+          sanitizeDPlayerOptions(options);
+          return new DP(options);
+        };
+        WrappedDP.prototype = DP.prototype;
+        WrappedDP._webshieldWrapped = true;
+        return WrappedDP;
+      };
+
+      if (_DPlayer) {
+        window.DPlayer = wrapDPlayer(_DPlayer);
+      } else {
+        Object.defineProperty(window, 'DPlayer', {
+          configurable: true,
+          enumerable: true,
+          get() { return _DPlayer; },
+          set(val) { _DPlayer = wrapDPlayer(val); }
+        });
+      }
+    } catch (e) { }
+
     try {
       const dummyAdProvider = { push: function () { } };
       Object.defineProperty(window, 'AdProvider', {
@@ -1025,18 +1089,7 @@
       const target = e.target;
       if (!target) return;
 
-      // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
-      // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
-      // TUYỆT ĐỐI KHÔNG gọi preventDefault(), stopPropagation() hay can thiệp DOM!
-      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
-
-      let check = target;
-      while (check && check !== document && check !== document.body && check !== document.documentElement) {
-        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) return;
-        check = check.parentElement;
-      }
-
-      // Check if click is on an anchor tag outside player
+      // 1. Kiểm tra nếu click phát sinh từ thẻ liên kết <a> trỏ ra domain ngoài
       let curr = target;
       let anchor = null;
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
@@ -1047,6 +1100,43 @@
         curr = curr.parentElement;
       }
 
+      if (anchor && anchor.href) {
+        let isExternal = false;
+        try {
+          const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
+          const curHost = window.location.hostname.toLowerCase();
+          isExternal = targetHost && targetHost !== curHost && !targetHost.endsWith('.' + curHost);
+        } catch (err) {
+          isExternal = false;
+        }
+
+        // Nếu anchor trỏ ra ngoài và không thuộc whitelist (kể cả lót trong player hoặc bọc nút skip):
+        // CHẶN ĐỨNG 100% HÀNH VI NHẢY TRANG!
+        if (isExternal && !isWhitelisted(anchor.href)) {
+          const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+          const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
+          if (!checkNavigationOrPopup(anchor.href, contextName)) {
+            e.preventDefault();
+            e.stopPropagation();
+            reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
+            console.log('[Anti Pop-Under] Blocked click on ad anchor link:', anchor.href);
+            return;
+          }
+        }
+      }
+
+      // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
+      // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
+      // Cho qua các click điều khiển player tự nhiên (Play, Pause, Tua timeline, Âm lượng, Cài đặt)
+      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
+
+      let check = target;
+      while (check && check !== document && check !== document.body && check !== document.documentElement) {
+        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) return;
+        check = check.parentElement;
+      }
+
+      // Check if click is on an anchor tag outside player
       if (anchor && anchor.href) {
         if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor)) return;
 
@@ -1543,11 +1633,20 @@
       return originalOpen.apply(this, arguments);
     }
 
-    // Nếu thao tác phát sinh từ bên trong video player nội bộ (toggle fullscreen / external video provider)
+    // Nếu thao tác phát sinh từ bên trong video player nội bộ:
+    // Video player chân chính KHÔNG BAO GIỜ cần gọi window.open() mở domain bên ngoài!
     if (lastInteractionEvent && lastInteractionEvent.target && isInsideVideoPlayer(lastInteractionEvent.target)) {
-      // Chỉ chặn nếu URL đích là domain quảng cáo rác/cờ bạc đã biết
-      if (!url || (!gamblingRegex.test(url) && !adUrlRegex.test(url))) {
-        return originalOpen.apply(this, arguments);
+      let isExternal = false;
+      try {
+        const targetHost = new URL(url, window.location.href).hostname.toLowerCase();
+        const curHost = window.location.hostname.toLowerCase();
+        isExternal = targetHost && targetHost !== curHost && !targetHost.endsWith('.' + curHost);
+      } catch (e) {
+        isExternal = true;
+      }
+      if (isExternal && !isWhitelisted(url)) {
+        reportBlocked(url || 'blank', 'Blocked external popup/jump from video player click');
+        return createDummyWindow();
       }
     }
 
