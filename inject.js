@@ -1332,66 +1332,114 @@
     }
 
     // --- GENERIC TAP-TO-SHOW-CONTROLS FOR EMBEDDED PLAYER IFRAMES ---
-    // On mobile, there's no mouse hover. Users MUST tap to show timeline/progress bar.
-    // This adds universal tap-to-show-controls for ANY video player inside embedded iframes.
+    // On mobile, there's no mouse hover. Users tap to show timeline/progress bar.
+    // On desktop, hover is protected so cursor over timeline NEVER flickers or auto-hides.
     if (isEmbeddedPlayerFrame || window.self !== window.top) {
       function setupEmbeddedPlayerTapControls() {
+        function getPlayerContainer(vid) {
+          let el = vid.parentElement;
+          let fallback = null;
+          while (el && el !== document.body && el !== document.documentElement) {
+            const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+            const id = (typeof el.id === 'string') ? el.id.toLowerCase() : '';
+            if (
+              cls.includes('jwplayer') ||
+              cls.includes('fluid_video_wrapper') ||
+              cls.includes('video-js') ||
+              cls.includes('plyr') ||
+              cls.includes('dplayer') ||
+              cls.includes('art-video-player') ||
+              id.includes('player') ||
+              (cls.includes('player') && !cls.includes('play-') && !cls.includes('playback'))
+            ) {
+              return el;
+            }
+            if (!fallback && (cls.includes('wrapper') || cls.includes('media') || id.includes('video'))) {
+              fallback = el;
+            }
+            el = el.parentElement;
+          }
+          return fallback || vid.parentElement;
+        }
+
+        function findControlsContainer(playerContainer) {
+          if (!playerContainer) return null;
+          const selectors = [
+            '.fluid_controls_container',
+            '.jw-controls', '.jw-controlbar',
+            '.vjs-control-bar',
+            '.plyr__controls',
+            '.art-controls', '.art-bottom',
+            '.dplayer-controller',
+            '[class*="control-bar" i]', '[class*="controlbar" i]',
+            '[class*="controls" i]:not([class*="wrapper" i])',
+            '[class*="toolbar" i]'
+          ];
+          for (const sel of selectors) {
+            const ctrl = playerContainer.querySelector(sel);
+            if (ctrl) return ctrl;
+          }
+          return null;
+        }
+
         function initTapControls(vid) {
           if (!vid || vid._ws_tap_controls_attached) return;
           vid._ws_tap_controls_attached = true;
 
           let hideTimer = null;
           let controlsVisible = false;
+          let isHoveringControls = false;
+          let isHoveringPlayer = false;
+          let lastTapTime = 0;
 
-          // Find the closest player wrapper and its controls container
-          function findControlsContainer() {
-            const wrapper = vid.closest('[class*="player" i], [id*="player" i], [class*="video" i], [id*="video" i], [class*="wrapper" i]') || vid.parentElement;
-            if (!wrapper) return null;
+          const playerContainer = getPlayerContainer(vid);
 
-            // Try common control bar selectors across different players
-            const selectors = [
-              '.fluid_controls_container',
-              '.jw-controls', '.jw-controlbar',
-              '.vjs-control-bar',
-              '.plyr__controls',
-              '.art-controls', '.art-bottom',
-              '.dplayer-controller',
-              '[class*="control-bar" i]', '[class*="controlbar" i]',
-              '[class*="controls" i]:not([class*="wrapper" i])',
-              '[class*="toolbar" i]',
-              '[class*="progress" i]'
-            ];
-
-            for (const sel of selectors) {
-              const ctrl = wrapper.querySelector(sel);
-              if (ctrl) return ctrl;
+          function getCtrl() {
+            const container = getPlayerContainer(vid);
+            const ctrl = findControlsContainer(container);
+            if (ctrl && !ctrl._ws_hover_attached) {
+              ctrl._ws_hover_attached = true;
+              ctrl.addEventListener('mouseenter', () => {
+                isHoveringControls = true;
+                if (hideTimer) clearTimeout(hideTimer);
+                showControls();
+              }, { passive: true });
+              ctrl.addEventListener('mouseleave', () => {
+                isHoveringControls = false;
+                if (!vid.paused && !isHoveringPlayer) {
+                  scheduleAutoHide(2500);
+                }
+              }, { passive: true });
             }
-
-            // Try parent's controls
-            const parent = wrapper.parentElement;
-            if (parent) {
-              for (const sel of selectors) {
-                const ctrl = parent.querySelector(sel);
-                if (ctrl) return ctrl;
-              }
-            }
-
-            return null;
+            return ctrl;
           }
 
           function showControls() {
             controlsVisible = true;
-            const ctrl = findControlsContainer();
+            const container = getPlayerContainer(vid);
+            const ctrl = getCtrl();
             if (ctrl) {
-              // Show custom controls
               ctrl.style.setProperty('opacity', '1', 'important');
               ctrl.style.setProperty('visibility', 'visible', 'important');
               ctrl.style.setProperty('pointer-events', 'auto', 'important');
               ctrl.classList.remove('fade_out');
               ctrl.classList.add('fade_in');
-            } else {
-              // No custom controls found - enable native HTML5 controls
-              vid.setAttribute('controls', '');
+            }
+            // Wake up JWPlayer native active state
+            if (container && container.classList.contains('jwplayer')) {
+              container.classList.remove('jw-flag-user-inactive');
+              container.classList.add('jw-flag-user-active');
+              try {
+                if (typeof window.jwplayer === 'function') {
+                  const jw = window.jwplayer(container.id || 0);
+                  if (jw && typeof jw.userActive === 'function') jw.userActive();
+                }
+              } catch (e) {}
+            }
+            // Wake up VideoJS active state
+            if (container && container.classList.contains('video-js')) {
+              container.classList.remove('vjs-user-inactive');
+              container.classList.add('vjs-user-active');
             }
             try {
               vid.style.cursor = 'default';
@@ -1399,17 +1447,25 @@
           }
 
           function hideControls() {
-            if (vid.paused) return; // Keep controls visible when paused
+            // NEVER hide controls if video is paused or if cursor is hovering over controls/player!
+            if (vid.paused || isHoveringControls || isHoveringPlayer) return;
             controlsVisible = false;
-            const ctrl = findControlsContainer();
+            const container = getPlayerContainer(vid);
+            const ctrl = getCtrl();
             if (ctrl) {
-              ctrl.style.setProperty('opacity', '0', 'important');
-              ctrl.style.setProperty('visibility', 'hidden', 'important');
-              ctrl.style.setProperty('pointer-events', 'none', 'important');
+              ctrl.style.removeProperty('opacity');
+              ctrl.style.removeProperty('visibility');
+              ctrl.style.removeProperty('pointer-events');
               ctrl.classList.remove('fade_in');
               ctrl.classList.add('fade_out');
-            } else {
-              vid.removeAttribute('controls');
+            }
+            if (container && container.classList.contains('jwplayer')) {
+              container.classList.add('jw-flag-user-inactive');
+              container.classList.remove('jw-flag-user-active');
+            }
+            if (container && container.classList.contains('video-js')) {
+              container.classList.add('vjs-user-inactive');
+              container.classList.remove('vjs-user-active');
             }
             try {
               vid.style.cursor = 'none';
@@ -1418,26 +1474,29 @@
 
           function scheduleAutoHide(delayMs) {
             if (hideTimer) clearTimeout(hideTimer);
-            if (!vid.paused) {
+            if (!vid.paused && !isHoveringControls && !isHoveringPlayer) {
               hideTimer = setTimeout(hideControls, delayMs || 3500);
             }
           }
 
-          // TAP/CLICK handler - toggle controls visibility
+          // TAP/CLICK handler - toggles controls visibility on mobile or direct clicks
           function handleTap(e) {
             const target = e.target;
-            // If tapping on controls themselves, don't toggle - let controls handle it
-            if (target && target.closest && target.closest('[class*="control" i], [class*="progress" i], [class*="slider" i], [class*="volume" i], [class*="timeline" i], button, a, input, [class*="toolbar" i]')) {
-              scheduleAutoHide(4000);
+            // If clicking/tapping directly on controls (timeline, progress bar, sliders, buttons):
+            // KEEP CONTROLS VISIBLE! Never toggle hide!
+            if (target && target.closest && target.closest(
+              '[class*="control" i], [class*="progress" i], [class*="slider" i], ' +
+              '[class*="volume" i], [class*="timeline" i], [class*="rail" i], button, a, input, [class*="toolbar" i]'
+            )) {
+              if (hideTimer) clearTimeout(hideTimer);
+              scheduleAutoHide(4500);
               return;
             }
 
             if (controlsVisible && !vid.paused) {
-              // Controls are showing - hide them
               if (hideTimer) clearTimeout(hideTimer);
               hideControls();
             } else {
-              // Controls are hidden - show them
               showControls();
               scheduleAutoHide(3500);
             }
@@ -1446,35 +1505,46 @@
           // Listen for touch AND click events
           vid.addEventListener('click', handleTap, { passive: true });
           vid.addEventListener('touchend', (e) => {
-            // Prevent double-fire from touchend + click
-            e._ws_tap_handled = true;
+            const now = Date.now();
+            if (now - lastTapTime < 300) return;
+            lastTapTime = now;
             handleTap(e);
           }, { passive: true });
 
-          // Also handle taps on the wrapper (in case video doesn't fill 100%)
-          const wrapper = vid.closest('[class*="player" i], [id*="player" i], [class*="video" i], [id*="video" i], [class*="wrapper" i]') || vid.parentElement;
-          if (wrapper && wrapper !== vid) {
-            wrapper.addEventListener('click', (e) => {
-              if (e.target === wrapper || e.target === vid) {
+          // Also handle taps on the player background container
+          if (playerContainer && playerContainer !== vid) {
+            playerContainer.addEventListener('click', (e) => {
+              if (e.target === playerContainer || e.target === vid) {
                 handleTap(e);
               }
             }, { passive: true });
-          }
-
-          // Mouse movement (for desktop fallback inside iframe)
-          if (wrapper) {
-            wrapper.addEventListener('mousemove', () => {
-              showControls();
-              scheduleAutoHide(3000);
+            playerContainer.addEventListener('touchend', (e) => {
+              if (e.target === playerContainer || e.target === vid) {
+                const now = Date.now();
+                if (now - lastTapTime < 300) return;
+                lastTapTime = now;
+                handleTap(e);
+              }
             }, { passive: true });
 
-            wrapper.addEventListener('mouseleave', () => {
+            // Desktop hover protection on the player container:
+            // Entering player maintains visibility; leaving player schedules hide
+            playerContainer.addEventListener('mouseenter', () => {
+              isHoveringPlayer = true;
+              showControls();
+            }, { passive: true });
+
+            playerContainer.addEventListener('mouseleave', () => {
+              isHoveringPlayer = false;
+              isHoveringControls = false;
               if (!vid.paused) {
-                if (hideTimer) clearTimeout(hideTimer);
-                hideControls();
+                scheduleAutoHide(1500);
               }
             }, { passive: true });
           }
+
+          // Initial check for controls hover
+          getCtrl();
 
           // Video state listeners
           vid.addEventListener('pause', () => {
