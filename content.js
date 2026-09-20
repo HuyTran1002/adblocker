@@ -323,6 +323,17 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
+  /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
+  .jwplayer .jw-slider-volume {
+    display: none !important;
+  }
+  .jwplayer .jw-icon-volume:hover .jw-slider-volume,
+  .jwplayer .jw-slider-volume:hover,
+  .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
+  .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
+    display: block !important;
+  }
+
   /* === END PRE-BLOCK === */
 
   /* Đảm bảo html & body luôn nhận tương tác chuột bình thường */
@@ -2641,7 +2652,7 @@ if (window.location.hostname.includes('youtube.com')) {
           cursor: pointer !important;
         }
         /* Bảo vệ tuyệt đối danh sách tập phim, chọn server, thanh điều khiển video player */
-        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"], .ytp-chrome-bottom, .ytp-progress-bar, [class*="controls"], [class*="control-bar"], [class*="progress-bar"], [class*="seekbar"], [class*="volume-"]) {
+        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"], .ytp-chrome-bottom, .ytp-progress-bar, [class*="control-bar"], [class*="progress-bar"], [class*="seekbar"]) {
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;

@@ -1084,6 +1084,17 @@
           opacity: 1 !important;
           pointer-events: auto !important;
         }
+
+        /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
+        .jwplayer .jw-slider-volume {
+          display: none !important;
+        }
+        .jwplayer .jw-icon-volume:hover .jw-slider-volume,
+        .jwplayer .jw-slider-volume:hover,
+        .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
+        .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
+          display: block !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
