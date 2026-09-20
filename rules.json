@@ -1876,6 +1876,22 @@
     }
   },
   {
+    "id": 315,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*anyhtm3*",
+      "resourceTypes": [
+        "script",
+        "stylesheet",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
     "id": 9999,
     "priority": 100,
     "action": {

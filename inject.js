@@ -878,9 +878,6 @@
   function isInsideVideoPlayer(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
-      // Known ad overlays that inject inside player containers must NOT be protected
-      if (el.closest && el.closest('#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot')) return false;
-
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
       // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
       if (tag === 'video' || tag === 'audio' || tag === 'source' || tag === 'track') return true;
@@ -989,23 +986,11 @@
       style.id = 'webshield-player-styles';
       style.textContent = `
         /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
-        #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #popup-container,
-        #catfish-banner, .catfish-banner, .ad-banner, .banner-item {
+        #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #catfish-banner {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
           pointer-events: none !important;
-          height: 0 !important;
-        }
-
-        /* TokyoMotion & Tube Ad Overlays (anyhtm3 / VAST / clickjackers) */
-        #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll,
-        .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          width: 0 !important;
           height: 0 !important;
         }
       `;
@@ -1018,64 +1003,6 @@
   }
 
   if (!isYouTube) {
-    // --- UNIVERSAL PLAYER TAP-TO-WAKE (PASSIVE, NON-INVASIVE) ---
-    // Solves mobile player sleep/autoHide: tapping anywhere across the player area
-    // wakes the controls and progress bar via native 'userActive' and class reset.
-    function handlePlayerTap(e) {
-      // 1. Fullscreen bypass: In fullscreen mode, leave native player controls untouched
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
-
-      const target = e.target;
-      if (!target || target.nodeType !== 1) return;
-
-      // 2. Allow native control buttons, sliders, seekbar, volume, settings, links to process natively
-      if (target.closest && target.closest(
-        '.fluid_controls_container, [class*="controls" i], .fluid_button, ' +
-        'button, input, select, a, [role="button"], [class*="progress" i], [class*="slider" i]'
-      )) {
-        return;
-      }
-
-      // 3. Identify video and player wrapper
-      let video = null;
-      let wrapper = null;
-
-      if (target.tagName === 'VIDEO') {
-        video = target;
-        wrapper = target.parentElement;
-      } else if (target.closest) {
-        wrapper = target.closest('.fluid_video_wrapper, [class*="player" i], [id*="player" i], .video-js, .jwplayer, [data-player]');
-        if (wrapper) {
-          video = wrapper.querySelector('video');
-        }
-      }
-
-      if (!video) return;
-
-      // 4. Dispatch native 'userActive' to video element (wakes Fluid Player, JW Player, VideoJS)
-      try {
-        video.dispatchEvent(new CustomEvent('userActive', { bubbles: true }));
-      } catch (err) {}
-
-      // 5. Also ensure Fluid Player controls container transitions gracefully from fade_out to fade_in
-      try {
-        const parent = wrapper || video.parentElement;
-        if (parent) {
-          const controls = parent.querySelectorAll ? parent.querySelectorAll('.fluid_controls_container') : [];
-          controls.forEach(ctrl => {
-            if (ctrl.classList.contains('fade_out') || !ctrl.classList.contains('fade_in')) {
-              ctrl.classList.remove('fade_out');
-              ctrl.classList.add('fade_in');
-            }
-          });
-        }
-      } catch (err) {}
-    }
-
-    // Attach passively on pointerup and touchend (does not interfere with touch scrolling or dragging)
-    window.addEventListener('pointerup', handlePlayerTap, { passive: true, capture: false });
-    window.addEventListener('touchend', handlePlayerTap, { passive: true, capture: false });
-
     // Record user interaction timestamps passively without ever interfering with event flow
     ['pointerdown', 'keydown'].forEach(eventName => {
       window.addEventListener(eventName, (e) => {
@@ -1093,9 +1020,8 @@
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
       // Never block interactions when Target Picker mode is active on page
       if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
-      // In embedded player iframes or Fullscreen mode, allow 100% native player controls & clicks
+      // In embedded player iframes, allow 100% native player controls & progress bar clicks
       if (window.self !== window.top) return;
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
       const target = e.target;
       if (!target) return;
 
@@ -2319,17 +2245,21 @@
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
-        const targetSelectors = 'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, ytd-mealbar-promo-renderer, #feedback.ytd-enforcement-message-view-model';
+        const targetSelectors = 'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model';
         const targets = document.querySelectorAll(targetSelectors);
-        let removed = false;
+        let removedEnforcement = false;
 
         targets.forEach(el => {
-          const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
-          dialog.remove();
-          removed = true;
+          const dialog = el.closest('tp-yt-paper-dialog') || el;
+          try {
+            dialog.style.setProperty('display', 'none', 'important');
+            dialog.style.setProperty('visibility', 'hidden', 'important');
+            dialog.style.setProperty('pointer-events', 'none', 'important');
+          } catch (e) {}
+          removedEnforcement = true;
         });
 
-        // Suppress "Experiencing interruptions?" / "Bạn đang gặp sự cố khi phát video?" toasts
+        // Suppress "Experiencing interruptions?" toasts
         const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
         toasts.forEach(toast => {
           const text = (toast.textContent || '').toLowerCase();
@@ -2343,8 +2273,11 @@
             toast.querySelector('a[href*="answer"]') ||
             toast.querySelector('a[href*="support.google.com"]')
           ) {
-            toast.remove();
-            removed = true;
+            try {
+              toast.style.setProperty('display', 'none', 'important');
+              toast.style.setProperty('visibility', 'hidden', 'important');
+              toast.style.setProperty('pointer-events', 'none', 'important');
+            } catch (e) {}
           }
         });
 
@@ -2352,12 +2285,20 @@
         const errorScreen = document.querySelector('#error-screen.ytd-watch-flexy');
         if (errorScreen && errorScreen.style.display !== 'none') {
           errorScreen.style.setProperty('display', 'none', 'important');
-          removed = true;
+          removedEnforcement = true;
         }
 
-        if (removed) {
+        // Only restore body pointer-events/overflow if an enforcement dialog was actually hidden
+        // NEVER call video.play() here — it breaks user's ability to pause & seek!
+        if (removedEnforcement) {
           const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
-          backdrops.forEach(b => b.remove());
+          backdrops.forEach(b => {
+            try {
+              b.style.setProperty('display', 'none', 'important');
+              b.style.setProperty('visibility', 'hidden', 'important');
+              b.style.setProperty('pointer-events', 'none', 'important');
+            } catch (e) {}
+          });
 
           if (document.body) {
             document.body.style.setProperty('overflow', 'auto', 'important');
@@ -2366,11 +2307,6 @@
           if (document.documentElement) {
             document.documentElement.style.setProperty('overflow', 'auto', 'important');
             document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
-          }
-
-          const video = document.querySelector('video');
-          if (video && video.paused) {
-            video.play().catch(() => { });
           }
         }
       } catch (e) { }
@@ -2384,7 +2320,7 @@
       });
     } catch (e) { }
 
-    setInterval(scheduleClear, 2000);
+    setInterval(scheduleClear, 3000);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads

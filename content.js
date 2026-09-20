@@ -133,12 +133,13 @@ const adSelectors = [
   'a[aria-label*="Quảng cáo F8BET" i]',
   'a[aria-label*="Quảng cáo SC88" i]',
 
-  // Popup banners, overlays and catfish ads (qmhsexzc, phimmoi, stream sites)
-  '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner', '#popup-container',
-  '#catfish-banner', '.catfish-banner', '.banner-item',
+  // Popup banners, overlays and catfish ads (qmhsexzd, phimmoi, stream sites)
+  '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner',
+  '#popup-container', '.banner-item', '.ad-banner',
+  '#catfish-banner', '.catfish-banner',
   '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
   '.banner-popup', '.popup_banner', '.banner_popup',
-  // TokyoMotion & Tube Ad Overlays (anyhtm3 / VAST / clickjackers)
+  // TokyoMotion & Tube In-Player Ad Overlays
   '#nuevoa', '#anuevo', '#aclose', '.nva-center', '.nva-midroll',
   '.vast_clickthrough_layer', '.midroll_back', '.fluid_vpaid_slot'
 ];
@@ -279,7 +280,11 @@ function injectAdBlockCSS() {
   /* Block adcenter.cx iframes */
   iframe[src*="adcenter.cx"],
   img[src*="adcenter.cx"],
-  a[href*="adcenter.cx"] {
+  a[href*="adcenter.cx"],
+  /* TokyoMotion & Tube In-Player Ad Overlays & Popup Containers */
+  #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll,
+  .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot,
+  #popup-container, .banner-item, .ad-banner {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -1714,15 +1719,25 @@ if (window.location.hostname.includes('youtube.com')) {
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
     document.addEventListener('click', function(e) {
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return; // Fullscreen bypass: 100% native control in fullscreen
       if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
       if (!e.isTrusted) return; // Standard 2: Ignore untrusted/synthetic clicks
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       if (window.self !== window.top) return; // Allow 100% native clicks inside embedded video player iframes
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
 
       try {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
+
+        // Neutralize TokyoMotion & tube in-player ad overlay clickjackers (#nuevoa / .vast_clickthrough_layer)
+        const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot');
+        if (adOverlay) {
+          e.preventDefault();
+          e.stopPropagation();
+          adOverlay.remove();
+          console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay:', adOverlay);
+          return;
+        }
 
         // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
         // BẮT BUỘC: Nếu target hoặc bất kỳ phần tử cha nào thuộc về video player hay poster/nội dung phim:
@@ -1786,64 +1801,6 @@ if (window.location.hostname.includes('youtube.com')) {
         }
       } catch (err) {}
     }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
-
-    // --- UNIVERSAL PLAYER TAP-TO-WAKE (PASSIVE, NON-INVASIVE) ---
-    // Solves mobile player sleep/autoHide: tapping anywhere across the player area
-    // wakes the controls and progress bar via native 'userActive' and class reset.
-    function handlePlayerTap(e) {
-      // 1. Fullscreen bypass: In fullscreen mode, leave native player controls untouched
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
-
-      const target = e.target;
-      if (!target || target.nodeType !== 1) return;
-
-      // 2. Allow native control buttons, sliders, seekbar, volume, settings, links to process natively
-      if (target.closest && target.closest(
-        '.fluid_controls_container, [class*="controls" i], .fluid_button, ' +
-        'button, input, select, a, [role="button"], [class*="progress" i], [class*="slider" i]'
-      )) {
-        return;
-      }
-
-      // 3. Identify video and player wrapper
-      let video = null;
-      let wrapper = null;
-
-      if (target.tagName === 'VIDEO') {
-        video = target;
-        wrapper = target.parentElement;
-      } else if (target.closest) {
-        wrapper = target.closest('.fluid_video_wrapper, [class*="player" i], [id*="player" i], .video-js, .jwplayer, [data-player]');
-        if (wrapper) {
-          video = wrapper.querySelector('video');
-        }
-      }
-
-      if (!video) return;
-
-      // 4. Dispatch native 'userActive' to video element (wakes Fluid Player, JW Player, VideoJS)
-      try {
-        video.dispatchEvent(new CustomEvent('userActive', { bubbles: true }));
-      } catch (err) {}
-
-      // 5. Also ensure Fluid Player controls container transitions gracefully from fade_out to fade_in
-      try {
-        const parent = wrapper || video.parentElement;
-        if (parent) {
-          const controls = parent.querySelectorAll ? parent.querySelectorAll('.fluid_controls_container') : [];
-          controls.forEach(ctrl => {
-            if (ctrl.classList.contains('fade_out') || !ctrl.classList.contains('fade_in')) {
-              ctrl.classList.remove('fade_out');
-              ctrl.classList.add('fade_in');
-            }
-          });
-        }
-      } catch (err) {}
-    }
-
-    // Attach passively on pointerup and touchend (does not interfere with touch scrolling or dragging)
-    window.addEventListener('pointerup', handlePlayerTap, { passive: true, capture: false });
-    window.addEventListener('touchend', handlePlayerTap, { passive: true, capture: false });
 
     // --- MANUAL ELEMENT BLOCKER & TARGET MODE (Element Picker) ---
     let lastRightClickedElement = null;

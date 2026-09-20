@@ -604,56 +604,54 @@ if (chrome.runtime && chrome.runtime.onInstalled) {
 if (chrome.contextMenus && chrome.contextMenus.onClicked) {
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === "block_element") {
-    const sendToTab = (targetTabId) => {
-      if (!targetTabId) return;
-      const payload = {
-        type: "START_TARGET_PICKER",
-        info: {
-          srcUrl: info.srcUrl || null,
-          linkUrl: info.linkUrl || null,
-          frameUrl: info.frameUrl || null,
-          pageUrl: info.pageUrl || null,
-          mediaType: info.mediaType || null,
-          frameId: typeof info.frameId === 'number' ? info.frameId : 0
-        }
+      const sendToTab = (targetTabId) => {
+        if (!targetTabId) return;
+        const payload = {
+          type: "START_TARGET_PICKER",
+          info: {
+            srcUrl: info.srcUrl || null,
+            linkUrl: info.linkUrl || null,
+            frameUrl: info.frameUrl || null,
+            pageUrl: info.pageUrl || null,
+            mediaType: info.mediaType || null,
+            frameId: typeof info.frameId === 'number' ? info.frameId : 0
+          }
+        };
+
+        // Send to top frame
+        chrome.tabs.sendMessage(targetTabId, payload, { frameId: 0 }, (res) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            // If content script is not loaded in tab (e.g. opened before extension reload)
+            // Automatically inject content.js via scripting API!
+            if (chrome.scripting) {
+              chrome.scripting.executeScript({
+                target: { tabId: targetTabId },
+                files: ['content.js']
+              }).then(() => {
+                setTimeout(() => {
+                  chrome.tabs.sendMessage(targetTabId, payload, { frameId: 0 }, () => {
+                    const innerErr = chrome.runtime.lastError;
+                  });
+                }, 120);
+              }).catch((injectErr) => {
+                console.warn('[Anti Pop-Under] Could not inject content script:', injectErr);
+              });
+            }
+          }
+        });
       };
 
-      // Send to top frame
-      chrome.tabs.sendMessage(targetTabId, payload, { frameId: 0 }, (res) => {
-        const err = chrome.runtime.lastError;
-        if (err) {
-          // If content script is not loaded in tab (e.g. opened before extension reload)
-          // Automatically inject content.js via scripting API!
-          if (chrome.scripting) {
-            chrome.scripting.executeScript({
-              target: { tabId: targetTabId },
-              files: ['content.js']
-            }).then(() => {
-              setTimeout(() => {
-                chrome.tabs.sendMessage(targetTabId, payload, { frameId: 0 }, () => {
-                  const innerErr = chrome.runtime.lastError;
-                });
-              }, 120);
-            }).catch((injectErr) => {
-              console.warn('[Anti Pop-Under] Could not inject content script:', injectErr);
-            });
+      if (tab && tab.id) {
+        sendToTab(tab.id);
+      } else {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0] && tabs[0].id) {
+            sendToTab(tabs[0].id);
           }
-        }
-      });
-    };
-
-    if (tab && tab.id) {
-      sendToTab(tab.id);
-    } else {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs && tabs[0] && tabs[0].id) {
-          sendToTab(tabs[0].id);
-        }
-      });
+        });
+      }
     }
-  }
-});
+  });
 }
-
-
 
