@@ -1066,6 +1066,24 @@
           pointer-events: none !important;
           transition: visibility 0.5s ease, opacity 0.5s ease !important;
         }
+
+        /* Prevent loading overlay from blocking click to play/pause */
+        .vast_video_loading {
+          pointer-events: none !important;
+        }
+
+        /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
+        .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
+          opacity: 0 !important;
+          pointer-events: none !important;
+          transition: opacity 0.2s ease !important;
+        }
+        .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
+        .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
+        .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
+          opacity: 1 !important;
+          pointer-events: auto !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
@@ -1144,9 +1162,8 @@
           }
         }, { passive: true });
 
-        // 3. Smart Tap on Mobile / Touch
+        // 3. Touch interaction on Mobile / Tablets
         wrapper.addEventListener('touchstart', (e) => {
-          touchStartTime = Date.now();
           const target = e.target;
           if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
             isHoveringControls = true;
@@ -1157,30 +1174,39 @@
           isHoveringControls = false;
         }, { passive: true });
 
-        ['touchend', 'touchcancel'].forEach(evtType => {
-          wrapper.addEventListener(evtType, (e) => {
-            const target = e.target;
-            if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
-              scheduleAutoHide(3500);
-              return;
-            }
+        // 4. Click to Play / Pause GUARANTEE
+        // Direct click on video or player background ALWAYS toggles play / pause reliably!
+        let lastToggleTime = 0;
+        const handlePlayerToggle = (e) => {
+          const target = e.target;
+          // Nếu click vào thanh điều khiển hoặc nút chức năng (volume, timeline, subtitle, fullscreen): để controls tự xử lý
+          if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
+            scheduleAutoHide(3500);
+            return;
+          }
 
-            const tapDuration = Date.now() - touchStartTime;
-            if (tapDuration < 300) {
-              const isCurrentlyVisible = !ctrl.classList.contains('fade_out') && ctrl.style.visibility !== 'hidden';
-              if (isCurrentlyVisible && !vid.paused) {
-                // Tap to hide
-                if (hideTimer) clearTimeout(hideTimer);
-                hideControls();
-              } else {
-                // Tap to show
-                showControls();
-                scheduleAutoHide(3000);
-              }
-            } else {
-              scheduleAutoHide(3000);
-            }
-          }, { passive: true });
+          // Tránh double toggle do nhiều event (ví dụ pointerdown + click) cùng kích hoạt trong 250ms
+          const now = Date.now();
+          if (now - lastToggleTime < 250) return;
+          lastToggleTime = now;
+
+          if (vid.paused) {
+            try {
+              const p = vid.play();
+              if (p && p.catch) p.catch(() => {});
+            } catch (err) {}
+          } else {
+            try {
+              vid.pause();
+            } catch (err) {}
+          }
+        };
+
+        vid.addEventListener('click', handlePlayerToggle);
+        wrapper.addEventListener('click', (e) => {
+          if (e.target === wrapper || e.target === vid) {
+            handlePlayerToggle(e);
+          }
         });
 
         // 4. Video state listeners
@@ -1248,7 +1274,45 @@
       const target = e.target;
       if (!target) return;
 
-      // 1. Kiểm tra nếu click phát sinh từ thẻ liên kết <a> trỏ ra domain ngoài
+      // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video Player & Native Controls Pass-Through
+      // Nếu click trực tiếp vào <video>, <audio> hoặc các thành phần điều khiển player (controls, timeline, volume, play button, v.v.):
+      // RETURN NGAY LẬP TỨC để trình phát nhận 100% tương tác tự nhiên, tuyệt đối không can thiệp!
+      const tag = target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag === 'video' || tag === 'audio') return;
+
+      if (target.closest && target.closest(
+        '.fluid_controls_container, .vjs-control-bar, .jw-controls, [class*="control-bar"], ' +
+        '[class*="controls"], [class*="controller"], .ytp-chrome-bottom, .art-controls, ' +
+        '.dplayer-controller, [class*="play-btn"], [class*="btn-play"], [class*="play_btn"], ' +
+        '[class*="vjs-play-control"], [class*="jw-icon-playback"]'
+      )) {
+        return;
+      }
+
+      // Xử lý nếu click trúng lớp phủ quảng cáo trong player (VAST clickthrough layer, ad banners, v.v.):
+      const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, #catfish-banner, .popup-banner');
+      if (adOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { adOverlay.remove(); } catch (err) {}
+        console.log('[Anti Pop-Under] Intercepted and removed ad overlay:', adOverlay);
+        return;
+      }
+
+      // 2. Nhận diện nếu click phát sinh từ bên trong video player hoặc poster/nội dung phim
+      let inPlayer = isInsideVideoPlayer(target) || isMovieBannerOrPoster(target);
+      if (!inPlayer) {
+        let check = target;
+        while (check && check !== document && check !== document.body && check !== document.documentElement) {
+          if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) {
+            inPlayer = true;
+            break;
+          }
+          check = check.parentElement;
+        }
+      }
+
+      // 3. Kiểm tra xem click có nằm trong thẻ liên kết <a> hay không
       let curr = target;
       let anchor = null;
       while (curr && curr !== document && curr !== document.body && curr !== document.documentElement) {
@@ -1259,6 +1323,11 @@
         curr = curr.parentElement;
       }
 
+      // Nếu click thuộc video player hoặc poster phim và KHÔNG PHẢI là thẻ <a>:
+      // Cho qua 100% để người dùng thoải mái click play/pause, tua hay tương tác bình thường!
+      if (inPlayer && !anchor) return;
+
+      // 4. Nếu có thẻ <a>, kiểm tra hành vi nhảy trang popunder
       if (anchor && anchor.href) {
         let isExternal = false;
         try {
@@ -1269,45 +1338,28 @@
           isExternal = false;
         }
 
-        // Nếu anchor trỏ ra ngoài và không thuộc whitelist (kể cả lót trong player hoặc bọc nút skip):
-        // CHẶN ĐỨNG 100% HÀNH VI NHẢY TRANG!
+        // Nếu anchor trỏ ra ngoài và không thuộc whitelist:
         if (isExternal && !isWhitelisted(anchor.href)) {
           const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
           const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
           if (!checkNavigationOrPopup(anchor.href, contextName)) {
             e.preventDefault();
-            e.stopPropagation();
+            // Nếu click nằm bên trong player (ví dụ click vào khung video bị bọc anchor ngoài):
+            // Chỉ gọi preventDefault() để chặn nhảy trang, KHÔNG gọi stopPropagation()
+            // để sự kiện click vẫn truyền tới player thực hiện play/pause tự nhiên!
+            if (inPlayer) {
+              console.log('[Anti Pop-Under] Prevented ad jump inside player, passing click to player:', anchor.href);
+            } else {
+              e.stopPropagation();
+            }
             reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
             console.log('[Anti Pop-Under] Blocked click on ad anchor link:', anchor.href);
             return;
           }
         }
-      }
 
-      // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
-      // BẮT BUỘC: Nếu click phát sinh từ bên trong video player: RETURN NGAY LẬP TỨC!
-      // Cho qua các click điều khiển player tự nhiên (Play, Pause, Tua timeline, Âm lượng, Cài đặt)
-      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
-
-      let check = target;
-      while (check && check !== document && check !== document.body && check !== document.documentElement) {
-        if (isInsideVideoPlayer(check) || isMovieBannerOrPoster(check)) return;
-        check = check.parentElement;
-      }
-
-      // Check if click is on an anchor tag outside player
-      if (anchor && anchor.href) {
-        if (isInsideVideoPlayer(anchor) || isMovieBannerOrPoster(anchor)) return;
-
-        const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
-        const contextName = isTargetBlank ? 'anchor.click._blank' : 'anchor.click';
-        if (!checkNavigationOrPopup(anchor.href, contextName)) {
-          e.preventDefault();
-          e.stopPropagation();
-          reportBlocked(anchor.href, `Blocked popunder link click (${contextName})`);
-          console.log('[Anti Pop-Under] Blocked click on popunder link:', anchor.href);
-          return;
-        }
+        // Nếu anchor nằm trong player nhưng là link nội bộ (như đổi tập phim, chọn server): cho qua tự nhiên!
+        if (inPlayer) return;
       }
     }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
   }

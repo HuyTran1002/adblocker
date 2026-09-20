@@ -305,6 +305,24 @@ function injectAdBlockCSS() {
     transition: visibility 0.5s ease, opacity 0.5s ease !important;
   }
 
+  /* Prevent loading overlay from blocking click to play/pause */
+  .vast_video_loading {
+    pointer-events: none !important;
+  }
+
+  /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
+  .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.2s ease !important;
+  }
+  .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
+  .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
+  .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
   /* === END PRE-BLOCK === */
 
   /* Đảm bảo html & body luôn nhận tương tác chuột bình thường */
