@@ -397,7 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Static Core Rules (rules.json)
     const staticCountEl = document.getElementById("rules-static-count");
     if (staticCountEl) {
-      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 91;
+      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 102;
       staticCountEl.textContent = `${staticCount.toLocaleString()} quy tắc cốt lõi`;
     }
 

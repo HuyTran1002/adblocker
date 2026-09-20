@@ -299,12 +299,12 @@ async function updateOnlineFilters() {
     const appliedRegionalRules = domainCosmeticsCount + (counts.abpvn || 1076);
 
     const stats = {
-      staticDnrRules: 91,
+      staticDnrRules: 102,
       appliedAdDomains: appliedAdDomains,
       appliedDnrRules: appliedDnrRules,
       appliedCosmetics: appliedCosmetics,
       appliedRegionalRules: appliedRegionalRules,
-      totalAppliedRules: 91 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
+      totalAppliedRules: 102 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
       lastUpdated: Date.now()
     };
 
