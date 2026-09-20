@@ -296,6 +296,15 @@ function injectAdBlockCSS() {
     pointer-events: none !important;
   }
 
+  /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
+  .fluid_video_wrapper .fluid_controls_container.fade_out,
+  .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: visibility 0.5s ease, opacity 0.5s ease !important;
+  }
+
   /* === END PRE-BLOCK === */
 
   /* Đảm bảo html & body luôn nhận tương tác chuột bình thường */

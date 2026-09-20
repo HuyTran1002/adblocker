@@ -1057,6 +1057,15 @@
           pointer-events: none !important;
           height: 0 !important;
         }
+
+        /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
+        .fluid_video_wrapper .fluid_controls_container.fade_out,
+        .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          transition: visibility 0.5s ease, opacity 0.5s ease !important;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
@@ -1067,6 +1076,156 @@
   }
 
   if (!isYouTube) {
+    // --- FLUID PLAYER AUTO-HIDE & SMART TAP CONTROLLER ---
+    // Solves timeline auto-hide failure and missing tap-to-hide on TokyoMotion & Fluid Player v3.
+    function setupFluidPlayerAutoHide() {
+      function initPlayer(wrapper) {
+        if (!wrapper || wrapper._ws_autohide_attached) return;
+        wrapper._ws_autohide_attached = true;
+
+        const vid = wrapper.querySelector('video');
+        const ctrl = wrapper.querySelector('.fluid_controls_container');
+        if (!vid || !ctrl) return;
+
+        let hideTimer = null;
+        let isHoveringControls = false;
+        let touchStartTime = 0;
+
+        function showControls() {
+          ctrl.classList.remove('fade_out');
+          ctrl.classList.remove('initial_controls_show');
+          ctrl.classList.add('fade_in');
+          try {
+            vid.style.cursor = 'default';
+            wrapper.style.cursor = 'default';
+          } catch (e) {}
+        }
+
+        function hideControls() {
+          if (vid.paused || isHoveringControls) return;
+          ctrl.classList.remove('fade_in');
+          ctrl.classList.remove('initial_controls_show');
+          ctrl.classList.add('fade_out');
+          try {
+            vid.style.cursor = 'none';
+            wrapper.style.cursor = 'none';
+          } catch (e) {}
+        }
+
+        function scheduleAutoHide(delayMs) {
+          if (hideTimer) clearTimeout(hideTimer);
+          if (!vid.paused && !isHoveringControls) {
+            hideTimer = setTimeout(hideControls, delayMs || 3000);
+          }
+        }
+
+        // 1. Mouse movement (Desktop)
+        ['mousemove', 'pointermove'].forEach(evtType => {
+          wrapper.addEventListener(evtType, (e) => {
+            const target = e.target;
+            if (target && target.closest && target.closest('.fluid_controls_container')) {
+              isHoveringControls = true;
+              if (hideTimer) clearTimeout(hideTimer);
+              showControls();
+              return;
+            }
+            isHoveringControls = false;
+            showControls();
+            scheduleAutoHide(3000);
+          }, { passive: true });
+        });
+
+        // 2. Mouse leave player (Desktop)
+        wrapper.addEventListener('mouseleave', () => {
+          isHoveringControls = false;
+          if (hideTimer) clearTimeout(hideTimer);
+          if (!vid.paused) {
+            hideControls();
+          }
+        }, { passive: true });
+
+        // 3. Smart Tap on Mobile / Touch
+        wrapper.addEventListener('touchstart', (e) => {
+          touchStartTime = Date.now();
+          const target = e.target;
+          if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
+            isHoveringControls = true;
+            if (hideTimer) clearTimeout(hideTimer);
+            showControls();
+            return;
+          }
+          isHoveringControls = false;
+        }, { passive: true });
+
+        ['touchend', 'touchcancel'].forEach(evtType => {
+          wrapper.addEventListener(evtType, (e) => {
+            const target = e.target;
+            if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
+              scheduleAutoHide(3500);
+              return;
+            }
+
+            const tapDuration = Date.now() - touchStartTime;
+            if (tapDuration < 300) {
+              const isCurrentlyVisible = !ctrl.classList.contains('fade_out') && ctrl.style.visibility !== 'hidden';
+              if (isCurrentlyVisible && !vid.paused) {
+                // Tap to hide
+                if (hideTimer) clearTimeout(hideTimer);
+                hideControls();
+              } else {
+                // Tap to show
+                showControls();
+                scheduleAutoHide(3000);
+              }
+            } else {
+              scheduleAutoHide(3000);
+            }
+          }, { passive: true });
+        });
+
+        // 4. Video state listeners
+        vid.addEventListener('play', () => {
+          showControls();
+          scheduleAutoHide(3000);
+        }, { passive: true });
+
+        vid.addEventListener('pause', () => {
+          if (hideTimer) clearTimeout(hideTimer);
+          showControls();
+        }, { passive: true });
+
+        if (!vid.paused) {
+          scheduleAutoHide(3000);
+        }
+      }
+
+      // Scan existing wrappers
+      document.querySelectorAll('.fluid_video_wrapper').forEach(initPlayer);
+
+      // Observe dynamically created players
+      try {
+        const obs = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            for (const node of m.addedNodes) {
+              if (node.nodeType === 1) {
+                if (node.classList && node.classList.contains('fluid_video_wrapper')) {
+                  initPlayer(node);
+                } else if (node.querySelectorAll) {
+                  node.querySelectorAll('.fluid_video_wrapper').forEach(initPlayer);
+                }
+              }
+            }
+          }
+        });
+        obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+      } catch (e) {}
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupFluidPlayerAutoHide);
+    } else {
+      setupFluidPlayerAutoHide();
+    }
     // Record user interaction timestamps passively without ever interfering with event flow
     ['pointerdown', 'keydown'].forEach(eventName => {
       window.addEventListener(eventName, (e) => {
