@@ -1332,8 +1332,8 @@
     }
 
     // --- GENERIC TAP-TO-SHOW-CONTROLS FOR EMBEDDED PLAYER IFRAMES ---
-    // On mobile, there's no mouse hover. Users tap to show timeline/progress bar.
-    // On desktop, hover is protected so cursor over timeline NEVER flickers or auto-hides.
+    // On mobile: users tap to reveal timeline/progress bar and controls.
+    // On desktop: moving mouse shows controls; hovering timeline keeps them visible; idle mouse auto-hides cleanly.
     if (isEmbeddedPlayerFrame || window.self !== window.top) {
       function setupEmbeddedPlayerTapControls() {
         function getPlayerContainer(vid) {
@@ -1389,7 +1389,6 @@
           let hideTimer = null;
           let controlsVisible = false;
           let isHoveringControls = false;
-          let isHoveringPlayer = false;
           let lastTapTime = 0;
 
           const playerContainer = getPlayerContainer(vid);
@@ -1406,7 +1405,7 @@
               }, { passive: true });
               ctrl.addEventListener('mouseleave', () => {
                 isHoveringControls = false;
-                if (!vid.paused && !isHoveringPlayer) {
+                if (!vid.paused) {
                   scheduleAutoHide(2500);
                 }
               }, { passive: true });
@@ -1418,17 +1417,16 @@
             controlsVisible = true;
             const container = getPlayerContainer(vid);
             const ctrl = getCtrl();
-            if (ctrl) {
-              ctrl.style.setProperty('opacity', '1', 'important');
-              ctrl.style.setProperty('visibility', 'visible', 'important');
-              ctrl.style.setProperty('pointer-events', 'auto', 'important');
-              ctrl.classList.remove('fade_out');
-              ctrl.classList.add('fade_in');
-            }
-            // Wake up JWPlayer native active state
+
+            // 1. JWPlayer: use its native active flag and API without overriding CSS transitions
             if (container && container.classList.contains('jwplayer')) {
               container.classList.remove('jw-flag-user-inactive');
               container.classList.add('jw-flag-user-active');
+              if (ctrl) {
+                ctrl.style.removeProperty('opacity');
+                ctrl.style.removeProperty('visibility');
+                ctrl.style.removeProperty('pointer-events');
+              }
               try {
                 if (typeof window.jwplayer === 'function') {
                   const jw = window.jwplayer(container.id || 0);
@@ -1436,37 +1434,72 @@
                 }
               } catch (e) {}
             }
-            // Wake up VideoJS active state
-            if (container && container.classList.contains('video-js')) {
+            // 2. Fluid Player: use fade classes
+            else if (container && container.classList.contains('fluid_video_wrapper')) {
+              if (ctrl) {
+                ctrl.classList.remove('fade_out');
+                ctrl.classList.add('fade_in');
+              }
+            }
+            // 3. VideoJS: use native user-active class
+            else if (container && container.classList.contains('video-js')) {
               container.classList.remove('vjs-user-inactive');
               container.classList.add('vjs-user-active');
             }
+            // 4. Generic Player
+            else if (ctrl) {
+              ctrl.style.opacity = '1';
+              ctrl.style.visibility = 'visible';
+              ctrl.style.pointerEvents = 'auto';
+            }
+
             try {
               vid.style.cursor = 'default';
             } catch (e) {}
           }
 
           function hideControls() {
-            // NEVER hide controls if video is paused or if cursor is hovering over controls/player!
-            if (vid.paused || isHoveringControls || isHoveringPlayer) return;
+            // NEVER hide controls if video is paused or if cursor is hovering over controls/timeline!
+            if (vid.paused || isHoveringControls) return;
             controlsVisible = false;
             const container = getPlayerContainer(vid);
             const ctrl = getCtrl();
-            if (ctrl) {
-              ctrl.style.removeProperty('opacity');
-              ctrl.style.removeProperty('visibility');
-              ctrl.style.removeProperty('pointer-events');
-              ctrl.classList.remove('fade_in');
-              ctrl.classList.add('fade_out');
-            }
+
+            // 1. JWPlayer: allow native CSS inactive animation (slide-down + fade-out to 0)
             if (container && container.classList.contains('jwplayer')) {
               container.classList.add('jw-flag-user-inactive');
               container.classList.remove('jw-flag-user-active');
+              if (ctrl) {
+                ctrl.style.removeProperty('opacity');
+                ctrl.style.removeProperty('visibility');
+                ctrl.style.removeProperty('pointer-events');
+              }
+              try {
+                if (typeof window.jwplayer === 'function') {
+                  const jw = window.jwplayer(container.id || 0);
+                  if (jw && typeof jw.userInactive === 'function') jw.userInactive();
+                }
+              } catch (e) {}
             }
-            if (container && container.classList.contains('video-js')) {
+            // 2. Fluid Player
+            else if (container && container.classList.contains('fluid_video_wrapper')) {
+              if (ctrl) {
+                ctrl.classList.remove('fade_in');
+                ctrl.classList.add('fade_out');
+              }
+            }
+            // 3. VideoJS
+            else if (container && container.classList.contains('video-js')) {
               container.classList.add('vjs-user-inactive');
               container.classList.remove('vjs-user-active');
             }
+            // 4. Generic Player
+            else if (ctrl) {
+              ctrl.style.opacity = '0';
+              ctrl.style.visibility = 'hidden';
+              ctrl.style.pointerEvents = 'none';
+            }
+
             try {
               vid.style.cursor = 'none';
             } catch (e) {}
@@ -1474,8 +1507,8 @@
 
           function scheduleAutoHide(delayMs) {
             if (hideTimer) clearTimeout(hideTimer);
-            if (!vid.paused && !isHoveringControls && !isHoveringPlayer) {
-              hideTimer = setTimeout(hideControls, delayMs || 3500);
+            if (!vid.paused && !isHoveringControls) {
+              hideTimer = setTimeout(hideControls, delayMs || 3000);
             }
           }
 
@@ -1511,7 +1544,7 @@
             handleTap(e);
           }, { passive: true });
 
-          // Also handle taps on the player background container
+          // Also handle interactions on the player background container
           if (playerContainer && playerContainer !== vid) {
             playerContainer.addEventListener('click', (e) => {
               if (e.target === playerContainer || e.target === vid) {
@@ -1527,18 +1560,17 @@
               }
             }, { passive: true });
 
-            // Desktop hover protection on the player container:
-            // Entering player maintains visibility; leaving player schedules hide
-            playerContainer.addEventListener('mouseenter', () => {
-              isHoveringPlayer = true;
+            // Desktop mouse activity on the player:
+            // Moving mouse inside player reveals controls and schedules clean auto-hide
+            playerContainer.addEventListener('mousemove', () => {
               showControls();
+              scheduleAutoHide(3000);
             }, { passive: true });
 
             playerContainer.addEventListener('mouseleave', () => {
-              isHoveringPlayer = false;
               isHoveringControls = false;
               if (!vid.paused) {
-                scheduleAutoHide(1500);
+                scheduleAutoHide(1000);
               }
             }, { passive: true });
           }
