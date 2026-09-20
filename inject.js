@@ -2,12 +2,38 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
+  // --- EMBEDDED PLAYER IFRAME DETECTION ---
+  // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, vlstream.net),
+  // API overrides (getComputedStyle, offsetHeight, getBoundingClientRect, bait stubs, CSS injection)
+  // can break the player's internal click-to-pause and timeline controls.
+  // Detect and flag these frames so dangerous overrides are skipped.
+  const isEmbeddedPlayerFrame = (function () {
+    if (window.self === window.top) return false; // Top-level page, not an iframe
+    try {
+      const host = window.location.hostname.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      // Known embedded player domains
+      if (/streamvl|vlstream|play\.|embed\.|player\.|hls\.|stream\.|media\.|cdn\.|video\./.test(host)) return true;
+      // Common player URL patterns
+      if (/\/watch|\/embed\/|\/player\/|\/play\/|\/stream\/|\/hls\/|\/video\/|\/v\//.test(path)) return true;
+      // Has a video element already (very likely a player frame)
+      if (document.querySelector('video')) return true;
+    } catch (e) {}
+    return false;
+  })();
+
+  if (isEmbeddedPlayerFrame) {
+    console.log('[Anti Pop-Under] Detected embedded player iframe, skipping anti-adblock overrides to protect player:', window.location.hostname);
+  }
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function () {
     if (window.location.hostname.includes('youtube.com') ||
       window.location.hostname.includes('google') ||
       window.location.hostname.includes('doubleclick')) return;
+
+    // Skip ALL anti-adblock overrides in embedded player iframes to prevent breaking player controls
+    if (isEmbeddedPlayerFrame) return;
 
     // 1. Truthy & Falsy Anti-Adblock flags (Scriptlet set-constant emulation)
     const falsyProps = [
@@ -1048,54 +1074,95 @@
       if (document.getElementById('webshield-player-styles')) return;
       const style = document.createElement('style');
       style.id = 'webshield-player-styles';
-      style.textContent = `
-        /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
-        #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #catfish-banner {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          height: 0 !important;
-        }
 
-        /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
-        .fluid_video_wrapper .fluid_controls_container.fade_out,
-        .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transition: visibility 0.5s ease, opacity 0.5s ease !important;
-        }
+      // In embedded player iframes: ONLY inject Fluid Player & JWPlayer control styles (safe).
+      // Do NOT inject ad-blocking CSS (#popup-overlay, .vast_video_loading pointer-events:none)
+      // because these can hide or disable legitimate player UI elements inside the iframe.
+      if (isEmbeddedPlayerFrame) {
+        style.textContent = `
+          /* Fluid Player Controls & Timeline Auto-Hide Fix (safe for player iframes) */
+          .fluid_video_wrapper .fluid_controls_container.fade_out,
+          .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: visibility 0.5s ease, opacity 0.5s ease !important;
+          }
 
-        /* Prevent loading overlay from blocking click to play/pause */
-        .vast_video_loading {
-          pointer-events: none !important;
-        }
+          /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
+          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: opacity 0.2s ease !important;
+          }
+          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
+          .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
+          .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+          }
 
-        /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
-        .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transition: opacity 0.2s ease !important;
-        }
-        .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
-        .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
-        .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
-          opacity: 1 !important;
-          pointer-events: auto !important;
-        }
+          /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
+          .jwplayer .jw-slider-volume {
+            display: none !important;
+          }
+          .jwplayer .jw-icon-volume:hover .jw-slider-volume,
+          .jwplayer .jw-slider-volume:hover,
+          .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
+          .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
+            display: block !important;
+          }
+        `;
+      } else {
+        style.textContent = `
+          /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
+          #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #catfish-banner {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            height: 0 !important;
+          }
 
-        /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
-        .jwplayer .jw-slider-volume {
-          display: none !important;
-        }
-        .jwplayer .jw-icon-volume:hover .jw-slider-volume,
-        .jwplayer .jw-slider-volume:hover,
-        .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
-        .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
-          display: block !important;
-        }
-      `;
+          /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
+          .fluid_video_wrapper .fluid_controls_container.fade_out,
+          .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: visibility 0.5s ease, opacity 0.5s ease !important;
+          }
+
+          /* Prevent loading overlay from blocking click to play/pause */
+          .vast_video_loading {
+            pointer-events: none !important;
+          }
+
+          /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
+          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: opacity 0.2s ease !important;
+          }
+          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
+          .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
+          .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+          }
+
+          /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
+          .jwplayer .jw-slider-volume {
+            display: none !important;
+          }
+          .jwplayer .jw-icon-volume:hover .jw-slider-volume,
+          .jwplayer .jw-slider-volume:hover,
+          .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
+          .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
+            display: block !important;
+          }
+        `;
+      }
       (document.head || document.documentElement).appendChild(style);
     } catch (e) { }
   }
@@ -1263,6 +1330,200 @@
     } else {
       setupFluidPlayerAutoHide();
     }
+
+    // --- GENERIC TAP-TO-SHOW-CONTROLS FOR EMBEDDED PLAYER IFRAMES ---
+    // On mobile, there's no mouse hover. Users MUST tap to show timeline/progress bar.
+    // This adds universal tap-to-show-controls for ANY video player inside embedded iframes.
+    if (isEmbeddedPlayerFrame || window.self !== window.top) {
+      function setupEmbeddedPlayerTapControls() {
+        function initTapControls(vid) {
+          if (!vid || vid._ws_tap_controls_attached) return;
+          vid._ws_tap_controls_attached = true;
+
+          let hideTimer = null;
+          let controlsVisible = false;
+
+          // Find the closest player wrapper and its controls container
+          function findControlsContainer() {
+            const wrapper = vid.closest('[class*="player" i], [id*="player" i], [class*="video" i], [id*="video" i], [class*="wrapper" i]') || vid.parentElement;
+            if (!wrapper) return null;
+
+            // Try common control bar selectors across different players
+            const selectors = [
+              '.fluid_controls_container',
+              '.jw-controls', '.jw-controlbar',
+              '.vjs-control-bar',
+              '.plyr__controls',
+              '.art-controls', '.art-bottom',
+              '.dplayer-controller',
+              '[class*="control-bar" i]', '[class*="controlbar" i]',
+              '[class*="controls" i]:not([class*="wrapper" i])',
+              '[class*="toolbar" i]',
+              '[class*="progress" i]'
+            ];
+
+            for (const sel of selectors) {
+              const ctrl = wrapper.querySelector(sel);
+              if (ctrl) return ctrl;
+            }
+
+            // Try parent's controls
+            const parent = wrapper.parentElement;
+            if (parent) {
+              for (const sel of selectors) {
+                const ctrl = parent.querySelector(sel);
+                if (ctrl) return ctrl;
+              }
+            }
+
+            return null;
+          }
+
+          function showControls() {
+            controlsVisible = true;
+            const ctrl = findControlsContainer();
+            if (ctrl) {
+              // Show custom controls
+              ctrl.style.setProperty('opacity', '1', 'important');
+              ctrl.style.setProperty('visibility', 'visible', 'important');
+              ctrl.style.setProperty('pointer-events', 'auto', 'important');
+              ctrl.classList.remove('fade_out');
+              ctrl.classList.add('fade_in');
+            } else {
+              // No custom controls found - enable native HTML5 controls
+              vid.setAttribute('controls', '');
+            }
+            try {
+              vid.style.cursor = 'default';
+            } catch (e) {}
+          }
+
+          function hideControls() {
+            if (vid.paused) return; // Keep controls visible when paused
+            controlsVisible = false;
+            const ctrl = findControlsContainer();
+            if (ctrl) {
+              ctrl.style.setProperty('opacity', '0', 'important');
+              ctrl.style.setProperty('visibility', 'hidden', 'important');
+              ctrl.style.setProperty('pointer-events', 'none', 'important');
+              ctrl.classList.remove('fade_in');
+              ctrl.classList.add('fade_out');
+            } else {
+              vid.removeAttribute('controls');
+            }
+            try {
+              vid.style.cursor = 'none';
+            } catch (e) {}
+          }
+
+          function scheduleAutoHide(delayMs) {
+            if (hideTimer) clearTimeout(hideTimer);
+            if (!vid.paused) {
+              hideTimer = setTimeout(hideControls, delayMs || 3500);
+            }
+          }
+
+          // TAP/CLICK handler - toggle controls visibility
+          function handleTap(e) {
+            const target = e.target;
+            // If tapping on controls themselves, don't toggle - let controls handle it
+            if (target && target.closest && target.closest('[class*="control" i], [class*="progress" i], [class*="slider" i], [class*="volume" i], [class*="timeline" i], button, a, input, [class*="toolbar" i]')) {
+              scheduleAutoHide(4000);
+              return;
+            }
+
+            if (controlsVisible && !vid.paused) {
+              // Controls are showing - hide them
+              if (hideTimer) clearTimeout(hideTimer);
+              hideControls();
+            } else {
+              // Controls are hidden - show them
+              showControls();
+              scheduleAutoHide(3500);
+            }
+          }
+
+          // Listen for touch AND click events
+          vid.addEventListener('click', handleTap, { passive: true });
+          vid.addEventListener('touchend', (e) => {
+            // Prevent double-fire from touchend + click
+            e._ws_tap_handled = true;
+            handleTap(e);
+          }, { passive: true });
+
+          // Also handle taps on the wrapper (in case video doesn't fill 100%)
+          const wrapper = vid.closest('[class*="player" i], [id*="player" i], [class*="video" i], [id*="video" i], [class*="wrapper" i]') || vid.parentElement;
+          if (wrapper && wrapper !== vid) {
+            wrapper.addEventListener('click', (e) => {
+              if (e.target === wrapper || e.target === vid) {
+                handleTap(e);
+              }
+            }, { passive: true });
+          }
+
+          // Mouse movement (for desktop fallback inside iframe)
+          if (wrapper) {
+            wrapper.addEventListener('mousemove', () => {
+              showControls();
+              scheduleAutoHide(3000);
+            }, { passive: true });
+
+            wrapper.addEventListener('mouseleave', () => {
+              if (!vid.paused) {
+                if (hideTimer) clearTimeout(hideTimer);
+                hideControls();
+              }
+            }, { passive: true });
+          }
+
+          // Video state listeners
+          vid.addEventListener('pause', () => {
+            if (hideTimer) clearTimeout(hideTimer);
+            showControls();
+          }, { passive: true });
+
+          vid.addEventListener('play', () => {
+            showControls();
+            scheduleAutoHide(3000);
+          }, { passive: true });
+
+          vid.addEventListener('ended', () => {
+            if (hideTimer) clearTimeout(hideTimer);
+            showControls();
+          }, { passive: true });
+
+          console.log('[Anti Pop-Under] Embedded player tap-to-show-controls initialized for:', vid.src || vid.currentSrc || 'video element');
+        }
+
+        // Scan existing videos
+        document.querySelectorAll('video').forEach(initTapControls);
+
+        // Observe dynamically created videos
+        try {
+          const obs = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              for (const node of m.addedNodes) {
+                if (node.nodeType === 1) {
+                  if (node.tagName === 'VIDEO') {
+                    initTapControls(node);
+                  } else if (node.querySelectorAll) {
+                    node.querySelectorAll('video').forEach(initTapControls);
+                  }
+                }
+              }
+            }
+          });
+          obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+        } catch (e) {}
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupEmbeddedPlayerTapControls);
+      } else {
+        setupEmbeddedPlayerTapControls();
+      }
+    }
+
     // Record user interaction timestamps passively without ever interfering with event flow
     ['pointerdown', 'keydown'].forEach(eventName => {
       window.addEventListener(eventName, (e) => {
