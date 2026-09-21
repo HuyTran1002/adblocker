@@ -15,6 +15,25 @@
     return; // Completely inactive on sensitive/auth domains
   }
 
+  // Synchronous check: if WebShield is disabled globally or for this domain, exit immediately!
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
+        return; // Disabled globally or for this tab
+      }
+      const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+      if (rawDisabled) {
+        const disabledList = JSON.parse(rawDisabled);
+        if (Array.isArray(disabledList) && disabledList.some(d => currentHost === d || currentHost.endsWith('.' + d) || d.endsWith('.' + currentHost))) {
+          return; // Whitelisted domain
+        }
+      }
+    }
+    if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+      return;
+    }
+  } catch (e) {}
+
   // 91porn / 91porna Landing Modal Suppressor
   // Pre-seed localStorage key '__landing_modal_at__' with today's date (YYYY-MM-DD)
   // so the website's own common.js script skips showing #tip_modal and .modal-backdrop
@@ -56,7 +75,7 @@
       window.location.hostname.includes('google') ||
       window.location.hostname.includes('doubleclick')) return;
 
-    // Skip ALL anti-adblock overrides in embedded player iframes to prevent breaking player controls
+    // Skip ALL anti-adblock overrides in embedded player iframes or whitelisted pages to prevent breaking player controls
     if (isEmbeddedPlayerFrame) return;
 
     // 1. Truthy & Falsy Anti-Adblock flags (Scriptlet set-constant emulation)
@@ -165,13 +184,7 @@
       gaClassic: {},
       _gaq: { push: function (arr) { if (arr && arr[0] === '_setCallback' && typeof arr[1] === 'function') { try { arr[1](); } catch (e) { } } } },
       AdProvider: { push: function () { } },
-      VideoSlider: { init: function () { } },
-      univresalP: function () { },
       pickDirect: function () { console.log('[Anti Pop-Under] Blocked pickDirect ad overlay'); },
-      funcGetvastAdx: function () { return []; },
-      funcJWonReadyVAST: function () { },
-      COUNT_VAST: 0,
-      show_adx: 0,
       google: {
         ima: {
           AdDisplayContainer: function () { return { initialize: function () { }, destroy: function () { } }; },
@@ -199,138 +212,9 @@
     });
 
     try {
-      window.funcGetvastAdx = function () { return []; };
-      window.funcJWonReadyVAST = function () { };
-      window.COUNT_VAST = 0;
-      window.show_adx = 0;
-
-      // Safety stub for JWPlayer telemetry (jwpsrv)
-      if (!window.jwpsrv) {
-        const dummyJwpsrv = function () {
-          return {
-            track: function () { },
-            event: function () { },
-            send: function () { }
-          };
-        };
-        dummyJwpsrv.track = function () { };
-        dummyJwpsrv.event = function () { };
-        dummyJwpsrv.send = function () { };
-        dummyJwpsrv.setTracker = function () { };
-        window.jwpsrv = dummyJwpsrv;
-      }
-    } catch (e) { }
-
-    // Neutralize VideoJS preroll ad hijackings on video tube sites (e.g. 91porn, adult tube sites)
-    try {
-      const overrideVideoJsPreroll = (vjs) => {
-        if (!vjs || vjs._prerollNeutralized) return;
-        vjs._prerollNeutralized = true;
-        try {
-          if (vjs.Player && vjs.Player.prototype) {
-            vjs.Player.prototype.preroll = function () {
-              console.log('[Anti Pop-Under] Neutralized videojs preroll ad injection');
-              return this;
-            };
-          }
-          if (vjs.prototype) {
-            vjs.prototype.preroll = function () {
-              return this;
-            };
-          }
-        } catch (err) { }
-      };
-
-      if (window.videojs) {
-        overrideVideoJsPreroll(window.videojs);
-      } else {
-        let realVideoJs = window.videojs;
-        Object.defineProperty(window, 'videojs', {
-          configurable: true,
-          enumerable: true,
-          get() { return realVideoJs; },
-          set(val) {
-            realVideoJs = val;
-            overrideVideoJsPreroll(val);
-          }
-        });
-      }
-    } catch (e) { }
-
-    // Neutralize DPlayer pre-roll ad system (e.g. 51cg1.com and generic DPlayer video ads)
-    try {
-      const emptyAdConfig = () => null;
-      const noopAttach = (dp) => dp;
-      const noopFn = () => {};
-
-      let _dplayerPreroll = {
-        pickAdConfig: emptyAdConfig,
-        attachPreRollAd: noopAttach,
-        patchVideoInline: noopFn,
-        attachPauseAudioCleanup: noopFn
-      };
-
-      Object.defineProperty(window, 'DPLAYER_PREROLL_AD', {
-        get() { return _dplayerPreroll; },
-        set(val) {
-          if (val && typeof val === 'object') {
-            try {
-              val.pickAdConfig = emptyAdConfig;
-              val.attachPreRollAd = noopAttach;
-            } catch (e) { }
-          }
-        },
-        configurable: true,
-        enumerable: true
-      });
-
-      const sanitizeDPlayerOptions = (opts) => {
-        if (!opts || typeof opts !== 'object') return opts;
-        try {
-          opts.ads_skip = 1;
-          opts.ads_duration = 0;
-          opts.video_player_ads = [];
-          opts.video_ads_url = '';
-          opts.ads_jump_url = '';
-          opts.ads_jump_time = -1;
-        } catch (e) { }
-        return opts;
-      };
-
-      let _DPlayer = window.DPlayer;
-      const wrapDPlayer = (DP) => {
-        if (!DP || DP._webshieldWrapped) return DP;
-        const WrappedDP = function (options) {
-          sanitizeDPlayerOptions(options);
-          return new DP(options);
-        };
-        WrappedDP.prototype = DP.prototype;
-        WrappedDP._webshieldWrapped = true;
-        return WrappedDP;
-      };
-
-      if (_DPlayer) {
-        window.DPlayer = wrapDPlayer(_DPlayer);
-      } else {
-        Object.defineProperty(window, 'DPlayer', {
-          configurable: true,
-          enumerable: true,
-          get() { return _DPlayer; },
-          set(val) { _DPlayer = wrapDPlayer(val); }
-        });
-      }
-    } catch (e) { }
-
-    try {
       const dummyAdProvider = { push: function () { } };
       Object.defineProperty(window, 'AdProvider', {
         get() { return dummyAdProvider; },
-        set(val) { /* ignore */ },
-        configurable: true
-      });
-      const dummyVideoSlider = { init: function () { } };
-      Object.defineProperty(window, 'VideoSlider', {
-        get() { return dummyVideoSlider; },
         set(val) { /* ignore */ },
         configurable: true
       });
@@ -340,45 +224,15 @@
         configurable: true
       });
 
-      // Safety patch for jQuery .position() on movie sites (e.g. animevietsub home-v1.js:373)
-      // Prevents: "TypeError: Cannot read properties of undefined (reading 'top')" when active episode is not found
-      function patchJQuery(jq) {
-        if (jq && jq.fn && jq.fn.position && !jq.fn.position._safePatched) {
-          const origPos = jq.fn.position;
-          jq.fn.position = function () {
-            if (!this[0]) {
-              return { top: 0, left: 0 };
-            }
-            return origPos.apply(this, arguments) || { top: 0, left: 0 };
-          };
-          jq.fn.position._safePatched = true;
-        }
+      // Passive safety patch for jQuery .position() on animevietsub home-v1.js:373 without defining properties on window
+      if (window.jQuery && window.jQuery.fn && window.jQuery.fn.position && !window.jQuery.fn.position._safePatched) {
+        const origPos = window.jQuery.fn.position;
+        window.jQuery.fn.position = function () {
+          if (!this[0]) return { top: 0, left: 0 };
+          return origPos.apply(this, arguments) || { top: 0, left: 0 };
+        };
+        window.jQuery.fn.position._safePatched = true;
       }
-
-      let _jq = window.jQuery;
-      if (_jq) patchJQuery(_jq);
-      Object.defineProperty(window, 'jQuery', {
-        get() { return _jq; },
-        set(val) {
-          _jq = val;
-          patchJQuery(val);
-        },
-        configurable: true,
-        enumerable: true
-      });
-
-      let _dollar = window.$;
-      if (_dollar) patchJQuery(_dollar);
-      Object.defineProperty(window, '$', {
-        get() { return _dollar; },
-        set(val) {
-          _dollar = val;
-          patchJQuery(val);
-        },
-        configurable: true,
-        enumerable: true
-      });
-      // End mock globals
     } catch (e) { }
 
     function isAdUrl(urlStr) {
@@ -391,9 +245,9 @@
           'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo',
           'highperformancegate', 'highcpmgate', 'greatcpmgate', 'eclick.vn', 'novanet.vn',
           'magsrv.com', 'mnaspm.com', 'mayzaent.com', 'prplad.com', 'monetag.com', 'smartpop',
-          'ev-player.js', '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
+          '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
           'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip',
-          'ima3.js', 'vast.js', 'vpaid.js', 'trafficjunky', 'tsyndicate', 'a-ads.com'
+          'ima3.js', 'trafficjunky', 'tsyndicate', 'a-ads.com'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -560,6 +414,16 @@
   let initialData = undefined;
   let ytplayer = undefined;
   let extensionEnabled = true;
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__webshield_enabled__') === 'false') {
+      extensionEnabled = false;
+    }
+  } catch (e) {}
+  try {
+    if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+      extensionEnabled = false;
+    }
+  } catch (e) {}
   let contentScriptReady = false;
   const pendingReports = [];
   let lastInteractionTime = 0;
@@ -579,10 +443,26 @@
   function isCurrentPageWhitelisted() {
     try {
       const host = window.location.hostname.toLowerCase();
-      return whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain));
+      if (whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain))) {
+        return true;
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        if (sessionStorage.getItem('__webshield_enabled__') === 'false') return true;
+        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+        if (rawDisabled) {
+          const disabledList = JSON.parse(rawDisabled);
+          if (Array.isArray(disabledList) && disabledList.some(d => host === d || host.endsWith('.' + d) || d.endsWith('.' + host))) {
+            return true;
+          }
+        }
+      }
+      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+        return true;
+      }
     } catch (e) {
       return false;
     }
+    return false;
   }
 
   const blockedReportTimes = new Map();
@@ -718,446 +598,82 @@
     return false;
   }
 
-  if (!isYouTube) {
-    // --- FLUID PLAYER AUTO-HIDE & SMART TAP CONTROLLER ---
-    // Solves timeline auto-hide failure and missing tap-to-hide on TokyoMotion & Fluid Player v3.
-    function setupFluidPlayerAutoHide() {
-      function initPlayer(wrapper) {
-        if (!wrapper || wrapper._ws_autohide_attached) return;
-        wrapper._ws_autohide_attached = true;
-
-        const vid = wrapper.querySelector('video');
-        const ctrl = wrapper.querySelector('.fluid_controls_container');
-        if (!vid || !ctrl) return;
-
-        let hideTimer = null;
-        let isHoveringControls = false;
-        let touchStartTime = 0;
-
-        function showControls() {
-          ctrl.classList.remove('fade_out');
-          ctrl.classList.remove('initial_controls_show');
-          ctrl.classList.add('fade_in');
-          try {
-            vid.style.cursor = 'default';
-            wrapper.style.cursor = 'default';
-          } catch (e) {}
-        }
-
-        function hideControls() {
-          if (vid.paused || isHoveringControls) return;
-          ctrl.classList.remove('fade_in');
-          ctrl.classList.remove('initial_controls_show');
-          ctrl.classList.add('fade_out');
-          try {
-            vid.style.cursor = 'none';
-            wrapper.style.cursor = 'none';
-          } catch (e) {}
-        }
-
-        function scheduleAutoHide(delayMs) {
-          if (hideTimer) clearTimeout(hideTimer);
-          if (!vid.paused && !isHoveringControls) {
-            hideTimer = setTimeout(hideControls, delayMs || 3000);
-          }
-        }
-
-        // 1. Mouse movement (Desktop)
-        ['mousemove', 'pointermove'].forEach(evtType => {
-          wrapper.addEventListener(evtType, (e) => {
-            const target = e.target;
-            if (target && target.closest && target.closest('.fluid_controls_container')) {
-              isHoveringControls = true;
-              if (hideTimer) clearTimeout(hideTimer);
-              showControls();
-              return;
-            }
-            isHoveringControls = false;
-            showControls();
-            scheduleAutoHide(3000);
-          }, { passive: true });
-        });
-
-        // 2. Mouse leave player (Desktop)
-        wrapper.addEventListener('mouseleave', () => {
-          isHoveringControls = false;
-          if (hideTimer) clearTimeout(hideTimer);
-          if (!vid.paused) {
-            hideControls();
-          }
-        }, { passive: true });
-
-        // 3. Touch interaction on Mobile / Tablets
-        wrapper.addEventListener('touchstart', (e) => {
-          const target = e.target;
-          if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
-            isHoveringControls = true;
-            if (hideTimer) clearTimeout(hideTimer);
-            showControls();
-            return;
-          }
-          isHoveringControls = false;
-        }, { passive: true });
-
-        // 4. Click interaction on player:
-        // Fluid Player natively handles play/pause toggle when video is clicked.
-        // We only manage showing controls and scheduling auto-hide without calling vid.play()/vid.pause().
-        wrapper.addEventListener('click', (e) => {
-          const target = e.target;
-          if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
-            scheduleAutoHide(3500);
-            return;
-          }
-          showControls();
-          scheduleAutoHide(3000);
-        }, { passive: true });
-
-        // 4. Video state listeners
-        vid.addEventListener('play', () => {
-          showControls();
-          scheduleAutoHide(3000);
-        }, { passive: true });
-
-        vid.addEventListener('pause', () => {
-          if (hideTimer) clearTimeout(hideTimer);
-          showControls();
-        }, { passive: true });
-
-        if (!vid.paused) {
-          scheduleAutoHide(3000);
-        }
-      }
-
-      // Scan existing wrappers
-      document.querySelectorAll('.fluid_video_wrapper').forEach(initPlayer);
-
-      // Observe dynamically created players
-      try {
-        const obs = new MutationObserver((mutations) => {
-          for (const m of mutations) {
-            for (const node of m.addedNodes) {
-              if (node.nodeType === 1) {
-                if (node.classList && node.classList.contains('fluid_video_wrapper')) {
-                  initPlayer(node);
-                } else if (node.querySelectorAll) {
-                  node.querySelectorAll('.fluid_video_wrapper').forEach(initPlayer);
-                }
-              }
-            }
-          }
-        });
-        obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
-      } catch (e) {}
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', setupFluidPlayerAutoHide);
-    } else {
-      setupFluidPlayerAutoHide();
-    }
-
-    // --- GENERIC TAP-TO-SHOW-CONTROLS FOR EMBEDDED PLAYER IFRAMES ---
-    // On mobile: users tap to reveal timeline/progress bar and controls.
-    // On desktop: moving mouse shows controls; hovering timeline keeps them visible; idle mouse auto-hides cleanly.
-    if (isEmbeddedPlayerFrame || window.self !== window.top) {
-      function setupEmbeddedPlayerTapControls() {
-        function getPlayerContainer(vid) {
-          let el = vid.parentElement;
-          let fallback = null;
-          while (el && el !== document.body && el !== document.documentElement) {
-            const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-            const id = (typeof el.id === 'string') ? el.id.toLowerCase() : '';
-            if (
-              cls.includes('jwplayer') ||
-              cls.includes('fluid_video_wrapper') ||
-              cls.includes('video-js') ||
-              cls.includes('plyr') ||
-              cls.includes('dplayer') ||
-              cls.includes('art-video-player') ||
-              id.includes('player') ||
-              (cls.includes('player') && !cls.includes('play-') && !cls.includes('playback'))
-            ) {
-              return el;
-            }
-            if (!fallback && (cls.includes('wrapper') || cls.includes('media') || id.includes('video'))) {
-              fallback = el;
-            }
-            el = el.parentElement;
-          }
-          return fallback || vid.parentElement;
-        }
-
-        function findControlsContainer(playerContainer) {
-          if (!playerContainer) return null;
-          const selectors = [
-            '.fluid_controls_container',
-            '.jw-controls', '.jw-controlbar',
-            '.vjs-control-bar',
-            '.plyr__controls',
-            '.art-controls', '.art-bottom',
-            '.dplayer-controller',
-            '[class*="control-bar" i]', '[class*="controlbar" i]',
-            '[class*="controls" i]:not([class*="wrapper" i])',
-            '[class*="toolbar" i]'
-          ];
-          for (const sel of selectors) {
-            const ctrl = playerContainer.querySelector(sel);
-            if (ctrl) return ctrl;
-          }
-          return null;
-        }
-
-        function initTapControls(vid) {
-          if (!vid || vid._ws_tap_controls_attached) return;
-          vid._ws_tap_controls_attached = true;
-
-          let hideTimer = null;
-          let controlsVisible = false;
-          let isHoveringControls = false;
-          let lastTapTime = 0;
-
-          const playerContainer = getPlayerContainer(vid);
-
-          function getCtrl() {
-            const container = getPlayerContainer(vid);
-            const ctrl = findControlsContainer(container);
-            if (ctrl && !ctrl._ws_hover_attached) {
-              ctrl._ws_hover_attached = true;
-              ctrl.addEventListener('mouseenter', () => {
-                isHoveringControls = true;
-                if (hideTimer) clearTimeout(hideTimer);
-                showControls();
-              }, { passive: true });
-              ctrl.addEventListener('mouseleave', () => {
-                isHoveringControls = false;
-                if (!vid.paused) {
-                  scheduleAutoHide(2500);
-                }
-              }, { passive: true });
-            }
-            return ctrl;
-          }
-
-          function showControls() {
-            controlsVisible = true;
-            const container = getPlayerContainer(vid);
-            const ctrl = getCtrl();
-
-            // 1. JWPlayer: use its native active flag and API without overriding CSS transitions
-            if (container && container.classList.contains('jwplayer')) {
-              container.classList.remove('jw-flag-user-inactive');
-              container.classList.add('jw-flag-user-active');
-              if (ctrl) {
-                ctrl.style.removeProperty('opacity');
-                ctrl.style.removeProperty('visibility');
-                ctrl.style.removeProperty('pointer-events');
-              }
-              try {
-                if (typeof window.jwplayer === 'function') {
-                  const jw = window.jwplayer(container.id || 0);
-                  if (jw && typeof jw.userActive === 'function') jw.userActive();
-                }
-              } catch (e) {}
-            }
-            // 2. Fluid Player: use fade classes
-            else if (container && container.classList.contains('fluid_video_wrapper')) {
-              if (ctrl) {
-                ctrl.classList.remove('fade_out');
-                ctrl.classList.add('fade_in');
-              }
-            }
-            // 3. VideoJS: use native user-active class
-            else if (container && container.classList.contains('video-js')) {
-              container.classList.remove('vjs-user-inactive');
-              container.classList.add('vjs-user-active');
-            }
-            // 4. Generic Player
-            else if (ctrl) {
-              ctrl.style.opacity = '1';
-              ctrl.style.visibility = 'visible';
-              ctrl.style.pointerEvents = 'auto';
-            }
-
-            try {
-              vid.style.cursor = 'default';
-            } catch (e) {}
-          }
-
-          function hideControls() {
-            // NEVER hide controls if video is paused or if cursor is hovering over controls/timeline!
-            if (vid.paused || isHoveringControls) return;
-            controlsVisible = false;
-            const container = getPlayerContainer(vid);
-            const ctrl = getCtrl();
-
-            // 1. JWPlayer: allow native CSS inactive animation (slide-down + fade-out to 0)
-            if (container && container.classList.contains('jwplayer')) {
-              container.classList.add('jw-flag-user-inactive');
-              container.classList.remove('jw-flag-user-active');
-              if (ctrl) {
-                ctrl.style.removeProperty('opacity');
-                ctrl.style.removeProperty('visibility');
-                ctrl.style.removeProperty('pointer-events');
-              }
-              try {
-                if (typeof window.jwplayer === 'function') {
-                  const jw = window.jwplayer(container.id || 0);
-                  if (jw && typeof jw.userInactive === 'function') jw.userInactive();
-                }
-              } catch (e) {}
-            }
-            // 2. Fluid Player
-            else if (container && container.classList.contains('fluid_video_wrapper')) {
-              if (ctrl) {
-                ctrl.classList.remove('fade_in');
-                ctrl.classList.add('fade_out');
-              }
-            }
-            // 3. VideoJS
-            else if (container && container.classList.contains('video-js')) {
-              container.classList.add('vjs-user-inactive');
-              container.classList.remove('vjs-user-active');
-            }
-            // 4. Generic Player
-            else if (ctrl) {
-              ctrl.style.opacity = '0';
-              ctrl.style.visibility = 'hidden';
-              ctrl.style.pointerEvents = 'none';
-            }
-
-            try {
-              vid.style.cursor = 'none';
-            } catch (e) {}
-          }
-
-          function scheduleAutoHide(delayMs) {
-            if (hideTimer) clearTimeout(hideTimer);
-            if (!vid.paused && !isHoveringControls) {
-              hideTimer = setTimeout(hideControls, delayMs || 3000);
-            }
-          }
-
-          // TAP/CLICK handler - toggles controls visibility on mobile or direct clicks
-          function handleTap(e) {
-            const target = e.target;
-            // If clicking/tapping directly on controls (timeline, progress bar, sliders, buttons):
-            // KEEP CONTROLS VISIBLE! Never toggle hide!
-            if (target && target.closest && target.closest(
-              '[class*="control" i], [class*="progress" i], [class*="slider" i], ' +
-              '[class*="volume" i], [class*="timeline" i], [class*="rail" i], button, a, input, [class*="toolbar" i]'
-            )) {
-              if (hideTimer) clearTimeout(hideTimer);
-              scheduleAutoHide(4500);
-              return;
-            }
-
-            if (controlsVisible && !vid.paused) {
-              if (hideTimer) clearTimeout(hideTimer);
-              hideControls();
-            } else {
-              showControls();
-              scheduleAutoHide(3500);
-            }
-          }
-
-          // Listen for touch AND click events
-          vid.addEventListener('click', handleTap, { passive: true });
-          vid.addEventListener('touchend', (e) => {
-            const now = Date.now();
-            if (now - lastTapTime < 300) return;
-            lastTapTime = now;
-            handleTap(e);
-          }, { passive: true });
-
-          // Also handle interactions on the player background container
-          if (playerContainer && playerContainer !== vid) {
-            playerContainer.addEventListener('click', (e) => {
-              if (e.target === playerContainer || e.target === vid) {
-                handleTap(e);
-              }
-            }, { passive: true });
-            playerContainer.addEventListener('touchend', (e) => {
-              if (e.target === playerContainer || e.target === vid) {
-                const now = Date.now();
-                if (now - lastTapTime < 300) return;
-                lastTapTime = now;
-                handleTap(e);
-              }
-            }, { passive: true });
-
-            // Desktop mouse activity on the player:
-            // Moving mouse inside player reveals controls and schedules clean auto-hide
-            playerContainer.addEventListener('mousemove', () => {
-              showControls();
-              scheduleAutoHide(3000);
-            }, { passive: true });
-
-            playerContainer.addEventListener('mouseleave', () => {
-              isHoveringControls = false;
-              if (!vid.paused) {
-                scheduleAutoHide(1000);
-              }
-            }, { passive: true });
-          }
-
-          // Initial check for controls hover
-          getCtrl();
-
-          // Video state listeners
-          vid.addEventListener('pause', () => {
-            if (hideTimer) clearTimeout(hideTimer);
-            showControls();
-          }, { passive: true });
-
-          vid.addEventListener('play', () => {
-            showControls();
-            scheduleAutoHide(3000);
-          }, { passive: true });
-
-          vid.addEventListener('ended', () => {
-            if (hideTimer) clearTimeout(hideTimer);
-            showControls();
-          }, { passive: true });
-
-          console.log('[Anti Pop-Under] Embedded player tap-to-show-controls initialized for:', vid.src || vid.currentSrc || 'video element');
-        }
-
-        // Scan existing videos
-        document.querySelectorAll('video').forEach(initTapControls);
-
-        // Observe dynamically created videos
-        try {
-          const obs = new MutationObserver((mutations) => {
-            for (const m of mutations) {
-              for (const node of m.addedNodes) {
-                if (node.nodeType === 1) {
-                  if (node.tagName === 'VIDEO') {
-                    initTapControls(node);
-                  } else if (node.querySelectorAll) {
-                    node.querySelectorAll('video').forEach(initTapControls);
-                  }
-                }
-              }
-            }
-          });
-          obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
-        } catch (e) {}
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupEmbeddedPlayerTapControls);
-      } else {
-        setupEmbeddedPlayerTapControls();
-      }
-    }
-
-    // Record user interaction timestamps passively without ever interfering with event flow
+  // Record user interaction timestamps passively without ever interfering with event flow
     ['pointerdown', 'keydown'].forEach(eventName => {
       window.addEventListener(eventName, (e) => {
         lastInteractionTime = Date.now();
         lastInteractionEvent = e;
       }, { passive: true, capture: false });
     });
+
+  // --- MAIN WORLD JWPLAYER & HTML5 PLAYER TIMELINE GUARDIAN ---
+  // When user interacts with JWPlayer on movie websites, ensure jw-flag-user-inactive is removed
+  // and clicks cleanly toggle play/pause instead of getting stuck in an inactive state.
+  try {
+    document.addEventListener('click', (e) => {
+      try {
+        const jwEl = e.target && e.target.closest && e.target.closest('.jwplayer');
+        if (!jwEl) return;
+        
+        // Immediately remove user-inactive class so controls/timeline wake up
+        jwEl.classList.remove('jw-flag-user-inactive');
+
+        // If clicking on control bar, display icon, or menus, let native player handle it
+        if (e.target.closest('.jw-controlbar, .jw-display-icon-container, .jw-settings-menu, .jw-modal')) {
+          return;
+        }
+
+        // If clicking the video display area or background, toggle play/pause via JWPlayer API if available
+        if (typeof window.jwplayer === 'function') {
+          const id = jwEl.id;
+          if (id) {
+            const player = window.jwplayer(id);
+            if (player && typeof player.play === 'function' && typeof player.getState === 'function') {
+              const state = player.getState();
+              if (state === 'playing') {
+                player.pause();
+              } else if (state === 'paused' || state === 'idle') {
+                player.play();
+              }
+            }
+          }
+        }
+      } catch (err) {}
+    }, true);
+
+    // Mousemove wakeup for JWPlayer: removing jw-flag-user-inactive immediately reveals timeline
+    document.addEventListener('mousemove', (e) => {
+      try {
+        const jwEl = e.target && e.target.closest && e.target.closest('.jwplayer');
+        if (jwEl && jwEl.classList.contains('jw-flag-user-inactive')) {
+          jwEl.classList.remove('jw-flag-user-inactive');
+        }
+      } catch (err) {}
+    }, { passive: true, capture: true });
+  } catch (e) {}
+
+  // --- BODY POINTER-EVENTS & SCROLL GUARDIAN (MAIN WORLD) ---
+  function ensureBodyPointerEvents() {
+    if (!isEnabled() || isCurrentPageWhitelisted()) return;
+    try {
+      if (document.body) {
+        if (document.body.style.pointerEvents === 'none') {
+          document.body.style.setProperty('pointer-events', 'auto', 'important');
+        }
+        if (document.body.style.overflow === 'hidden') {
+          if (!document.querySelector('dialog[open], [role="dialog"]:not([style*="display: none"]), [aria-modal="true"]:not([style*="display: none"])')) {
+            document.body.style.overflow = '';
+            document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
+          }
+        }
+      }
+      if (document.documentElement) {
+        if (document.documentElement.style.pointerEvents === 'none') {
+          document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
+        }
+      }
+    } catch (e) {}
+  }
 
     // Handle user clicks in bubbling phase (capture: false)
     window.addEventListener('click', (e) => {
@@ -1166,6 +682,7 @@
 
       if (!e.isTrusted) return; // Standard 2: Validate isTrusted
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement) return;
       // Never block interactions when Target Picker mode is active on page
       if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
       // In embedded player iframes, allow 100% native player controls & progress bar clicks
@@ -1178,6 +695,18 @@
       // RETURN NGAY LẬP TỨC để trình phát nhận 100% tương tác tự nhiên, tuyệt đối không can thiệp!
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag === 'video' || tag === 'audio') return;
+
+      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
+
+      let checkPlayer = target;
+      while (checkPlayer && checkPlayer !== document.body && checkPlayer !== document.documentElement) {
+        if (isInsideVideoPlayer(checkPlayer) || isMovieBannerOrPoster(checkPlayer)) {
+          return;
+        }
+        checkPlayer = checkPlayer.parentElement;
+      }
+
+      if (target.querySelector && target.querySelector('video, audio')) return;
 
       if (target.closest && target.closest(
         '.fluid_controls_container, .vjs-control-bar, .jw-controls, [class*="control-bar"], ' +
@@ -1261,7 +790,6 @@
         if (inPlayer) return;
       }
     }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
-  }
 
   // Intercept natural form submissions (often used by popunder scripts on player clicks)
   if (!isYouTube) {
@@ -1287,16 +815,48 @@
 
   window.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'ANTI_POPUP_STATE_CHANGE') {
-      extensionEnabled = event.data.enabled;
+      extensionEnabled = event.data.enabled !== false;
       contentScriptReady = true;
-      flushPendingReports();
+      if (extensionEnabled) {
+        flushPendingReports();
+      }
     }
   });
+
+  try {
+    document.addEventListener('anti-popup-state-change', (e) => {
+      if (e.detail && typeof e.detail.enabled !== 'undefined') {
+        extensionEnabled = e.detail.enabled !== false;
+      }
+    });
+  } catch (e) {}
 
   // Request current state from content.js
   window.postMessage({ type: 'ANTI_POPUP_REQUEST_STATE' }, '*');
 
   function isEnabled() {
+    if (!extensionEnabled) return false;
+    try {
+      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+        extensionEnabled = false;
+        return false;
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
+          extensionEnabled = false;
+          return false;
+        }
+        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+        if (rawDisabled) {
+          const host = window.location.hostname.toLowerCase();
+          const disabledList = JSON.parse(rawDisabled);
+          if (Array.isArray(disabledList) && disabledList.some(d => host === d || host.endsWith('.' + d) || d.endsWith('.' + host))) {
+            extensionEnabled = false;
+            return false;
+          }
+        }
+      }
+    } catch (e) {}
     return extensionEnabled;
   }
 
@@ -1795,8 +1355,8 @@
       if (win.open !== customOpen) {
         Object.defineProperty(win, 'open', {
           value: customOpen,
-          writable: false,
-          configurable: false
+          writable: true,
+          configurable: true
         });
       }
     } catch (e) {
@@ -1809,8 +1369,8 @@
       if (win.Window && win.Window.prototype && win.Window.prototype.open !== customOpen) {
         Object.defineProperty(win.Window.prototype, 'open', {
           value: customOpen,
-          writable: false,
-          configurable: false
+          writable: true,
+          configurable: true
         });
       }
     } catch (e) { }
@@ -1944,8 +1504,8 @@
 
           return originalClick.apply(this, arguments);
         },
-        writable: false,
-        configurable: false
+        writable: true,
+        configurable: true
       });
     } catch (err) {
       HTMLAnchorElement.prototype.click = function () {
@@ -2024,8 +1584,8 @@
           }
           return originalSubmit.apply(this, arguments);
         },
-        writable: false,
-        configurable: false
+        writable: true,
+        configurable: true
       });
     } catch (err) {
       HTMLFormElement.prototype.submit = function () {
@@ -2044,6 +1604,7 @@
   // --- ADGUARD / UBLOCK ORIGIN NATIVE YOUTUBE AD ENGINE & DETECTION IMMUNITY ---
   function runYouTubeAdGuardEngine() {
     if (!window.location.hostname.includes('youtube.com')) return;
+    if (!isEnabled()) return;
 
     console.log('[WebShield] AdGuard Native YouTube Engine Active (Zero-Ad Architecture & Anti-Detection)');
 

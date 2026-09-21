@@ -232,8 +232,8 @@ async function updateOnlineFilters() {
       }
     });
 
-    // Save up to 2,000 clean global cosmetic selectors
-    const topCosmetics = Array.from(allGenericCosmetics).slice(0, 2000);
+    // Never apply un-scoped generic cosmetic selectors globally to avoid breaking legitimate website layouts
+    const topCosmetics = [];
     const domainCosmeticsCount = Object.keys(allDomainCosmetics).length;
 
     // Update dynamic rules: apply up to 50,000 distinct ad domains in chunks of 50
@@ -312,7 +312,7 @@ async function updateOnlineFilters() {
     await chrome.storage.local.set({
       lastFiltersUpdateTimestamp: Date.now(),
       onlineFilterStats: stats,
-      dynamicCosmeticFilters: topCosmetics,
+      dynamicCosmeticFilters: [],
       dynamicDomainCosmetics: allDomainCosmetics
     });
 
@@ -387,6 +387,8 @@ chrome.runtime.onInstalled.addListener(() => {
     if (res.customBlockedSelectors === undefined) {
       chrome.storage.local.set({ customBlockedSelectors: [] });
     }
+    // Cleanse any legacy un-scoped generic cosmetics from previous versions
+    chrome.storage.local.set({ dynamicCosmeticFilters: [] });
     if (res.onlineFilterStats === undefined) {
       chrome.storage.local.set({
         onlineFilterStats: {
@@ -485,16 +487,56 @@ function updateDeclarativeRules(disabledDomains) {
   }
 }
 
-// Update declarative ruleset state (enable/disable static ruleset)
-function updateRulesetState(enabled) {
-  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateEnabledRulesets) return;
-  chrome.declarativeNetRequest.updateEnabledRulesets({
-    [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
-  }, () => {
-    if (chrome.runtime.lastError) {
-      console.warn('[Anti Pop-Under] updateEnabledRulesets error:', chrome.runtime.lastError);
+// Update declarative ruleset state (enable/disable static ruleset and dynamic blocking rules)
+async function updateRulesetState(enabled) {
+  if (!chrome.declarativeNetRequest) return;
+  try {
+    if (chrome.declarativeNetRequest.updateEnabledRulesets) {
+      chrome.declarativeNetRequest.updateEnabledRulesets({
+        [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Anti Pop-Under] updateEnabledRulesets error:', chrome.runtime.lastError);
+        }
+      });
     }
-  });
+
+    const MASTER_BYPASS_RULE_ID = 10000;
+    if (!enabled) {
+      // Install top-priority allow-all dynamic rule to immediately bypass all dynamic blocking rules
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [MASTER_BYPASS_RULE_ID],
+        addRules: [{
+          id: MASTER_BYPASS_RULE_ID,
+          priority: 99999,
+          action: { type: "allow" },
+          condition: {
+            urlFilter: "*",
+            resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"]
+          }
+        }]
+      });
+      if (chrome.action && chrome.action.setBadgeText) {
+        chrome.action.setBadgeText({ text: "OFF" });
+        if (chrome.action.setBadgeBackgroundColor) {
+          chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
+        }
+      }
+    } else {
+      // Remove bypass rule and restore normal blocking
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [MASTER_BYPASS_RULE_ID]
+      });
+      if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
+      }
+      chrome.storage.local.get(["blockedCount"], (res) => {
+        updateBadge((res && res.blockedCount) || 0);
+      });
+    }
+  } catch (err) {
+    console.warn('[Anti Pop-Under] updateRulesetState notice:', err);
+  }
 }
 
 // Watch storage changes to update badge & dynamic allow rules
@@ -515,14 +557,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 // Initialize badge and declarative rules on startup
 chrome.storage.local.get(["blockedCount", "disabledDomains", "enabled", "lastFiltersUpdateTimestamp"], (result) => {
   if (result) {
-    if (result.blockedCount) {
-      updateBadge(result.blockedCount);
-    }
-    if (result.disabledDomains) {
-      updateDeclarativeRules(result.disabledDomains);
-    }
     const enabled = result.enabled !== false;
     updateRulesetState(enabled);
+    if (enabled) {
+      if (result.blockedCount) {
+        updateBadge(result.blockedCount);
+      }
+      if (result.disabledDomains) {
+        updateDeclarativeRules(result.disabledDomains);
+      }
+    }
 
     // Check if 24 hours have passed since last filter update
     const lastTime = result.lastFiltersUpdateTimestamp || 0;
@@ -541,8 +585,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const domain = sender.tab && sender.tab.url ? new URL(sender.tab.url).hostname : "Trang web";
     
     // Get and update count & history
-    chrome.storage.local.get(["blockedCount", "blockedHistory"], (result) => {
+    chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory"], (result) => {
       const res = result || {};
+      if (res.enabled === false) return;
       const currentCount = res.blockedCount || 0;
       const history = res.blockedHistory || [];
       
@@ -651,3 +696,91 @@ if (chrome.contextMenus && chrome.contextMenus.onClicked) {
   });
 }
 
+// =========================================================================
+// DECLARATIVE NET REQUEST (DNR) RULES SYNCHRONIZATION
+// =========================================================================
+
+async function syncDnrRuleset(isEnabled) {
+  if (typeof chrome === 'undefined' || !chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateEnabledRulesets) return;
+  try {
+    if (isEnabled) {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+        enableRulesetIds: ['ruleset_1']
+      });
+      console.log('[Anti Pop-Under] DNR static ruleset enabled');
+    } else {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+        disableRulesetIds: ['ruleset_1']
+      });
+      console.log('[Anti Pop-Under] DNR static ruleset disabled (protection paused)');
+    }
+  } catch (e) {
+    console.warn('[Anti Pop-Under] syncDnrRuleset error:', e);
+  }
+}
+
+async function syncDnrWhitelist(disabledDomains) {
+  if (typeof chrome === 'undefined' || !chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) return;
+  try {
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const ruleIdsToRemove = (existingRules || [])
+      .filter(r => r.id >= 990000 && r.id < 999990)
+      .map(r => r.id);
+
+    const newRules = [];
+    if (Array.isArray(disabledDomains) && disabledDomains.length > 0) {
+      const cleanDomains = disabledDomains
+        .map(d => (d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+        .filter(d => d && d.includes('.'));
+
+      if (cleanDomains.length > 0) {
+        newRules.push({
+          id: 990001,
+          priority: 999999,
+          action: { type: 'allowAllRequests' },
+          condition: {
+            initiatorDomains: cleanDomains,
+            resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other']
+          }
+        });
+        newRules.push({
+          id: 990002,
+          priority: 999999,
+          action: { type: 'allow' },
+          condition: {
+            requestDomains: cleanDomains,
+            resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other']
+          }
+        });
+      }
+    }
+
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: ruleIdsToRemove,
+      addRules: newRules
+    });
+    console.log('[Anti Pop-Under] Synced DNR whitelist dynamic rules:', newRules.length);
+  } catch (e) {
+    console.warn('[Anti Pop-Under] syncDnrWhitelist error:', e);
+  }
+}
+
+// Watch storage changes to dynamically toggle DNR rulesets and whitelisted domains
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local') {
+    if (changes.enabled) {
+      syncDnrRuleset(changes.enabled.newValue !== false);
+    }
+    if (changes.disabledDomains) {
+      syncDnrWhitelist(changes.disabledDomains.newValue || []);
+    }
+  }
+});
+
+// Initial boot synchronization
+chrome.storage.local.get(['enabled', 'disabledDomains'], (res) => {
+  if (res) {
+    syncDnrRuleset(res.enabled !== false);
+    syncDnrWhitelist(res.disabledDomains || []);
+  }
+});

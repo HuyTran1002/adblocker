@@ -4,6 +4,26 @@ console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfull
 
 
 // Skip sensitive authentication, identity provider, developer portal, and extension store domains
+let currentEnabledState = true;
+try {
+  if (typeof sessionStorage !== 'undefined') {
+    if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
+      currentEnabledState = false;
+    }
+    const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+    if (rawDisabled) {
+      const parsed = JSON.parse(rawDisabled);
+      const host = window.location.hostname.toLowerCase();
+      if (Array.isArray(parsed) && parsed.some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host))) {
+        currentEnabledState = false;
+      }
+    }
+    if (document.documentElement && !currentEnabledState) {
+      document.documentElement.setAttribute('data-anti-popunder-enabled', 'false');
+    }
+  }
+} catch (e) {}
+
 const SENSITIVE_DOMAINS = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
@@ -102,7 +122,7 @@ const adSelectors = [
   // Adult ad network tags (ExoClick, Monetag, PropellerAds) & anti-adblock overlays
   'ins[data-zoneid]', 'ins[class*="eas"]',
   'iframe[src*="smartpop"]', 'iframe[src*="mnaspm"]', 'iframe[src*="mayzaent"]',
-  'iframe[src*="magsrv"]', 'iframe[src*="prplad"]', '#adbd', '.overdiv:not([class*="player"] *):not(video)',
+  'iframe[src*="magsrv"]', 'iframe[src*="prplad"]', '#adbd',
 
   // VnSexTop1 & Adspro network banners
   '#popBannerAds', '#topBannerContainer', '#bottomBannerContainer', '#underPlayerAdsContainer',
@@ -136,10 +156,6 @@ const adSelectors = [
   // Mflix.store & streaming site popup overlays and catfish ads
   '.preload_popup', '.preload_ads', '.close-preload-ads',
   '.cashfish-ads', '.close-cashfish-ads', 'a.btn-popup-click',
-  'div[style*="z-index:99999999"]:not([class*="player"] *):not(video):not([class*="art-"]):not([class*="vjs-"]):not([class*="plyr"]):not([class*="jw-"]):not([class*="dplayer"])',
-  'div[style*="z-index: 99999999"]:not([class*="player"] *):not(video):not([class*="art-"]):not([class*="vjs-"]):not([class*="plyr"]):not([class*="jw-"]):not([class*="dplayer"])',
-  'div[style*="z-index:2147483647"]:not([class*="player"] *):not(video):not([class*="art-"]):not([class*="vjs-"]):not([class*="plyr"]):not([class*="jw-"]):not([class*="dplayer"])',
-  'div[style*="z-index: 2147483647"]:not([class*="player"] *):not(video):not([class*="art-"]):not([class*="vjs-"]):not([class*="plyr"]):not([class*="jw-"]):not([class*="dplayer"])',
 
   // Tramphim headers and floating ad banners
   'aside[aria-label*="Quảng cáo" i]',
@@ -150,8 +166,8 @@ const adSelectors = [
   'a[aria-label*="Quảng cáo SC88" i]',
 
   // Popup banners, overlays and catfish ads (qmhsexzd, phimmoi, stream sites)
-  '#popup-overlay:not([class*="player"] *):not(video)', '.popup-grid', '.popup-banner',
-  '#popup-container', '.banner-item', '.ad-banner',
+  '.popup-grid', '.popup-banner',
+  '#popup-container', '.ad-banner',
   '#catfish-banner', '.catfish-banner',
   '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
   '.banner-popup', '.popup_banner', '.banner_popup',
@@ -236,7 +252,7 @@ function injectAdBlockCSS() {
   video[src*="juicyads"], video[src*="9splt.com"], video[src*="cm8806.com"],
   video[src*="vast"], video[src*="vpaid"], video[src*="/ads/"], video[src*="preroll"],
   video[src*="midroll"], video[src*="postroll"], video[src*="streamux.top"],
-  video[src*="/static/media/pc-"], video[src*="/static/media/"] {
+  video[src*="/static/media/pc-"] {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
@@ -263,91 +279,42 @@ function injectAdBlockCSS() {
   div[data-pagelet*="FeedUnit"]:has(span[aria-label*="Sponsored" i]),
   div[data-testid="cellInnerDiv"]:has(svg + span:is([aria-label*="Sponsored" i], [aria-label*="Ad" i])),
   shreddit-post:has(shreddit-comment-badge[badge-type="sponsored"]),
-  div:has(> a[href*="/quang-cao/"]),
-  div:has(> a[href*="/ad-click/"]),
-  section:has(> [class*="sponsor-label"]),
-  div:has(> a[href*="bit.ly/"][rel*="sponsored"]),
-  div:has(> a[href*="shbet"]),
-  div:has(> a[href*="f8bet"]),
-  div:has(> a[href*="789bet"]),
-  div:has(> a.no-ads-under),
-  div:has(> button[aria-label*="hide ads" i]),
-  div:has(> button[aria-label*="hide all ads" i]),
-  div:has(> button[aria-label*="topfish" i]),
-  div:has(> button[aria-label*="catfish" i]),
-  div:has(> a[href*="adqc"]),
-  div:has(> a[href*="6789x"]),
-  div:has(> a[href*="gem88"]),
-  div:has(> a[href*="net88"]),
-  div:has(> a[href*="uk88"]),
-  div:has(> a[href*="rikvip"]),
-  div:has(> a[href*="rikvipchinhhang"]),
-  div:has(> a[href*="bom88"]),
-  div:has(> a[href*="cm88"]),
-  div:has(> a[href*="vsbet"]),
-  div:has(> a[href*="musicskins"]),
-  /* motphimc.app PopupAd - Radix UI Dialog overlay (z-[9998]) and modal (z-[9999]) */
-  [data-state="open"][class*="z-[9998]"],
-  [data-state="open"][class*="z-[9999]"],
-  [data-radix-popper-content-wrapper],
-  /* Popup dialog containing gambling/ad links */
-  [role="dialog"]:has(a[href*="rikvip"]),
-  [role="dialog"]:has(a[href*="rikvipchinhhang"]),
-  [role="dialog"]:has(a[href*="adcenter"]),
-  [role="dialog"]:has(a[href*="78win"]),
-  [role="dialog"]:has(img[src*="adcenter"]),
-  [aria-modal="true"]:has(a[href*="rikvip"]),
-  [aria-modal="true"]:has(a[href*="rikvipchinhhang"]),
-  /* Block adcenter.cx iframes */
+  a[href*="/quang-cao/"],
+  a[href*="/ad-click/"],
+  [class*="sponsor-label"],
+  a[href*="bit.ly/"][rel*="sponsored"],
+  a[href*="shbet"],
+  a[href*="f8bet"],
+  a[href*="789bet"],
+  a.no-ads-under,
+  button[aria-label*="hide ads" i],
+  button[aria-label*="hide all ads" i],
+  button[aria-label*="topfish" i],
+  button[aria-label*="catfish" i],
+  a[href*="adqc"],
+  a[href*="6789x"],
+  a[href*="gem88"],
+  a[href*="net88"],
+  a[href*="uk88"],
+  a[href*="rikvip"],
+  a[href*="rikvipchinhhang"],
+  a[href*="bom88"],
+  a[href*="cm88"],
+  a[href*="vsbet"],
+  a[href*="musicskins"],
+  a[href*="78win"],
+  /* Block adcenter.cx iframes & links */
   iframe[src*="adcenter.cx"],
   img[src*="adcenter.cx"],
   a[href*="adcenter.cx"],
   /* TokyoMotion & Tube In-Player Ad Overlays & Popup Containers */
   #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll,
   .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot,
-  #popup-container, .banner-item, .ad-banner {
+  #popup-container, .ad-banner {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
     pointer-events: none !important;
-  }
-
-  /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
-  .fluid_video_wrapper .fluid_controls_container.fade_out,
-  .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: visibility 0.5s ease, opacity 0.5s ease !important;
-  }
-
-  /* Prevent loading overlay from blocking click to play/pause */
-  .vast_video_loading {
-    pointer-events: none !important;
-  }
-
-  /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
-  .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: opacity 0.2s ease !important;
-  }
-  .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
-  .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
-  .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
-
-  /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
-  .jwplayer .jw-slider-volume {
-    display: none !important;
-  }
-  .jwplayer .jw-icon-volume:hover .jw-slider-volume,
-  .jwplayer .jw-slider-volume:hover,
-  .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
-  .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
-    display: block !important;
   }
 
   /* Off-screen bait stubs styling for anti-adblock detection stubs (100% CSP safe, zero inline styles) */
@@ -379,28 +346,96 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Con trỏ pointer chỉ ép lên iframe trình phát */
-  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
+  /* === IRON-CLAD VIDEO PLAYER & TIMELINE PASS-THROUGH GUARANTEE === */
+  /* 1. Transparent container overlays must allow clicks to pass through naturally to the underlying video */
+  .jwplayer .jw-overlays,
+  .jwplayer .jw-controls,
+  .jwplayer .jw-captions,
+  .jwplayer .jw-title,
+  .jwplayer .jw-shortcuts-tooltip,
+  .video-js .vjs-text-track-display,
+  .artplayer .art-layers {
+    pointer-events: none !important;
+  }
+
+  /* 2. Video elements & media background must directly receive mouse & click events */
+  video, audio,
+  .jwplayer video,
+  .jwplayer .jw-media,
+  .jwplayer .jw-aspect,
+  .jwplayer .jw-preview,
+  .video-js video,
+  .video-js .vjs-tech,
+  .video-js .vjs-poster,
+  .artplayer video,
+  .artplayer .art-video-player,
+  .artplayer .art-mask,
+  .dplayer video,
+  .dplayer .dplayer-video-wrap,
+  .plyr video,
+  .xgplayer video,
+  .fluid_player video,
+  [class*="player" i] video,
+  [id*="player" i] video {
+    pointer-events: auto !important;
+  }
+
+  /* Automatically hide mouse cursor when player is inactive (watching movie with resting mouse) */
+  .jwplayer.jw-flag-user-inactive,
+  .jwplayer.jw-flag-user-inactive *,
+  .video-js.vjs-user-inactive,
+  .video-js.vjs-user-inactive *,
+  .artplayer.art-inactive,
+  .artplayer.art-inactive *,
+  .dplayer.dplayer-hide-controller,
+  .dplayer.dplayer-hide-controller * {
+    cursor: none !important;
+  }
+
+  /* 3. Player control bars, buttons, timeline seekbars must receive 100% user interactions */
+  .jwplayer .jw-controlbar,
+  .jwplayer .jw-controlbar *,
+  .jwplayer .jw-display-icon-container,
+  .jwplayer .jw-display-icon-container *,
+  .jwplayer .jw-settings-menu,
+  .jwplayer .jw-settings-menu *,
+  .video-js .vjs-control-bar,
+  .video-js .vjs-control-bar *,
+  .artplayer .art-controls,
+  .artplayer .art-controls *,
+  .dplayer .dplayer-controller,
+  .dplayer .dplayer-controller *,
+  .dplayer .dplayer-bar-wrap,
+  .dplayer .dplayer-bar-wrap *,
+  .plyr .plyr__controls,
+  .plyr .plyr__controls *,
+  [class*="control-bar" i], [class*="control-bar" i] *,
+  [class*="progress-bar" i], [class*="progress-bar" i] *,
+  [class*="seekbar" i], [class*="seekbar" i] * {
+    pointer-events: auto !important;
     cursor: pointer !important;
   }
 
-  /* Bảo vệ tuyệt đối iframe trình phát phim */
-  iframe[src*="player"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="embed"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="stream"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="video"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="hotp"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[src*="hotphim"]:not([src*="adserver"]):not([src*="doubleclick"]):not([src*="exoclick"]),
-  iframe[class*="player"], iframe[id*="player"],
-  #player-wrapper iframe, .player iframe, [class*="player"] iframe, [id*="player"] iframe {
-    display: block !important;
+  /* 4. Player controlbar interaction & pause states (allows natural 2-3s auto-hide when cursor is resting) */
+  .jw-controlbar:hover,
+  .jw-controlbar:active,
+  .jwplayer:active .jw-controlbar,
+  .jwplayer.jw-state-paused .jw-controlbar,
+  .vjs-control-bar:hover,
+  .vjs-control-bar:active,
+  .video-js.vjs-paused .vjs-control-bar,
+  .art-controls:hover,
+  .dplayer-controller:hover {
+    opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto !important;
-    opacity: 1 !important;
-    height: 100% !important;
-    min-height: 200px !important;
-    max-height: none !important;
-    width: 100% !important;
+    display: flex !important;
+  }
+
+  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
+    visibility: visible !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
   }
 
   /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
@@ -493,8 +528,6 @@ function injectYouTubeAdBlockCSS() {
   (document.head || document.documentElement).appendChild(style);
 }
 
-let currentEnabledState = true;
-
 function restoreBlockedElements() {
   try {
     const blockedElements = document.querySelectorAll('[data-ad-blocked="true"]');
@@ -516,10 +549,21 @@ function updateEnabledState(enabled, disabledDomains) {
   const newState = (enabled !== false) && !isWhitelisted;
   
   currentEnabledState = newState;
-  document.documentElement.setAttribute('data-anti-popunder-enabled', newState ? 'true' : 'false');
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('__webshield_enabled__', newState ? 'true' : 'false');
+      sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(customWhitelistedDomains));
+    }
+  } catch (e) {}
+  if (document.documentElement) {
+    document.documentElement.setAttribute('data-anti-popunder-enabled', newState ? 'true' : 'false');
+  }
   
-  // Broadcast state to main world (inject.js)
+  // Broadcast state to main world (inject.js) via postMessage AND custom event
   window.postMessage({ type: 'ANTI_POPUP_STATE_CHANGE', enabled: newState }, '*');
+  try {
+    document.dispatchEvent(new CustomEvent('anti-popup-state-change', { detail: { enabled: newState } }));
+  } catch (e) {}
   
   const styleTag = document.getElementById('anti-popunder-adblock-css');
   const ytStyleTag = document.getElementById('anti-popunder-youtube-css');
@@ -544,11 +588,13 @@ function updateEnabledState(enabled, disabledDomains) {
   }
 }
 
-// Synchronously inject CSS immediately at document_start to avoid any flashes
-if (window.location.hostname.includes('youtube.com')) {
-  injectYouTubeAdBlockCSS();
-} else if (!isCurrentPageWhitelisted()) {
-  injectAdBlockCSS();
+// Synchronously inject CSS immediately at document_start only if enabled
+if (currentEnabledState) {
+  if (window.location.hostname.includes('youtube.com')) {
+    injectYouTubeAdBlockCSS();
+  } else if (!isCurrentPageWhitelisted()) {
+    injectAdBlockCSS();
+  }
 }
 
     // Get initial state and watch for updates
@@ -952,48 +998,27 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (isAd) {
             let elementToHide = anchor;
-            let curr = anchor.parentElement;
-            let depth = 0;
-
-            // Traverse up up to 6 parent levels to find the outermost floating backdrop / overlay container
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              // STOP parent traversal immediately if we reach a video player or movie banner!
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) {
-                break;
+            // Only hide direct parent if it is an explicit small ad wrapper and strictly not a player/content wrapper
+            const parent = anchor.parentElement;
+            if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
+              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
+                const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
+                const pId = (parent.id || '').toLowerCase();
+                if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
+                  elementToHide = parent;
+                }
               }
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
-                break;
-              }
-
-              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
-              if (isMediaOrThumb) break;
-
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad & Outer Overlay Container:', href, elementToHide);
+              console.log('[Anti Pop-Under] Hide Ad Anchor:', href, elementToHide);
 
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: href,
-                reason: 'Ẩn banner & khung mờ quảng cáo'
+                reason: 'Ẩn banner & liên kết quảng cáo'
               });
             }
           }
@@ -1029,48 +1054,26 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (isAdIframe) {
             let elementToHide = iframe;
-            let curr = iframe.parentElement;
-            let depth = 0;
-
-            // Traverse up up to 6 parent levels to find outer floating overlay/backdrop wrapper
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              // STOP parent traversal immediately if we reach a video player or movie banner!
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) {
-                break;
+            const parent = iframe.parentElement;
+            if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
+              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
+                const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
+                const pId = (parent.id || '').toLowerCase();
+                if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
+                  elementToHide = parent;
+                }
               }
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
-                break;
-              }
-
-              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
-              if (isMediaOrThumb) break;
-
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Iframe & Outer Overlay Container:', src, elementToHide);
+              console.log('[Anti Pop-Under] Hide Ad Iframe:', src, elementToHide);
 
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: src,
-                reason: 'Ẩn khung quảng cáo & lớp mờ'
+                reason: 'Ẩn khung quảng cáo'
               });
             }
           }
@@ -1095,44 +1098,25 @@ if (window.location.hostname.includes('youtube.com')) {
             } catch (err) { }
 
             let elementToHide = video;
-            let curr = video.parentElement;
-            let depth = 0;
-            
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
-                break;
+            const parent = video.parentElement;
+            if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
+              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
+                const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
+                if (pClass.includes('video-ad-wrap') || pClass.includes('catfish')) {
+                  elementToHide = parent;
+                }
               }
-
-              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
-              if (isMediaOrThumb) break;
-
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor || isFloating ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad Video & Wrapper:', video.src, elementToHide);
+              console.log('[Anti Pop-Under] Hide Ad Video:', video.src, elementToHide);
               
               safeSendMessage({
                 type: 'AD_BLOCKED',
                 url: video.src || 'video-ad',
-                reason: 'Ẩn video quảng cáo & lớp mờ'
+                reason: 'Ẩn video quảng cáo'
               });
             }
           }
@@ -1157,39 +1141,21 @@ if (window.location.hostname.includes('youtube.com')) {
                                
           if (imgMatchesAd) {
             let elementToHide = img;
-            let curr = img.parentElement;
-            let depth = 0;
-            
-            while (curr && curr !== document.body && curr !== document.documentElement && depth < 6) {
-              depth++;
-              if (isVideoPlayerOrControls(curr) || isMovieBannerOrPoster(curr)) break;
-
-              const currClass = (typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
-              const currId = (curr.id || '').toLowerCase();
-              if (currClass.includes('film') || currClass.includes('movie') || currClass.includes('hero') || currClass.includes('slider') || currClass.includes('carousel') || currClass.includes('poster') || currClass.includes('halim') || currClass.includes('tray') || currClass.includes('swiper') || currClass.includes('backdrop') || currClass.includes('banner') || currClass.includes('slide') || currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('card') || currId.includes('thumb') || currId.includes('video')) {
-                break;
+            const parent = img.parentElement;
+            if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
+              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
+                const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
+                const pId = (parent.id || '').toLowerCase();
+                if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
+                  elementToHide = parent;
+                }
               }
-
-              const isMediaOrThumb = currClass.includes('thumb') || currClass.includes('video') || currClass.includes('preview') || currClass.includes('poster') || currClass.includes('card') || currClass.includes('img-') || currId.includes('thumb') || currId.includes('video');
-              if (isMediaOrThumb) break;
-
-              const style = window.getComputedStyle(curr);
-              const isFloating = style.position === 'fixed' || style.position === 'absolute';
-              const isAnchor = curr.tagName.toLowerCase() === 'a';
-              const isAdWrapper = isAnchor ||
-                                  currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
-                                  currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
-
-              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
-                elementToHide = curr;
-              }
-              curr = curr.parentElement;
             }
 
             if (!elementToHide.hasAttribute('data-ad-blocked')) {
               elementToHide.setAttribute('data-ad-blocked', 'true');
               elementToHide.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-              console.log('[Anti Pop-Under] Hide Ad Image & Wrapper:', src, elementToHide);
+              console.log('[Anti Pop-Under] Hide Ad Image:', src, elementToHide);
             }
           }
         } catch (e) {}
@@ -1706,6 +1672,8 @@ if (window.location.hostname.includes('youtube.com')) {
               html.style.setProperty('overflow-y', 'auto', 'important');
             }
           }
+
+          ensureBodyPointerEvents();
         }
       } catch (err) {
         console.error('[Janitor] Error during cleanup sweep:', err);
@@ -1820,6 +1788,29 @@ if (window.location.hostname.includes('youtube.com')) {
       setTimeout(scheduleJanitorSweep, 3000);
     });
 
+    // --- BODY POINTER-EVENTS & SCROLL GUARDIAN ---
+    function ensureBodyPointerEvents() {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      try {
+        if (document.body) {
+          if (document.body.style.pointerEvents === 'none') {
+            document.body.style.setProperty('pointer-events', 'auto', 'important');
+          }
+          if (document.body.style.overflow === 'hidden' && !hasValidInteractiveModal()) {
+            document.body.style.overflow = '';
+            document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
+          }
+        }
+        if (document.documentElement) {
+          if (document.documentElement.style.pointerEvents === 'none') {
+            document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
+          }
+          if (document.documentElement.style.overflow === 'hidden' && !hasValidInteractiveModal()) {
+            document.documentElement.style.overflow = '';
+          }
+        }
+      } catch (e) {}
+    }
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
     document.addEventListener('click', function(e) {
@@ -2718,6 +2709,21 @@ if (window.location.hostname.includes('youtube.com')) {
           opacity: 1 !important;
           pointer-events: auto !important;
         }
+        .jw-controlbar:hover,
+        .jw-controlbar:active,
+        .jwplayer:active .jw-controlbar,
+        .jwplayer.jw-state-paused .jw-controlbar {
+          opacity: 1 !important;
+          visibility: visible !important;
+          pointer-events: auto !important;
+          display: flex !important;
+        }
+        .jwplayer.jw-flag-user-inactive,
+        .jwplayer.jw-flag-user-inactive *,
+        .video-js.vjs-user-inactive,
+        .video-js.vjs-user-inactive * {
+          cursor: none !important;
+        }
       `;
       dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
     }
@@ -2725,14 +2731,13 @@ if (window.location.hostname.includes('youtube.com')) {
     function refreshDynamicCosmetics() {
       if (!isContextValid() || isCurrentPageWhitelisted()) return;
       try {
-        chrome.storage.local.get(['dynamicCosmeticFilters', 'dynamicDomainCosmetics'], (res) => {
+        chrome.storage.local.get(['dynamicDomainCosmetics'], (res) => {
           if (!res) return;
-          const globalSelectors = res.dynamicCosmeticFilters || [];
           const domainMap = res.dynamicDomainCosmetics || {};
           const host = window.location.hostname.toLowerCase();
           
-          const combined = [...globalSelectors];
-          // Match domain-specific rules (e.g. from ABPVN, uBlock, EasyList) for current site
+          const combined = [];
+          // Match domain-specific rules (e.g. from ABPVN, uBlock, EasyList) ONLY for current site
           Object.keys(domainMap).forEach(dom => {
             if (host === dom || host.endsWith('.' + dom) || dom.endsWith('.' + host)) {
               const domRules = domainMap[dom] || [];
@@ -2742,6 +2747,8 @@ if (window.location.hostname.includes('youtube.com')) {
 
           if (combined.length > 0) {
             applyDynamicCosmetics(combined);
+          } else if (dynamicCosmeticStyle) {
+            dynamicCosmeticStyle.textContent = '';
           }
         });
       } catch (e) {}

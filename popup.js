@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.7.8" }),
+      getManifest: () => ({ version: "3.8.4" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -502,6 +502,26 @@ document.addEventListener("DOMContentLoaded", () => {
         statusCard.classList.add("disabled");
         statusBadge.textContent = "Đã tạm dừng";
       }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0] && tabs[0].id) {
+          const tabId = tabs[0].id;
+          if (chrome.scripting && chrome.scripting.executeScript) {
+            chrome.scripting.executeScript({
+              target: { tabId: tabId, allFrames: true },
+              func: (enabledVal) => {
+                try {
+                  sessionStorage.setItem('__webshield_enabled__', enabledVal ? 'true' : 'false');
+                } catch (e) {}
+              },
+              args: [isEnabled]
+            }).catch(() => {}).finally(() => {
+              chrome.tabs.reload(tabId);
+            });
+          } else {
+            chrome.tabs.reload(tabId);
+          }
+        }
+      });
     });
   });
 
@@ -518,7 +538,25 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       chrome.storage.local.set({ disabledDomains: disabledDomains }, () => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs && tabs[0] && tabs[0].id) chrome.tabs.reload(tabs[0].id);
+          if (tabs && tabs[0] && tabs[0].id) {
+            const tabId = tabs[0].id;
+            if (chrome.scripting && chrome.scripting.executeScript) {
+              chrome.scripting.executeScript({
+                target: { tabId: tabId, allFrames: true },
+                func: (domains, blocked) => {
+                  try {
+                    sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(domains));
+                    sessionStorage.setItem('__webshield_enabled__', blocked ? 'true' : 'false');
+                  } catch (e) {}
+                },
+                args: [disabledDomains, isBlocked]
+              }).catch(() => {}).finally(() => {
+                chrome.tabs.reload(tabId);
+              });
+            } else {
+              chrome.tabs.reload(tabId);
+            }
+          }
         });
       });
     });
@@ -694,7 +732,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.7.8";
+      const version = manifest.version || "3.8.0";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
