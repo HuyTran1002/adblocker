@@ -364,9 +364,6 @@ async function sanitizeExistingDynamicRules() {
   }
 }
 
-// Sanitize dynamic rules immediately on background service worker start
-sanitizeExistingDynamicRules();
-
 // Initialize storage on install
 chrome.runtime.onInstalled.addListener(() => {
   sanitizeExistingDynamicRules();
@@ -490,7 +487,7 @@ function updateDeclarativeRules(disabledDomains) {
 
 // Update declarative ruleset state (enable/disable static ruleset)
 function updateRulesetState(enabled) {
-  if (!chrome.declarativeNetRequest) return;
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateEnabledRulesets) return;
   chrome.declarativeNetRequest.updateEnabledRulesets({
     [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
   }, () => {
@@ -592,8 +589,7 @@ function setupContextMenu() {
   });
 }
 
-// Ensure context menu is always available on startup and installation
-setupContextMenu();
+// Ensure context menu is created cleanly on installation / extension update
 if (chrome.runtime && chrome.runtime.onInstalled) {
   chrome.runtime.onInstalled.addListener(() => {
     setupContextMenu();

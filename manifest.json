@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WebShield - Content & Popup Filter",
   "short_name": "WebShield",
-  "version": "3.7.4",
+  "version": "3.7.8",
   "author": "HuyTran1002",
   "description": "Công cụ hỗ trợ chặn cửa sổ bật lên tự động và quản lý quy tắc lọc mạng cục bộ.",
   "icons": {
@@ -30,6 +30,24 @@
       "matches": [
         "<all_urls>"
       ],
+      "exclude_matches": [
+        "*://accounts.firefox.com/*",
+        "*://addons.mozilla.org/*",
+        "*://*.mozilla.org/*",
+        "*://accounts.google.com/*",
+        "*://myaccount.google.com/*",
+        "*://chrome.google.com/*",
+        "*://chromewebstore.google.com/*",
+        "*://login.microsoftonline.com/*",
+        "*://login.live.com/*",
+        "*://appleid.apple.com/*",
+        "*://github.com/*",
+        "*://gitlab.com/*",
+        "*://id.atlassian.com/*",
+        "*://*.auth0.com/*",
+        "*://*.paypal.com/*",
+        "*://*.stripe.com/*"
+      ],
       "js": [
         "inject.js"
       ],
@@ -40,6 +58,24 @@
     {
       "matches": [
         "<all_urls>"
+      ],
+      "exclude_matches": [
+        "*://accounts.firefox.com/*",
+        "*://addons.mozilla.org/*",
+        "*://*.mozilla.org/*",
+        "*://accounts.google.com/*",
+        "*://myaccount.google.com/*",
+        "*://chrome.google.com/*",
+        "*://chromewebstore.google.com/*",
+        "*://login.microsoftonline.com/*",
+        "*://login.live.com/*",
+        "*://appleid.apple.com/*",
+        "*://github.com/*",
+        "*://gitlab.com/*",
+        "*://id.atlassian.com/*",
+        "*://*.auth0.com/*",
+        "*://*.paypal.com/*",
+        "*://*.stripe.com/*"
       ],
       "js": [
         "content.js"

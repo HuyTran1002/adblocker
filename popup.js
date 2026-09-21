@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.7.4" }),
+      getManifest: () => ({ version: "3.7.8" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -180,7 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
         siteToggleLabel.textContent = `Chặn trên ${currentDomain}`;
         
         chrome.storage.local.get(["disabledDomains"], (res) => {
-          const disabledDomains = res.disabledDomains || [];
+          const disabledDomains = (res && res.disabledDomains) || [];
           siteToggle.checked = !disabledDomains.includes(currentDomain);
         });
       } catch (e) {
@@ -212,7 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tag.querySelector(".tag-remove-btn").addEventListener("click", (e) => {
           const domToRemove = e.currentTarget.getAttribute("data-domain");
           chrome.storage.local.get(["disabledDomains"], (res) => {
-            const updated = (res.disabledDomains || []).filter(d => d !== domToRemove);
+            const updated = ((res && res.disabledDomains) || []).filter(d => d !== domToRemove);
             chrome.storage.local.set({ disabledDomains: updated }, () => {
               if (domToRemove === currentDomain) {
                 siteToggle.checked = true;
@@ -260,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const deleteBtn = item.querySelector(".custom-rule-delete-btn");
         deleteBtn.addEventListener("click", () => {
           chrome.storage.local.get(["manualFilters"], (res) => {
-            let curFilters = res.manualFilters || {};
+            let curFilters = (res && res.manualFilters) || {};
             if (curFilters[currentDomain]) {
               curFilters[currentDomain] = curFilters[currentDomain].filter(s => s !== selector);
               if (curFilters[currentDomain].length === 0) delete curFilters[currentDomain];
@@ -293,7 +293,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const deleteBtn = item.querySelector(".custom-rule-delete-btn");
         deleteBtn.addEventListener("click", () => {
           chrome.storage.local.get(["customBlockedSelectors"], (res) => {
-            const updated = (res.customBlockedSelectors || []).filter(r => r !== rule);
+            const updated = ((res && res.customBlockedSelectors) || []).filter(r => r !== rule);
             chrome.storage.local.set({ customBlockedSelectors: updated }, () => {
               updateCustomRulesUI(filters, updated);
               chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -314,7 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!cleanDomain) return;
 
     chrome.storage.local.get(["disabledDomains"], (res) => {
-      const disabledDomains = res.disabledDomains || [];
+      const disabledDomains = (res && res.disabledDomains) || [];
       if (!disabledDomains.includes(cleanDomain)) {
         disabledDomains.push(cleanDomain);
         chrome.storage.local.set({ disabledDomains: disabledDomains }, () => {
@@ -342,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (currentDomain) {
       chrome.storage.local.get(["manualFilters"], (res) => {
-        let filters = res.manualFilters || {};
+        let filters = (res && res.manualFilters) || {};
         if (!filters[currentDomain]) filters[currentDomain] = [];
         if (!filters[currentDomain].includes(cleanRule)) {
           filters[currentDomain].push(cleanRule);
@@ -353,7 +353,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } else {
       chrome.storage.local.get(["customBlockedSelectors"], (res) => {
-        const customRules = res.customBlockedSelectors || [];
+        const customRules = (res && res.customBlockedSelectors) || [];
         if (!customRules.includes(cleanRule)) {
           customRules.push(cleanRule);
           chrome.storage.local.set({ customBlockedSelectors: customRules }, () => {
@@ -369,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   clearCustomRulesBtn.addEventListener("click", () => {
     chrome.storage.local.get(["manualFilters"], (res) => {
-      let filters = res.manualFilters || {};
+      let filters = (res && res.manualFilters) || {};
       if (currentDomain && filters[currentDomain]) {
         delete filters[currentDomain];
       }
@@ -457,8 +457,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         chrome.storage.local.get(["lastFiltersUpdateTimestamp", "onlineFilterStats"], (res) => {
-          const ts = res.lastFiltersUpdateTimestamp || Date.now();
-          updateFilterTimestampsUI(ts, res.onlineFilterStats);
+          const ts = (res && res.lastFiltersUpdateTimestamp) || Date.now();
+          updateFilterTimestampsUI(ts, res ? res.onlineFilterStats : null);
         });
 
         setTimeout(() => {
@@ -474,7 +474,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Load Initial Storage State
-  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (result) => {
+  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
+    const result = rawResult || {};
     const enabled = result.enabled !== false;
     const count = result.blockedCount || 0;
     const history = result.blockedHistory || [];
@@ -509,7 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentDomain) return;
     const isBlocked = siteToggle.checked;
     chrome.storage.local.get(["disabledDomains"], (res) => {
-      let disabledDomains = res.disabledDomains || [];
+      let disabledDomains = (res && res.disabledDomains) || [];
       if (isBlocked) {
         disabledDomains = disabledDomains.filter(d => d !== currentDomain);
       } else {
@@ -526,7 +527,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Storage Change Observer (Realtime UI updates)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local") {
-      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters"], (result) => {
+      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters"], (rawResult) => {
+        const result = rawResult || {};
         const enabled = result.enabled !== false;
         const count = result.blockedCount || 0;
         const history = result.blockedHistory || [];
@@ -692,7 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.7.2";
+      const version = manifest.version || "3.7.8";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");

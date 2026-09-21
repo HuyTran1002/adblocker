@@ -2,6 +2,30 @@
   // Developed by HuyTran1002
   console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
 
+  // Skip sensitive authentication, identity provider, developer portal, and extension store domains
+  const SENSITIVE_DOMAINS = [
+    'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
+    'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
+    'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
+    'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
+    'paypal.com', 'stripe.com'
+  ];
+  const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+  if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
+    return; // Completely inactive on sensitive/auth domains
+  }
+
+  // 91porn / 91porna Landing Modal Suppressor
+  // Pre-seed localStorage key '__landing_modal_at__' with today's date (YYYY-MM-DD)
+  // so the website's own common.js script skips showing #tip_modal and .modal-backdrop
+  try {
+    if (currentHost.includes('91porn')) {
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      localStorage.setItem('__landing_modal_at__', todayStr);
+    }
+  } catch (e) {}
+
   // --- EMBEDDED PLAYER IFRAME DETECTION ---
   // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, vlstream.net),
   // API overrides (getComputedStyle, offsetHeight, getBoundingClientRect, bait stubs, CSS injection)
@@ -454,232 +478,9 @@
       }
     } catch (e) { }
 
-    function isAdBait(el) {
-      if (!el || !el.tagName) return false;
-      const tag = el.tagName;
-      if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'CANVAS' || tag === 'SOURCE' || tag === 'TRACK' || tag === 'IFRAME') return false;
-      const rawId = el.id;
-      const rawClass = el.className;
-      if (!rawId && (!rawClass || typeof rawClass !== 'string' || rawClass === '')) return false;
-
-      try {
-        const id = rawId ? rawId.toLowerCase() : '';
-        const className = (typeof rawClass === 'string') ? rawClass.toLowerCase() : '';
-
-        // Fast guard: skip elements that do not contain ad-related keyword substrings
-        if (!id.includes('ad') && !id.includes('qc') && !id.includes('quang') && !id.includes('preload') &&
-          !className.includes('ad') && !className.includes('qc') && !className.includes('quang') && !className.includes('adv')) {
-          return false;
-        }
-
-        const name = (el.getAttribute && el.getAttribute('name') || '').toLowerCase();
-
-        // Exact ID matches for bait patterns used by anti-adblock detectors
-        const exactBaitIds = [
-          'ad', 'ads', 'ad1', 'ad2', 'ad_box', 'ad-box', 'ads-box', 'adsbox',
-          '_preload-ads-1', '_preload-ads-2', 'preload-ads', 'ads-preload',
-          'googlead', 'google-ads', 'google_ads', 'google-ad-banner'
-        ];
-        if (exactBaitIds.includes(id)) return true;
-
-        const keywords = [
-          'adsbox', 'ad-placement', 'quangcao', 'quang-cao', 'ad-box', 'ad_box', 'ads-box',
-          'sponsored', 'ad-holder', 'qc-holder', 'ad-container', 'preload-ads', '_preload-ads',
-          'ad-center', 'ad-detect', 'adblock-detect', 'ads-detect'
-        ];
-        if (keywords.some(kw => id.includes(kw) || className.includes(kw) || name.includes(kw))) {
-          return true;
-        }
-
-        // Class-specific bait patterns (Adv, adv, ad-center-header)
-        const classTokens = className.split(/\s+/);
-        const baitClasses = ['adv', 'ad-center-header', 'ads-banner', 'ad-banner', 'adbanner', 'adsense'];
-        if (baitClasses.some(bc => classTokens.includes(bc))) return true;
-
-        if (id === 'ad' || id === 'ads' || className === 'ad' || className === 'ads') {
-          return true;
-        }
-      } catch (e) { }
-      return false;
-    }
-
-    // === document.getElementById / querySelector OVERRIDE ===
-    // Intercept early bait-element lookups that happen before body exists.
-    // Anti-adblock scripts in <head> do: getElementById('_preload-ads-1') and
-    // check offsetHeight/style. Return a real (but off-screen) fake element.
-    try {
-      const BAIT_IDS = new Set([
-        '_preload-ads-1', '_preload-ads-2', 'preload-ads', 'ads-preload',
-        'adsbox', 'ads-banner', 'ad-banner', 'google-ads', 'google_ads',
-        'googlead', 'ad-box', 'ad_box', 'ads-box'
-      ]);
-      const BAIT_CLASS_SELECTORS = [
-        '.Adv', '.adv', '.ad-center-header', '.adsbox', '.ads-banner', '.ad-banner',
-        '[id="_preload-ads-1"]', '[id="_preload-ads-2"]'
-      ];
-
-      // Cache of fake elements keyed by id
-      const _fakeElCache = new Map();
-
-      function createFakeBaitElement(id) {
-        if (_fakeElCache.has(id)) return _fakeElCache.get(id);
-        try {
-          const el = document.createElement('div');
-          el.id = id || '';
-          el.className = 'Adv ad-center-header adsbox';
-          el.setAttribute('style', 'position:fixed;top:-9999px;left:-9999px;width:300px;height:250px;opacity:0.01;pointer-events:none;');
-          el.setAttribute('aria-hidden', 'true');
-          _fakeElCache.set(id, el);
-          // Attach to DOM immediately so parentElement / closest / querySelector all work natively
-          const attachTarget = document.body || document.documentElement || document.head;
-          if (attachTarget) {
-            try { attachTarget.appendChild(el); } catch (e) { }
-          }
-          if (!document.body) {
-            const moveObserver = new MutationObserver(() => {
-              if (document.body && el.parentElement !== document.body) {
-                try { document.body.insertBefore(el, document.body.firstChild); } catch (e) { }
-                moveObserver.disconnect();
-              }
-            });
-            try {
-              moveObserver.observe(document.documentElement || document, { childList: true, subtree: true });
-            } catch (e) { }
-          }
-          return el;
-        } catch (e) { return null; }
-      }
-
-      const _origGetElementById = document.getElementById.bind(document);
-      document.getElementById = function (id) {
-        try {
-          const real = _origGetElementById(id);
-          if (real) return real;
-          if (typeof id === 'string' && BAIT_IDS.has(id)) {
-            return createFakeBaitElement(id);
-          }
-          return null;
-        } catch (e) {
-          return _origGetElementById(id);
-        }
-      };
-
-      const _origQuerySelector = document.querySelector.bind(document);
-      document.querySelector = function (sel) {
-        try {
-          const real = _origQuerySelector(sel);
-          if (real) return real;
-          // Return fake for known bait selectors
-          if (typeof sel === 'string') {
-            const selLow = sel.toLowerCase();
-            if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase() || selLow.startsWith(bc.toLowerCase() + ' ') || selLow.startsWith(bc.toLowerCase() + '.'))) {
-              return createFakeBaitElement('adsbox');
-            }
-            // Also handle ID selectors like #_preload-ads-1
-            const idMatch = sel.match(/^#([\w-]+)$/);
-            if (idMatch && BAIT_IDS.has(idMatch[1])) {
-              return createFakeBaitElement(idMatch[1]);
-            }
-          }
-          return null;
-        } catch (e) {
-          return _origQuerySelector(sel);
-        }
-      };
-
-      const _origQuerySelectorAll = document.querySelectorAll.bind(document);
-      document.querySelectorAll = function (sel) {
-        try {
-          const real = _origQuerySelectorAll(sel);
-          if (real && real.length > 0) return real;
-          if (typeof sel === 'string') {
-            const selLow = sel.toLowerCase();
-            if (BAIT_CLASS_SELECTORS.some(bc => selLow === bc.toLowerCase())) {
-              const fakeEl = createFakeBaitElement('adsbox');
-              try {
-                const refreshed = _origQuerySelectorAll(sel);
-                if (refreshed && refreshed.length > 0) return refreshed;
-              } catch (err) { }
-              return fakeEl ? [fakeEl] : (real || []);
-            }
-          }
-          return real;
-        } catch (e) {
-          return _origQuerySelectorAll(sel);
-        }
-      };
-    } catch (e) { }
-    // === END document override ===
-
-    // Intercept fetch() to fake successful responses for ad network check URLs
-    // (Defeats network-based adblock detection used by sites like animevietsub.li)
-    try {
-      const _origFetch = window.fetch;
-      window.fetch = function (resource, init) {
-        let urlStr = '';
-        try {
-          urlStr = (typeof resource === 'string') ? resource : (resource && resource.url) || '';
-        } catch (e) { }
-        if (urlStr && isAdUrl(urlStr)) {
-          console.log('[Anti Pop-Under] Faking fetch success for ad URL:', urlStr);
-          return Promise.resolve(new Response('', { status: 200, statusText: 'OK' }));
-        }
-        return _origFetch.apply(this, arguments);
-      };
-    } catch (e) { }
-
-    // Intercept XMLHttpRequest to fake successful responses for ad network check URLs
-    try {
-      const _origXhrOpen = XMLHttpRequest.prototype.open;
-      const _origXhrSend = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open = function (method, url) {
-        this._interceptedAdUrl = (typeof url === 'string' && isAdUrl(url)) ? url : null;
-        return _origXhrOpen.apply(this, arguments);
-      };
-      XMLHttpRequest.prototype.send = function () {
-        if (this._interceptedAdUrl) {
-          console.log('[Anti Pop-Under] Faking XHR success for ad URL:', this._interceptedAdUrl);
-          Object.defineProperty(this, 'status', { get() { return 200; }, configurable: true });
-          Object.defineProperty(this, 'readyState', { get() { return 4; }, configurable: true });
-          Object.defineProperty(this, 'responseText', { get() { return ''; }, configurable: true });
-          Object.defineProperty(this, 'response', { get() { return ''; }, configurable: true });
-          setTimeout(() => {
-            try {
-              if (typeof this.onreadystatechange === 'function') this.onreadystatechange();
-              if (typeof this.onload === 'function') this.onload();
-            } catch (e) { }
-          }, 0);
-          return;
-        }
-        return _origXhrSend.apply(this, arguments);
-      };
-    } catch (e) { }
-
-    // Intercept Image() to fake onload for ad beacon/pixel checks
-    // Many sites do: var img = new Image(); img.onload = successFn; img.onerror = detectFn; img.src = adUrl;
-    try {
-      const OrigImage = window.Image;
-      const imgSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-      if (imgSrcDescriptor && imgSrcDescriptor.set) {
-        Object.defineProperty(HTMLImageElement.prototype, 'src', {
-          get: imgSrcDescriptor.get,
-          set(val) {
-            if (typeof val === 'string' && isAdUrl(val)) {
-              console.log('[Anti Pop-Under] Faking Image onload for ad beacon:', val);
-              // Set a 1x1 transparent gif data URI instead to trigger onload
-              imgSrcDescriptor.set.call(this, 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
-              return;
-            }
-            imgSrcDescriptor.set.call(this, val);
-          },
-          configurable: true,
-          enumerable: true
-        });
-      }
-    } catch (e) { }
-
     // Auto-inject stub bait elements that anti-adblock scripts expect to find in DOM
-    // Uses MutationObserver so stubs appear as soon as <body> is created (document_start)
+    // Uses natural layout dimensions (300x250) positioned off-screen, eliminating the need to monkey-patch
+    // offsetHeight/offsetWidth/getBoundingClientRect/getComputedStyle prototypes.
     try {
       const baitElementSpecs = [
         { id: '_preload-ads-1' },
@@ -689,58 +490,60 @@
         { id: 'adsbox' },
         { id: 'ad-banner' }
       ];
-      const STUB_STYLE = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;z-index:-1;';
 
       const injectBaitStubs = () => {
-        if (!document.body) return;
+        const mount = document.body || document.documentElement || document.head;
+        if (!mount) return;
         baitElementSpecs.forEach(spec => {
           if (!document.getElementById(spec.id)) {
             const stub = document.createElement('div');
             stub.id = spec.id;
-            stub.setAttribute('style', STUB_STYLE);
             stub.className = 'Adv ad-center-header adsbox';
             stub.setAttribute('aria-hidden', 'true');
-            document.body.insertBefore(stub, document.body.firstChild);
+            try { mount.insertBefore(stub, mount.firstChild); } catch (e) { }
           }
         });
       };
 
-      if (document.body) {
-        injectBaitStubs();
-      } else {
-        // MutationObserver watching documentElement for body insertion
+      injectBaitStubs();
+
+      if (!document.body) {
         const bodyObserver = new MutationObserver((mutations, obs) => {
           if (document.body) {
             obs.disconnect();
-            injectBaitStubs();
+            baitElementSpecs.forEach(spec => {
+              const el = document.getElementById(spec.id);
+              if (el && el.parentElement !== document.body) {
+                try { document.body.insertBefore(el, document.body.firstChild); } catch (e) { }
+              }
+            });
             startBaitGuardian();
           }
         });
-        bodyObserver.observe(document.documentElement || document, {
-          childList: true,
-          subtree: false
-        });
-        // Fallback
+        try {
+          bodyObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+        } catch (e) { }
         document.addEventListener('DOMContentLoaded', () => {
           injectBaitStubs();
           startBaitGuardian();
           try { bodyObserver.disconnect(); } catch (e) { }
         }, { once: true });
+      } else {
+        startBaitGuardian();
       }
 
       // Guardian: re-inject if any bait element gets removed
       function startBaitGuardian() {
         try {
-          const baitIds = new Set(baitElementSpecs.map(s => s.id));
           const guardObserver = new MutationObserver(() => {
+            if (!document.body) return;
             baitElementSpecs.forEach(spec => {
-              if (!document.getElementById(spec.id) && document.body) {
+              if (!document.getElementById(spec.id)) {
                 const stub = document.createElement('div');
                 stub.id = spec.id;
-                stub.setAttribute('style', STUB_STYLE);
                 stub.className = 'Adv ad-center-header adsbox';
                 stub.setAttribute('aria-hidden', 'true');
-                document.body.insertBefore(stub, document.body.firstChild);
+                try { document.body.insertBefore(stub, document.body.firstChild); } catch (e) { }
               }
             });
           });
@@ -749,127 +552,6 @@
           }
         } catch (e) { }
       }
-    } catch (e) { }
-
-    try {
-      const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight').get;
-      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-        get() {
-          const h = originalOffsetHeight.call(this);
-          if (h === 0 && isAdBait(this)) {
-            return 250;
-          }
-          return h;
-        },
-        configurable: true
-      });
-
-      const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth').get;
-      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-        get() {
-          const w = originalOffsetWidth.call(this);
-          if (w === 0 && isAdBait(this)) {
-            return 300;
-          }
-          return w;
-        },
-        configurable: true
-      });
-
-      const originalClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight').get;
-      Object.defineProperty(Element.prototype, 'clientHeight', {
-        get() {
-          const h = originalClientHeight.call(this);
-          if (h === 0 && isAdBait(this)) {
-            return 250;
-          }
-          return h;
-        },
-        configurable: true
-      });
-
-      const originalClientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth').get;
-      Object.defineProperty(Element.prototype, 'clientWidth', {
-        get() {
-          const w = originalClientWidth.call(this);
-          if (w === 0 && isAdBait(this)) {
-            return 300;
-          }
-          return w;
-        },
-        configurable: true
-      });
-    } catch (e) { }
-
-    try {
-      const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
-      Element.prototype.getBoundingClientRect = function () {
-        const rect = originalGetBoundingClientRect.call(this);
-        if (rect.height === 0 && isAdBait(this)) {
-          return {
-            top: rect.top,
-            left: rect.left,
-            right: rect.left + 300,
-            bottom: rect.top + 250,
-            width: 300,
-            height: 250,
-            x: rect.left,
-            y: rect.top,
-            toJSON: () => { }
-          };
-        }
-        return rect;
-      };
-    } catch (e) { }
-
-    try {
-      const originalGetComputedStyle = window.getComputedStyle;
-      window.getComputedStyle = function (el, pseudoElt) {
-        const style = originalGetComputedStyle.call(this, el, pseudoElt);
-        if (el && (el.id || (el.className && typeof el.className === 'string' && el.className !== ''))) {
-          if (isAdBait(el)) {
-            return new Proxy(style, {
-              get(target, prop) {
-                if (prop === 'display') {
-                  const val = target.display;
-                  return val === 'none' ? 'block' : val;
-                }
-                if (prop === 'visibility') {
-                  const val = target.visibility;
-                  return val === 'hidden' ? 'visible' : val;
-                }
-                if (prop === 'opacity') {
-                  const val = target.opacity;
-                  return val === '0' ? '1' : val;
-                }
-                if (prop === 'getPropertyValue') {
-                  return function (propertyName) {
-                    if (propertyName === 'display') {
-                      const val = target.getPropertyValue('display');
-                      return val === 'none' ? 'block' : val;
-                    }
-                    if (propertyName === 'visibility') {
-                      const val = target.getPropertyValue('visibility');
-                      return val === 'hidden' ? 'visible' : val;
-                    }
-                    if (propertyName === 'opacity') {
-                      const val = target.getPropertyValue('opacity');
-                      return val === '0' ? '1' : val;
-                    }
-                    return target.getPropertyValue(propertyName);
-                  };
-                }
-                const val = Reflect.get(target, prop);
-                if (typeof val === 'function') {
-                  return val.bind(target);
-                }
-                return val;
-              }
-            });
-          }
-        }
-        return style;
-      };
     } catch (e) { }
   })();
 
@@ -926,42 +608,9 @@
   const originalOpen = window.open;
   const originalClick = HTMLAnchorElement.prototype.click;
 
-  // Track last interaction and intercept background clicks
-  const interactionEvents = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchend'];
   const isYouTube = window.location.hostname.includes('youtube.com') ||
     window.location.hostname.includes('google') ||
     window.location.hostname.includes('doubleclick');
-
-  function isInteractiveElement(el) {
-    if (!el) return false;
-    try {
-      // In embedded iframes (e.g. video players like play.vlstream.net), clicks are always legitimate user gestures
-      if (window.self !== window.top) return true;
-
-      const tagName = el.tagName.toLowerCase();
-      if (['video', 'audio', 'canvas', 'iframe', 'embed', 'object'].includes(tagName)) return true;
-      if (el.closest('.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer, #box, .loader, [class*="player"], [id*="player"], [class*="video"], [id*="video"], [class*="control"], [id*="control"], [class*="time"], [id*="time"], [class*="progress"], [id*="progress"], [class*="slider"], [id*="slider"]')) return true;
-      if (el.closest('div, section') && el.closest('div, section').querySelector('video, #box, .jwplayer')) return true;
-
-      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [role="link"], [tabindex], [onclick], [data-action], [contenteditable], #no-link, [id*="no-link"], [class*="episode"], [id*="episode"], [class*="server"], [id*="server"], [class*="halim-"], [class*="halim_"], [class*="thumb"], [id*="thumb"], .thumb-overlay, .img-responsive')) return true;
-      const style = window.getComputedStyle(el);
-      if (style && style.cursor && style.cursor.toLowerCase().includes('pointer')) return true;
-      const ariaAttrs = ['aria-haspopup', 'aria-pressed', 'aria-expanded', 'aria-label', 'aria-controls'];
-      for (let a of ariaAttrs) { if (el.hasAttribute && el.hasAttribute(a)) return true; }
-      if (el.getAttribute && el.getAttribute('role')) {
-        const r = (el.getAttribute('role') || '').toLowerCase();
-        if (r === 'button' || r === 'link' || r === 'tab' || r === 'option') return true;
-      }
-    } catch (err) { }
-    return false;
-  }
-
-  function blockScriptedRedirects(e) {
-    // Background clicks should never cancel event propagation or preventDefault.
-    // Clicks on body/html in embed iframes (like play.vlstream.net) or player wrappers are legitimate user gestures.
-    // Actual malicious redirects (window.open, location changes, synthetic event dispatch) are already strictly intercepted by WebShield.
-    return;
-  }
 
   // Helper nhận diện ranh giới tuyệt đối của video player DOM
   // Standard 1: Strict Boundary Check
@@ -1069,108 +718,6 @@
     return false;
   }
 
-  function injectPlayerStyles() {
-    try {
-      if (document.getElementById('webshield-player-styles')) return;
-      const style = document.createElement('style');
-      style.id = 'webshield-player-styles';
-
-      // In embedded player iframes: ONLY inject Fluid Player & JWPlayer control styles (safe).
-      // Do NOT inject ad-blocking CSS (#popup-overlay, .vast_video_loading pointer-events:none)
-      // because these can hide or disable legitimate player UI elements inside the iframe.
-      if (isEmbeddedPlayerFrame) {
-        style.textContent = `
-          /* Fluid Player Controls & Timeline Auto-Hide Fix (safe for player iframes) */
-          .fluid_video_wrapper .fluid_controls_container.fade_out,
-          .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: visibility 0.5s ease, opacity 0.5s ease !important;
-          }
-
-          /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
-          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: opacity 0.2s ease !important;
-          }
-          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
-          .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
-          .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
-            opacity: 1 !important;
-            pointer-events: auto !important;
-          }
-
-          /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
-          .jwplayer .jw-slider-volume {
-            display: none !important;
-          }
-          .jwplayer .jw-icon-volume:hover .jw-slider-volume,
-          .jwplayer .jw-slider-volume:hover,
-          .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
-          .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
-            display: block !important;
-          }
-        `;
-      } else {
-        style.textContent = `
-          /* Chặn triệt để banner quảng cáo popup và catfish ngoài player */
-          #popup-overlay:not([class*="player"] *):not(video), .popup-grid, .popup-banner, #catfish-banner {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            height: 0 !important;
-          }
-
-          /* Fluid Player Controls & Timeline Auto-Hide Fix (TokyoMotion & Fluid Player sites) */
-          .fluid_video_wrapper .fluid_controls_container.fade_out,
-          .fluid_video_wrapper.mobile .fluid_controls_container.fade_out {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: visibility 0.5s ease, opacity 0.5s ease !important;
-          }
-
-          /* Prevent loading overlay from blocking click to play/pause */
-          .vast_video_loading {
-            pointer-events: none !important;
-          }
-
-          /* Keep Fluid Player volume slider collapsed until hovering over the volume button */
-          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right .fluid_control_volume_container {
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: opacity 0.2s ease !important;
-          }
-          .fluid_video_wrapper .fluid_controls_container .fluid_controls_right:hover .fluid_control_volume_container,
-          .fluid_video_wrapper .fluid_controls_container .fluid_button.fluid_button_volume:hover ~ .fluid_control_volume_container,
-          .fluid_video_wrapper .fluid_controls_container .fluid_control_volume_container:hover {
-            opacity: 1 !important;
-            pointer-events: auto !important;
-          }
-
-          /* Keep JWPlayer vertical volume slider collapsed until hovering over the volume icon */
-          .jwplayer .jw-slider-volume {
-            display: none !important;
-          }
-          .jwplayer .jw-icon-volume:hover .jw-slider-volume,
-          .jwplayer .jw-slider-volume:hover,
-          .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
-          .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
-            display: block !important;
-          }
-        `;
-      }
-      (document.head || document.documentElement).appendChild(style);
-    } catch (e) { }
-  }
-  injectPlayerStyles();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectPlayerStyles);
-  }
-
   if (!isYouTube) {
     // --- FLUID PLAYER AUTO-HIDE & SMART TAP CONTROLLER ---
     // Solves timeline auto-hide failure and missing tap-to-hide on TokyoMotion & Fluid Player v3.
@@ -1252,40 +799,18 @@
           isHoveringControls = false;
         }, { passive: true });
 
-        // 4. Click to Play / Pause GUARANTEE
-        // Direct click on video or player background ALWAYS toggles play / pause reliably!
-        let lastToggleTime = 0;
-        const handlePlayerToggle = (e) => {
+        // 4. Click interaction on player:
+        // Fluid Player natively handles play/pause toggle when video is clicked.
+        // We only manage showing controls and scheduling auto-hide without calling vid.play()/vid.pause().
+        wrapper.addEventListener('click', (e) => {
           const target = e.target;
-          // Nếu click vào thanh điều khiển hoặc nút chức năng (volume, timeline, subtitle, fullscreen): để controls tự xử lý
           if (target && target.closest && target.closest('.fluid_controls_container, .fluid_button, button, a, input')) {
             scheduleAutoHide(3500);
             return;
           }
-
-          // Tránh double toggle do nhiều event (ví dụ pointerdown + click) cùng kích hoạt trong 250ms
-          const now = Date.now();
-          if (now - lastToggleTime < 250) return;
-          lastToggleTime = now;
-
-          if (vid.paused) {
-            try {
-              const p = vid.play();
-              if (p && p.catch) p.catch(() => {});
-            } catch (err) {}
-          } else {
-            try {
-              vid.pause();
-            } catch (err) {}
-          }
-        };
-
-        vid.addEventListener('click', handlePlayerToggle);
-        wrapper.addEventListener('click', (e) => {
-          if (e.target === wrapper || e.target === vid) {
-            handlePlayerToggle(e);
-          }
-        });
+          showControls();
+          scheduleAutoHide(3000);
+        }, { passive: true });
 
         // 4. Video state listeners
         vid.addEventListener('play', () => {
@@ -2371,40 +1896,6 @@
       };
     } catch (e) { }
 
-    // Hook Node DOM insertion methods to patch iframe contentWindow immediately upon append
-    ['appendChild', 'insertBefore'].forEach(method => {
-      try {
-        const orig = Node.prototype[method];
-        Node.prototype[method] = function () {
-          try { sanitizeIframeNode(arguments[0]); } catch (e) { }
-          let result;
-          try {
-            result = orig.apply(this, arguments);
-          } catch (domErr) {
-            // Page script called insertBefore/appendChild with an invalid reference node.
-            // The page already didn't catch this — swallow silently so the stack trace
-            // doesn't falsely point to inject.js. Behavior is identical (undefined return).
-            return undefined;
-          }
-          try { patchIframeNode(arguments[0]); } catch (e) { }
-          return result;
-        };
-      } catch (e) { }
-    });
-
-    ['append', 'insertAdjacentElement'].forEach(method => {
-      try {
-        const orig = Element.prototype[method];
-        Element.prototype[method] = function () {
-          try { sanitizeIframeNode(arguments[0]); } catch (e) { }
-          let result;
-          try { result = orig.apply(this, arguments); } catch (e) { return undefined; }
-          try { patchIframeNode(arguments[0]); } catch (e) { }
-          return result;
-        };
-      } catch (e) { }
-    });
-
     // Hook HTMLIFrameElement prototype to intercept and override window.open inside dynamically created iframes
     try {
       const cwDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
@@ -2435,18 +1926,6 @@
         });
       }
     } catch (err) { }
-
-    // Fast interval check for iframe windows
-    setInterval(() => {
-      if (!isEnabled() || isYouTube || isCurrentPageWhitelisted()) return;
-      try {
-        for (let i = 0; i < window.frames.length; i++) {
-          try {
-            if (window.frames[i]) overrideWindowOpen(window.frames[i]);
-          } catch (e) { }
-        }
-      } catch (e) { }
-    }, 1000);
   }
 
   // Bulletproof override of HTMLAnchorElement.prototype.click
@@ -3003,8 +2482,6 @@
         subtree: true
       });
     } catch (e) { }
-
-    setInterval(scheduleClear, 3000);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads

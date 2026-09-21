@@ -3,6 +3,19 @@
 console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
 
 
+// Skip sensitive authentication, identity provider, developer portal, and extension store domains
+const SENSITIVE_DOMAINS = [
+  'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
+  'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
+  'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
+  'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
+  'paypal.com', 'stripe.com'
+];
+const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
+  // Completely inactive on sensitive/auth domains
+}
+
 // Check whether this extension context is still alive
 function isContextValid() {
   try {
@@ -26,14 +39,17 @@ function safeSendMessage(msg) {
 }
 
 const whitelistedDomains = [
-  'google.com', 'google.com.vn', 'accounts.google.com',
+  'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
+  'google.com', 'google.com.vn', 'accounts.google.com', 'myaccount.google.com',
+  'chromewebstore.google.com', 'chrome.google.com',
   'facebook.com', 'fb.com', 'm.facebook.com',
   'twitter.com', 'x.com',
-  'github.com', 'apple.com', 'microsoft.com', 'microsoftonline.com',
+  'github.com', 'gitlab.com', 'apple.com', 'appleid.apple.com',
+  'microsoft.com', 'microsoftonline.com', 'login.microsoftonline.com', 'login.live.com',
   'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
   'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
   'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
-  'auth0.com', 'firebaseapp.com', 'okta.com'
+  'auth0.com', 'firebaseapp.com', 'okta.com', 'id.atlassian.com'
 ];
 
 let customWhitelistedDomains = [];
@@ -332,6 +348,20 @@ function injectAdBlockCSS() {
   .jwplayer .jw-icon-volume:hover + .jw-slider-volume,
   .jwplayer .jw-icon-volume:hover ~ .jw-slider-volume {
     display: block !important;
+  }
+
+  /* Off-screen bait stubs styling for anti-adblock detection stubs (100% CSP safe, zero inline styles) */
+  #_preload-ads-1, #_preload-ads-2, #ads-banner, #google-ads, #adsbox, #ad-banner,
+  .Adv.ad-center-header.adsbox {
+    position: fixed !important;
+    top: -9999px !important;
+    left: -9999px !important;
+    width: 300px !important;
+    height: 250px !important;
+    opacity: 0.01 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    z-index: -1 !important;
   }
 
   /* === END PRE-BLOCK === */
@@ -949,7 +979,7 @@ if (window.location.hostname.includes('youtube.com')) {
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
                 elementToHide = curr;
               }
               curr = curr.parentElement;
@@ -1026,7 +1056,7 @@ if (window.location.hostname.includes('youtube.com')) {
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
                 elementToHide = curr;
               }
               curr = curr.parentElement;
@@ -1088,7 +1118,7 @@ if (window.location.hostname.includes('youtube.com')) {
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('float') || currClass.includes('catfish') || currClass.includes('modal') || currClass.includes('fixed') || currClass.includes('inset-0') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('float') || currId.includes('catfish') || currId.includes('modal');
 
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
                 elementToHide = curr;
               }
               curr = curr.parentElement;
@@ -1150,7 +1180,7 @@ if (window.location.hostname.includes('youtube.com')) {
                                   currClass.includes('ad-') || currClass.includes('-ad') || currClass.includes('qc') || currClass.includes('popup') || (currClass.includes('overlay') && !currClass.includes('thumb-overlay') && !isMediaOrThumb) || currClass.includes('ads-banner') || currClass.includes('ad-banner') || currClass.includes('banner-ad') || currClass.includes('float-banner') || currClass.includes('catfish') || currClass.includes('modal') ||
                                   currId.includes('ad') || currId.includes('qc') || currId.includes('popup') || (currId.includes('overlay') && !currId.includes('thumb')) || currId.includes('ads-banner') || currId.includes('ad-banner') || currId.includes('catfish') || currId.includes('modal');
 
-              if (isAdWrapper && (curr.innerText || '').trim().length < 150) {
+              if (isAdWrapper && (curr.textContent || '').trim().length < 150) {
                 elementToHide = curr;
               }
               curr = curr.parentElement;
@@ -1180,6 +1210,7 @@ if (window.location.hostname.includes('youtube.com')) {
       };
 
       // Heuristic Visual Ad Inspector (detects IAB standard banner dimensions with external redirect links)
+      // Fast-path: only inspect elements containing links, deferring forced layout measurement until a suspicious link is found.
       const checkHeuristicAdBanner = (el) => {
         if (!el || el.nodeType !== 1 || el.hasAttribute('data-ad-blocked')) return;
         if (isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return;
@@ -1188,26 +1219,10 @@ if (window.location.hostname.includes('youtube.com')) {
           const tag = el.tagName.toLowerCase();
           if (tag !== 'div' && tag !== 'a' && tag !== 'section' && tag !== 'aside') return;
 
-          const w = el.offsetWidth || el.clientWidth;
-          const h = el.offsetHeight || el.clientHeight;
-          if (w <= 0 || h <= 0) return;
+          // Fast-path guard: only inspect elements that contain anchors or are anchors
+          const anchors = tag === 'a' ? [el] : el.querySelectorAll('a[href]');
+          if (!anchors || anchors.length === 0) return;
 
-          // Check standard IAB display ad banner dimensions (+/- 8px)
-          const isIABDim = (
-            (Math.abs(w - 728) <= 8 && Math.abs(h - 90) <= 8) ||   // Leaderboard
-            (Math.abs(w - 970) <= 8 && Math.abs(h - 90) <= 8) ||   // Large Leaderboard
-            (Math.abs(w - 970) <= 8 && Math.abs(h - 250) <= 8) ||  // Billboard
-            (Math.abs(w - 300) <= 8 && Math.abs(h - 250) <= 8) ||  // Medium Rectangle (MPU)
-            (Math.abs(w - 336) <= 8 && Math.abs(h - 280) <= 8) ||  // Large Rectangle
-            (Math.abs(w - 160) <= 8 && Math.abs(h - 600) <= 8) ||  // Wide Skyscraper
-            (Math.abs(w - 300) <= 8 && Math.abs(h - 600) <= 8) ||  // Half Page
-            (Math.abs(w - 320) <= 8 && Math.abs(h - 50) <= 8)  ||  // Mobile Leaderboard
-            (Math.abs(w - 320) <= 8 && Math.abs(h - 100) <= 8)     // Large Mobile Banner
-          );
-
-          if (!isIABDim) return;
-
-          const anchors = el.querySelectorAll('a');
           const cleanDom = (d) => d.replace(/^www\./i, '');
           let hasSuspiciousLink = false;
 
@@ -1228,11 +1243,31 @@ if (window.location.hostname.includes('youtube.com')) {
             } catch(err) {}
           }
 
-          if (hasSuspiciousLink) {
-            el.setAttribute('data-ad-blocked', 'true');
-            el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-            console.log('[Heuristic Inspector] Blocked IAB display banner:', `${w}x${h}`, el);
-          }
+          if (!hasSuspiciousLink) return;
+
+          // Measure layout dimensions only after confirming suspicious redirect links
+          const w = el.offsetWidth || el.clientWidth;
+          const h = el.offsetHeight || el.clientHeight;
+          if (w <= 0 || h <= 0) return;
+
+          // Check standard IAB display ad banner dimensions (+/- 8px)
+          const isIABDim = (
+            (Math.abs(w - 728) <= 8 && Math.abs(h - 90) <= 8) ||   // Leaderboard
+            (Math.abs(w - 970) <= 8 && Math.abs(h - 90) <= 8) ||   // Large Leaderboard
+            (Math.abs(w - 970) <= 8 && Math.abs(h - 250) <= 8) ||  // Billboard
+            (Math.abs(w - 300) <= 8 && Math.abs(h - 250) <= 8) ||  // Medium Rectangle (MPU)
+            (Math.abs(w - 336) <= 8 && Math.abs(h - 280) <= 8) ||  // Large Rectangle
+            (Math.abs(w - 160) <= 8 && Math.abs(h - 600) <= 8) ||  // Wide Skyscraper
+            (Math.abs(w - 300) <= 8 && Math.abs(h - 600) <= 8) ||  // Half Page
+            (Math.abs(w - 320) <= 8 && Math.abs(h - 50) <= 8)  ||  // Mobile Leaderboard
+            (Math.abs(w - 320) <= 8 && Math.abs(h - 100) <= 8)     // Large Mobile Banner
+          );
+
+          if (!isIABDim) return;
+
+          el.setAttribute('data-ad-blocked', 'true');
+          el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+          console.log('[Heuristic Inspector] Blocked IAB display banner:', `${w}x${h}`, el);
         } catch(e) {}
       };
 
@@ -1288,8 +1323,13 @@ if (window.location.hostname.includes('youtube.com')) {
         if (vw === 0 || vh === 0) return;
         const viewportArea = vw * vh;
 
-        // Chỉ quét các phần tử ở tầng nông dưới body (direct child hoặc depth <= 3)
-        const overlays = document.querySelectorAll('body > div, body > section, body > dialog, body > ins, body > aside, body > * > div, body > * > * > div');
+        // Chỉ quét các phần tử ở tầng nông có đặc điểm là overlay/backdrop/modal/catfish/ad wrapper
+        const overlays = document.querySelectorAll(
+          'body > [class*="overlay" i], body > [class*="backdrop" i], body > [class*="modal" i], body > [class*="popup" i], ' +
+          'body > [class*="catfish" i], body > [class*="ad-" i], body > [class*="-ad" i], body > [id*="overlay" i], body > [id*="backdrop" i], body > [id*="popup" i], body > [id*="catfish" i], body > [id*="ad-" i], ' +
+          'body > dialog, body > ins, ' +
+          'body > * > [class*="overlay" i], body > * > [class*="backdrop" i], body > * > [class*="catfish" i], body > * > [class*="modal" i], body > * > [class*="popup" i]'
+        );
         overlays.forEach(el => {
           if (!el || !el.isConnected) return;
           if (el.hasAttribute('data-ad-blocked')) return;
@@ -1353,7 +1393,7 @@ if (window.location.hostname.includes('youtube.com')) {
           }
 
           // Kiểm tra văn bản: thông báo thật (> 300 ký tự không có từ khóa QC)
-          const text = (el.innerText || el.textContent || '').trim();
+          const text = (el.textContent || '').trim();
           const hasAdKeyword = /quảng cáo|quang cao|advertisement|sponsor|cá cược|nhà cái|tải game|đặt cược|casino|game bài|18\+|nohu|bắn cá/i.test(text) ||
                                elClass.includes('ad-') || elClass.includes('ad_') || elClass.includes('ads-') || elClass.includes('qc') || elId.includes('ad') || elId.includes('qc');
 
@@ -1397,11 +1437,22 @@ if (window.location.hostname.includes('youtube.com')) {
 
           // Phục hồi khóa cuộn (restore scroll lock)
           if (document.body) {
+            document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
             if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
             if (document.body.style.position === 'fixed') document.body.style.position = '';
           }
           if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
             document.documentElement.style.overflow = '';
+            document.documentElement.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
+          }
+
+          // Dọn dẹp luôn các backdrop mồ côi (.modal-backdrop, .dx-overlay) nếu không còn modal hợp lệ
+          if (!hasValidInteractiveModal()) {
+            document.querySelectorAll('.modal-backdrop, .dx-overlay').forEach(mb => {
+              if (!isVideoPlayerOrControls(mb) && !isInsideVideoPlayer(mb)) {
+                mb.remove();
+              }
+            });
           }
         });
       } catch(e) {
@@ -1468,8 +1519,8 @@ if (window.location.hostname.includes('youtube.com')) {
         // 1. EMPTY / ORPHAN BACKDROP OVERLAY PURGE
         // ----------------------------------------------------------------------
         const backdropCandidates = document.querySelectorAll(
-          'body > div, body > section, body > aside, body > dialog, ' +
-          'body > [class*="backdrop" i], body > [class*="overlay" i], body > [class*="modal" i], ' +
+          'body > [class*="backdrop" i], body > [class*="overlay" i], body > [class*="modal" i], body > [class*="popup" i], body > dialog, ' +
+          'body > [id*="backdrop" i], body > [id*="overlay" i], body > [id*="popup" i], ' +
           'body > * > [class*="backdrop" i], body > * > [class*="overlay" i]'
         );
 
@@ -1524,7 +1575,7 @@ if (window.location.hostname.includes('youtube.com')) {
           }
 
           // KIỂM TRA TÍNH CHẤT "MỒ CÔI / RỖNG" (ORPHAN / EMPTY)
-          const text = (el.innerText || el.textContent || '').trim();
+          const text = (el.textContent || '').trim();
           const hasOnlyCloseButton = (
             el.children.length <= 2 &&
             !!el.querySelector('button, [class*="close" i], [id*="close" i], [aria-label*="close" i], [class*="dismiss" i]')
@@ -1537,6 +1588,16 @@ if (window.location.hostname.includes('youtube.com')) {
             console.log('[Janitor] Đã dọn dẹp khung mờ tồn dư (orphan backdrop):', el);
           }
         });
+
+        // Dọn dẹp các backdrop mồ côi (.modal-backdrop, .dx-overlay) nếu không có interactive modal hợp lệ
+        if (!hasValidInteractiveModal()) {
+          document.querySelectorAll('.modal-backdrop, .dx-overlay').forEach(mb => {
+            if (!isVideoPlayerOrControls(mb) && !isInsideVideoPlayer(mb)) {
+              mb.remove();
+              console.log('[Janitor] Đã dọn dẹp backdrop/overlay tồn dư:', mb);
+            }
+          });
+        }
 
         // ----------------------------------------------------------------------
         // 2. ORPHAN CLOSE BUTTONS PURGE
@@ -1573,7 +1634,7 @@ if (window.location.hostname.includes('youtube.com')) {
 
           // Kiểm tra tính "mồ côi" của nút đóng
           const contextContainer = (parentFloating && parent !== document.body) ? parent : btn;
-          const contextText = (contextContainer.innerText || contextContainer.textContent || '').trim();
+          const contextText = (contextContainer.textContent || '').trim();
           const hasSubstantialText = contextText.length > 30 && !/quảng cáo|advertisement|sponsor/i.test(contextText);
           if (hasSubstantialText) return;
 
@@ -2786,3 +2847,78 @@ if (window.location.hostname.includes('youtube.com')) {
       }
     })();
     // === END motphimc.app PopupAd Guardian ===
+
+    // === 91porn / 91porna Landing Modal Guardian ===
+    // Ngăn chặn #tip_modal gây khóa màn hình bằng .modal-backdrop và .modal-open
+    (function porn91ModalGuard() {
+      const host = window.location.hostname.toLowerCase();
+      if (!host.includes('91porn')) return;
+
+      try {
+        const d = new Date();
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        localStorage.setItem('__landing_modal_at__', todayStr);
+      } catch (e) {}
+
+      function clean91PornModal() {
+        const tipModal = document.getElementById('tip_modal') || document.querySelector('.dx-modal');
+        if (tipModal) {
+          const dismissBtn = tipModal.querySelector('[data-dismiss="modal"], .close, .btn-primary');
+          if (dismissBtn) {
+            try { dismissBtn.click(); } catch(e) {}
+          }
+          tipModal.remove();
+        }
+
+        // Chỉ gỡ bỏ backdrop nếu modal đăng nhập hợp lệ (#login_modal) KHÔNG đang mở
+        const loginModal = document.getElementById('login_modal');
+        const isLoginOpen = loginModal && (
+          loginModal.classList.contains('in') ||
+          (window.getComputedStyle(loginModal).display !== 'none' && window.getComputedStyle(loginModal).visibility !== 'hidden')
+        );
+
+        if (!isLoginOpen) {
+          const backdrops = document.querySelectorAll('.modal-backdrop, .dx-overlay');
+          backdrops.forEach(b => b.remove());
+
+          if (document.body) {
+            document.body.classList.remove('modal-open');
+            if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+            if (document.body.style.position === 'fixed') document.body.style.position = '';
+          }
+          if (document.documentElement) {
+            document.documentElement.classList.remove('modal-open');
+            if (document.documentElement.style.overflow === 'hidden') document.documentElement.style.overflow = '';
+          }
+        }
+      }
+
+      clean91PornModal();
+
+      const observer = new MutationObserver(() => {
+        if (document.getElementById('tip_modal') || document.querySelector('.dx-modal, .modal-backdrop, .dx-overlay')) {
+          clean91PornModal();
+        }
+      });
+
+      const startObs = () => {
+        if (document.body) {
+          observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+        clean91PornModal();
+      };
+
+      if (document.body) {
+        startObs();
+      } else {
+        document.addEventListener('DOMContentLoaded', startObs, { once: true });
+      }
+
+      let count = 0;
+      const t = setInterval(() => {
+        clean91PornModal();
+        if (++count > 25) clearInterval(t);
+      }, 150);
+    })();
+    // === END 91porn / 91porna Landing Modal Guardian ===
+
