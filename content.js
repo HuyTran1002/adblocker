@@ -346,94 +346,12 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* === VIDEO PLAYER & TIMELINE INTERACTION GUARANTEE === */
-  /* 1. Only pure text/captions/tooltips allow clicks to pass through without blocking */
-  .jwplayer .jw-captions,
-  .jwplayer .jw-shortcuts-tooltip,
-  .video-js .vjs-text-track-display {
-    pointer-events: none !important;
-  }
-
-  /* 2. Video elements & media background must directly receive mouse & click events */
+  /* === VIDEO PLAYER & EMBED CONTAINER PROTECTION === */
+  /* Protect legitimate video players & embed iframes from being hidden by cosmetic filters without breaking their native interactivity */
   video, audio,
-  .jwplayer video,
-  .jwplayer .jw-media,
-  .jwplayer .jw-aspect,
-  .jwplayer .jw-preview,
-  .video-js video,
-  .video-js .vjs-tech,
-  .video-js .vjs-poster,
-  .artplayer video,
-  .artplayer .art-video-player,
-  .artplayer .art-mask,
-  .dplayer video,
-  .dplayer .dplayer-video-wrap,
-  .plyr video,
-  .xgplayer video,
-  .fluid_player video,
-  [class*="player" i] video,
-  [id*="player" i] video {
-    pointer-events: auto !important;
-  }
-
-  /* Automatically hide mouse cursor and disable hidden controls when player is inactive (natural auto-hide) */
-  .jwplayer.jw-flag-user-inactive,
-  .jwplayer.jw-flag-user-inactive *,
-  .video-js.vjs-user-inactive,
-  .video-js.vjs-user-inactive *,
-  .artplayer.art-inactive,
-  .artplayer.art-inactive *,
-  .dplayer.dplayer-hide-controller,
-  .dplayer.dplayer-hide-controller *,
-  .plyr--hide-controls,
-  .plyr--hide-controls *,
-  [data-ws-cursor-hidden="true"],
-  [data-ws-cursor-hidden="true"] * {
-    cursor: none !important;
-  }
-  .jwplayer.jw-flag-user-inactive .jw-controlbar,
-  .jwplayer.jw-flag-user-inactive .jw-controlbar *,
-  .video-js.vjs-user-inactive .vjs-control-bar,
-  .video-js.vjs-user-inactive .vjs-control-bar *,
-  .artplayer.art-inactive .art-controls,
-  .artplayer.art-inactive .art-controls *,
-  .dplayer.dplayer-hide-controller .dplayer-controller,
-  .dplayer.dplayer-hide-controller .dplayer-controller *,
-  .plyr--hide-controls .plyr__controls,
-  .plyr--hide-controls .plyr__controls *,
-  .fluid_controls_container.fade_out,
-  .fluid_controls_container.fade_out * {
-    pointer-events: none !important;
-  }
-
-  /* 3. Player control bars, buttons, timeline seekbars must receive 100% user interactions when active */
-  .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar,
-  .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar *,
-  .jwplayer .jw-display-icon-container,
-  .jwplayer .jw-display-icon-container *,
-  .jwplayer .jw-settings-menu,
-  .jwplayer .jw-settings-menu *,
-  .video-js:not(.vjs-user-inactive) .vjs-control-bar,
-  .video-js:not(.vjs-user-inactive) .vjs-control-bar *,
-  .artplayer:not(.art-inactive) .art-controls,
-  .artplayer:not(.art-inactive) .art-controls *,
-  .dplayer:not(.dplayer-hide-controller) .dplayer-controller,
-  .dplayer:not(.dplayer-hide-controller) .dplayer-controller *,
-  .dplayer .dplayer-bar-wrap,
-  .dplayer .dplayer-bar-wrap *,
-  .plyr:not(.plyr--hide-controls) .plyr__controls,
-  .plyr:not(.plyr--hide-controls) .plyr__controls *,
-  .fluid_controls_container:not(.fade_out),
-  .fluid_controls_container:not(.fade_out) *,
-  [class*="seekbar" i], [class*="seekbar" i] * {
-    pointer-events: auto !important;
-    cursor: pointer !important;
-  }
-
+  .jwplayer, .video-js, .artplayer, .dplayer, .plyr, .xgplayer, .fluid_video_wrapper,
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
-    visibility: visible !important;
-    pointer-events: auto !important;
-    cursor: pointer !important;
+    display: block !important;
   }
 
   /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
@@ -820,9 +738,15 @@ if (currentEnabledState) {
     function isMovieBannerOrPoster(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
-        // 1. Content Class / ID Whitelist
         const elId = (el.id || '').toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        // NEVER treat elements with explicit ad markers as movie banners!
+        if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner|floater)(?:[\s_-]|$)/i.test(elClass) ||
+            /(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner)(?:[\s_-]|$)/i.test(elId)) {
+          return false;
+        }
+
+        // 1. Content Class / ID Whitelist
         const contentKeywords = ['poster', 'thumb', 'cover', 'movie', 'film', 'episode', 'server', 'play-list', 'list-ep', 'tap', 'halim', 'tray', 'swiper', 'carousel', 'slider', 'trailer', 'detail'];
         if (contentKeywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
           return true;
@@ -840,7 +764,7 @@ if (currentEnabledState) {
           '[class*="server"], [id*="server"], [class*="play-list"], [id*="play-list"], [class*="movie"], [id*="movie"], ' +
           '[class*="film"], [id*="film"], [class*="trailer"], [id*="trailer"], [class*="detail"], [id*="detail"], ' +
           '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, .module-info-play, .module-mobile-play, .module-play-list, ' +
-          '.thumb-overlay, .video-js, [class*="video-js"], [class*="vjs-"], ' +
+          '.thumb-overlay, .video-js, [class*="video-js"], ' +
           '[id*="player_one"], .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"]'
         )) {
           return true;
@@ -2792,41 +2716,9 @@ if (currentEnabledState) {
           opacity: 1 !important;
           pointer-events: auto !important;
         }
-        /* Bảo vệ thanh điều khiển YouTube khỏi bộ lọc ẩn mà không làm đơ cơ chế tự mờ auto-hide */
-        .html5-video-player .ytp-chrome-bottom {
+        /* Bảo vệ container video khỏi bộ lọc ẩn */
+        video, .jwplayer, .video-js, .artplayer, .plyr, .dplayer, [class*="player"] video {
           display: block !important;
-        }
-        /* Đảm bảo thanh điều khiển video player luôn nhận tương tác khi active và ẩn tự nhiên khi inactive */
-        .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar,
-        .video-js:not(.vjs-user-inactive) .vjs-control-bar,
-        .artplayer:not(.art-inactive) .art-controls,
-        .dplayer:not(.dplayer-hide-controller) .dplayer-controller,
-        .plyr:not(.plyr--hide-controls) .plyr__controls,
-        .fluid_controls_container:not(.fade_out),
-        [class*="seekbar" i] {
-          pointer-events: auto !important;
-        }
-        .jwplayer.jw-flag-user-inactive,
-        .jwplayer.jw-flag-user-inactive *,
-        .video-js.vjs-user-inactive,
-        .video-js.vjs-user-inactive *,
-        .artplayer.art-inactive,
-        .artplayer.art-inactive *,
-        .dplayer.dplayer-hide-controller,
-        .dplayer.dplayer-hide-controller *,
-        .plyr--hide-controls,
-        .plyr--hide-controls *,
-        [data-ws-cursor-hidden="true"],
-        [data-ws-cursor-hidden="true"] * {
-          cursor: none !important;
-        }
-        .jwplayer.jw-flag-user-inactive .jw-controlbar,
-        .video-js.vjs-user-inactive .vjs-control-bar,
-        .artplayer.art-inactive .art-controls,
-        .dplayer.dplayer-hide-controller .dplayer-controller,
-        .plyr--hide-controls .plyr__controls,
-        .fluid_controls_container.fade_out {
-          pointer-events: none !important;
         }
       `;
       dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
@@ -3044,12 +2936,12 @@ if (currentEnabledState) {
         'wpadmngr', 'wpshsdk', 'exosrv', 'exoclick', 'realsrv', 'magsrv', 'trafficjunky',
         'tsyndicate', 'adsterra', 'hilltopads', 'popcash', 'popads', 'monetag', 'clickadu',
         'adxad', 'adtng', 'etahub', 'stripchat', 'chaturbate', 'juicyads', 'cpmgate',
-        'frozepriceless', 'linkroyal'
+        'frozepriceless', 'linkroyal', 'ethnicexpressions', 'deloplen', 'adtrue'
       ];
 
       function isFloatingAdElement(el) {
         if (!el || el.nodeType !== 1) return false;
-        if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return false;
+        if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el)) return false;
         if (el === document.body || el === document.documentElement) return false;
         // Never touch target picker UI
         if (el.id && el.id.startsWith('adblock-max-')) return false;
@@ -3093,12 +2985,23 @@ if (currentEnabledState) {
               }
             }
 
-            // B. Floating popup dialog with ad attributes (e.g. z-index >= 99990)
-            if (zIndex >= 99990) {
+            // B. Floating popup dialog with ad attributes (e.g. z-index >= 1000)
+            if (zIndex >= 1000) {
               const text = (el.textContent || '').toLowerCase();
-              const hasAdText = text.includes('advertisement') || text.includes('trending now') || text.includes('nhận hoa hồng') || text.includes('quảng cáo');
-              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.className || '') || /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.id || '');
-              if (hasAdText || hasAdClass) {
+              const hasFake18OrAd = text.includes('over 18 years old') ||
+                                    text.includes('confirm that you are over') ||
+                                    text.includes('watch full video') ||
+                                    text.includes('install app') ||
+                                    text.includes('advertisement') ||
+                                    text.includes('trending now') ||
+                                    text.includes('nhận hoa hồng') ||
+                                    text.includes('quảng cáo');
+              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.className || '') ||
+                                 /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.id || '');
+              if (hasFake18OrAd && (hasAdClass || zIndex >= 9000 || el.querySelector('video, iframe, button'))) {
+                return true;
+              }
+              if (zIndex >= 99990 && (hasFake18OrAd || hasAdClass)) {
                 return true;
               }
             }

@@ -243,6 +243,29 @@
         } catch (e) { }
       });
 
+      // Defuse ExoVideoSlider constructor (prevents javmost.ws line 1066 ReferenceError crash)
+      function DummyExoVideoSlider() {
+        return {
+          init: function () { },
+          show: function () { },
+          hide: function () { },
+          destroy: function () { },
+          on: function () { },
+          addEventListener: function () { }
+        };
+      }
+      DummyExoVideoSlider.prototype.init = function () { };
+      DummyExoVideoSlider.prototype.show = function () { };
+      DummyExoVideoSlider.prototype.hide = function () { };
+      DummyExoVideoSlider.prototype.destroy = function () { };
+      try {
+        Object.defineProperty(window, 'ExoVideoSlider', {
+          get() { return DummyExoVideoSlider; },
+          set(val) { /* ignore */ },
+          configurable: true
+        });
+      } catch (e) { }
+
       // Passive safety patch for jQuery .position() on animevietsub home-v1.js:373 without defining properties on window
       if (window.jQuery && window.jQuery.fn && window.jQuery.fn.position && !window.jQuery.fn.position._safePatched) {
         const origPos = window.jQuery.fn.position;
@@ -267,7 +290,8 @@
           '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
           'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip',
           'ima3.js', 'trafficjunky', 'tsyndicate', 'a-ads.com',
-          'wpadmngr', 'wpshsdk', 'detectivefrozepriceless', 'hilltopads', 'clickadu', 'adxad', 'adtng', 'etahub'
+          'wpadmngr', 'wpshsdk', 'detectivefrozepriceless', 'hilltopads', 'clickadu', 'adxad', 'adtng', 'etahub',
+          'ethnicexpressions', 'deloplen', 'adtrue'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -575,6 +599,14 @@
   function isMovieBannerOrPoster(el) {
     if (!el || el === document || el === document.body || el === document.documentElement) return false;
     try {
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      const elId = (el.id || '').toLowerCase();
+      // NEVER treat elements with explicit ad markers as movie banners!
+      if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner|floater)(?:[\s_-]|$)/i.test(elClass) ||
+          /(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner)(?:[\s_-]|$)/i.test(elId)) {
+        return false;
+      }
+
       if (el.closest && el.closest(
         '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
         '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
@@ -584,9 +616,9 @@
         '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, ' +
         '[class*="episode"], [class*="server"], [class*="play-list"], [class*="list-ep"], [class*="tap-"], ' +
         '[id*="episode"], [id*="server"], .module-info-play, .module-mobile-play, .module-play-list, ' +
-        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], [class*="vjs-"], ' +
+        '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], ' +
         '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
-        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="banner"], [class*="poster"], ' +
+        '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], ' +
         '[class*="detail"], [class*="trailer"]'
       )) {
         return true;
@@ -619,242 +651,17 @@
   }
 
   // Record user interaction timestamps passively without ever interfering with event flow
-    ['pointerdown', 'keydown'].forEach(eventName => {
-      window.addEventListener(eventName, (e) => {
-        lastInteractionTime = Date.now();
-        lastInteractionEvent = e;
-      }, { passive: true, capture: false });
-    });
+  ['pointerdown', 'keydown'].forEach(eventName => {
+    window.addEventListener(eventName, (e) => {
+      lastInteractionTime = Date.now();
+      lastInteractionEvent = e;
+    }, { passive: true, capture: false });
+  });
 
-  // --- MAIN WORLD UNIVERSAL VIDEO PLAYER TIMELINE & AUTO-HIDE GUARDIAN ---
-  // Fixes: Timeline sticking indefinitely after click/tap ("dính đó quài ko chịu ẩn đi")
-  // Ensures:
-  // 1. Clicks/taps/mouse movements instantly wake up timeline & controls across all players (JWPlayer, Video.js, ArtPlayer, DPlayer, Plyr, FluidPlayer, HTML5).
-  // 2. An active auto-hide timer (2.5s - 3s) cleanly returns the player to inactive state when idle.
-  // 3. Hovering over seekbar, controlbar, or buttons NEVER hides the controls while user is aiming.
-  // 4. Paused video NEVER hides controls so user can see playback state, seekbar, and play button.
-  // 5. Cursor hides cleanly when idle (cursor: none).
-  try {
-    function getWsPlayer(el) {
-      if (!el || el === document || el === document.body || el === document.documentElement) return null;
-      try {
-        if (el.closest) {
-          const p = el.closest(
-            '.jwplayer, .video-js, .artplayer, .dplayer, .plyr, .fluid_video_wrapper, ' +
-            '[class*="jwplayer" i], [class*="video-js" i], [class*="artplayer" i], [class*="dplayer" i], ' +
-            '.html5-video-player, [class*="player" i]:not(body):not(html), [id*="player" i]:not(body):not(html)'
-          );
-          if (p) return p;
-        }
-        if (el.tagName && el.tagName.toLowerCase() === 'video') {
-          return el.parentElement || el;
-        }
-        let curr = el;
-        let depth = 0;
-        while (curr && curr !== document.body && curr !== document.documentElement && depth < 5) {
-          if (curr.querySelector && curr.querySelector('video')) {
-            return curr;
-          }
-          curr = curr.parentElement;
-          depth++;
-        }
-      } catch (e) {}
-      return null;
-    }
-
-    function wakeUpPlayerControls(player) {
-      if (!player) return;
-      try {
-        // 1. JWPlayer
-        if (player.classList.contains('jwplayer') || player.querySelector('.jw-controlbar')) {
-          player.classList.remove('jw-flag-user-inactive');
-          player.classList.add('jw-flag-user-active');
-          if (typeof window.jwplayer === 'function') {
-            try {
-              const jw = window.jwplayer(player.id || 0);
-              if (jw && typeof jw.userActive === 'function') jw.userActive();
-            } catch (e) {}
-          }
-        }
-        // 2. Video.js
-        if (player.classList.contains('video-js') || player.querySelector('.vjs-control-bar')) {
-          player.classList.remove('vjs-user-inactive');
-          player.classList.add('vjs-user-active');
-        }
-        // 3. ArtPlayer
-        if (player.classList.contains('artplayer') || player.querySelector('.art-controls')) {
-          player.classList.remove('art-inactive');
-          player.classList.add('art-active');
-        }
-        // 4. DPlayer
-        if (player.classList.contains('dplayer') || player.querySelector('.dplayer-controller')) {
-          player.classList.remove('dplayer-hide-controller');
-        }
-        // 5. Plyr
-        if (player.classList.contains('plyr')) {
-          player.classList.remove('plyr--hide-controls');
-        }
-        // 6. Fluid Player
-        const fluidCtrl = player.querySelector('.fluid_controls_container');
-        if (fluidCtrl) {
-          fluidCtrl.classList.remove('fade_out');
-          fluidCtrl.classList.add('fade_in');
-        }
-        // Reset cursor visibility flag
-        player.removeAttribute('data-ws-cursor-hidden');
-      } catch (e) {}
-    }
-
-    function putPlayerToSleep(player) {
-      if (!player) return;
-      try {
-        const video = player.querySelector('video');
-        // NEVER auto-hide if video is paused, ended, or if cursor is hovering over controls/timeline!
-        if (video && (video.paused || video.ended)) return;
-        if (player._ws_hovering_controls) return;
-
-        // 1. JWPlayer
-        if (player.classList.contains('jwplayer') || player.querySelector('.jw-controlbar')) {
-          player.classList.add('jw-flag-user-inactive');
-          player.classList.remove('jw-flag-user-active');
-          if (typeof window.jwplayer === 'function') {
-            try {
-              const jw = window.jwplayer(player.id || 0);
-              if (jw && typeof jw.userInactive === 'function') jw.userInactive();
-            } catch (e) {}
-          }
-        }
-        // 2. Video.js
-        if (player.classList.contains('video-js') || player.querySelector('.vjs-control-bar')) {
-          player.classList.add('vjs-user-inactive');
-          player.classList.remove('vjs-user-active');
-        }
-        // 3. ArtPlayer
-        if (player.classList.contains('artplayer') || player.querySelector('.art-controls')) {
-          player.classList.add('art-inactive');
-          player.classList.remove('art-active');
-        }
-        // 4. DPlayer
-        if (player.classList.contains('dplayer') || player.querySelector('.dplayer-controller')) {
-          player.classList.add('dplayer-hide-controller');
-        }
-        // 5. Plyr
-        if (player.classList.contains('plyr')) {
-          player.classList.add('plyr--hide-controls');
-        }
-        // 6. Fluid Player
-        const fluidCtrl = player.querySelector('.fluid_controls_container');
-        if (fluidCtrl) {
-          fluidCtrl.classList.remove('fade_in');
-          fluidCtrl.classList.add('fade_out');
-        }
-        // Mark cursor hidden when idle
-        player.setAttribute('data-ws-cursor-hidden', 'true');
-      } catch (e) {}
-    }
-
-    function schedulePlayerSleep(player, delay = 2500) {
-      if (!player) return;
-      if (player._ws_sleep_timer) {
-        clearTimeout(player._ws_sleep_timer);
-        player._ws_sleep_timer = null;
-      }
-      const video = player.querySelector('video');
-      if (video && (video.paused || video.ended)) return; // Keep visible while paused
-      if (player._ws_hovering_controls) return; // Keep visible while hovering controls
-
-      player._ws_sleep_timer = setTimeout(() => {
-        putPlayerToSleep(player);
-      }, delay);
-    }
-
-    // Wake up & auto-hide on click / tap (Mobile & Desktop)
-    ['click', 'touchend', 'pointerdown'].forEach(evName => {
-      document.addEventListener(evName, (e) => {
-        try {
-          const player = getWsPlayer(e.target);
-          if (player) {
-            wakeUpPlayerControls(player);
-            schedulePlayerSleep(player, 3000);
-          }
-        } catch (err) {}
-      }, { capture: true, passive: true });
-    });
-
-    // Wake up & auto-hide on mousemove inside player container (Desktop)
-    document.addEventListener('mousemove', (e) => {
-      try {
-        const player = getWsPlayer(e.target);
-        if (player) {
-          wakeUpPlayerControls(player);
-          schedulePlayerSleep(player, 2500);
-        }
-      } catch (err) {}
-    }, { capture: true, passive: true });
-
-    // Control bar hover protection: NEVER hide while hovering over seekbar, buttons, or controls
-    document.addEventListener('mouseover', (e) => {
-      try {
-        const ctrl = e.target && e.target.closest && e.target.closest(
-          '.jw-controlbar, .vjs-control-bar, .art-controls, .dplayer-controller, ' +
-          '.plyr__controls, .fluid_controls_container, [class*="control-bar" i], ' +
-          '[class*="seekbar" i], [class*="progress-bar" i], [class*="slider" i]'
-        );
-        if (ctrl) {
-          const player = getWsPlayer(ctrl);
-          if (player) {
-            player._ws_hovering_controls = true;
-            if (player._ws_sleep_timer) {
-              clearTimeout(player._ws_sleep_timer);
-              player._ws_sleep_timer = null;
-            }
-            wakeUpPlayerControls(player);
-          }
-        }
-      } catch (err) {}
-    }, { passive: true, capture: true });
-
-    document.addEventListener('mouseout', (e) => {
-      try {
-        const ctrl = e.target && e.target.closest && e.target.closest(
-          '.jw-controlbar, .vjs-control-bar, .art-controls, .dplayer-controller, ' +
-          '.plyr__controls, .fluid_controls_container, [class*="control-bar" i], ' +
-          '[class*="seekbar" i], [class*="progress-bar" i], [class*="slider" i]'
-        );
-        if (ctrl) {
-          const player = getWsPlayer(ctrl);
-          if (player) {
-            player._ws_hovering_controls = false;
-            schedulePlayerSleep(player, 1500);
-          }
-        }
-      } catch (err) {}
-    }, { passive: true, capture: true });
-
-    // Video playback state tracking
-    document.addEventListener('play', (e) => {
-      if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'video') {
-        const player = getWsPlayer(e.target);
-        if (player) {
-          wakeUpPlayerControls(player);
-          schedulePlayerSleep(player, 2500);
-        }
-      }
-    }, { capture: true, passive: true });
-
-    document.addEventListener('pause', (e) => {
-      if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'video') {
-        const player = getWsPlayer(e.target);
-        if (player) {
-          if (player._ws_sleep_timer) {
-            clearTimeout(player._ws_sleep_timer);
-            player._ws_sleep_timer = null;
-          }
-          wakeUpPlayerControls(player);
-        }
-      }
-    }, { capture: true, passive: true });
-  } catch (e) {}
+  // --- VIDEO PLAYER NATIVE PASS-THROUGH (ZERO INTERFERENCE) ---
+  // WebShield respects the website's native video player (JWPlayer, Video.js, Plyr, YouTube, etc.).
+  // All clicks, touches, timeline scrubbing, auto-hide, and play/pause logic flow 100% naturally
+  // to the player without any artificial DOM manipulation or forced timers.
 
   // --- BODY POINTER-EVENTS & SCROLL GUARDIAN (MAIN WORLD) ---
   function ensureBodyPointerEvents() {
