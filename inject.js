@@ -60,7 +60,7 @@
       // Common player URL patterns
       if (/\/watch|\/embed\/|\/player\/|\/play\/|\/stream\/|\/hls\/|\/video\/|\/v\//.test(path)) return true;
       // Has a video element already (very likely a player frame)
-      if (document.querySelector('video')) return true;
+      if (document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
     } catch (e) {}
     return false;
   })();
@@ -665,7 +665,7 @@
 
   // --- BODY POINTER-EVENTS & SCROLL GUARDIAN (MAIN WORLD) ---
   function ensureBodyPointerEvents() {
-    if (!isEnabled() || isCurrentPageWhitelisted()) return;
+    if (isEmbeddedPlayerFrame || !isEnabled() || isCurrentPageWhitelisted()) return;
     try {
       if (document.body) {
         if (document.body.style.pointerEvents === 'none') {
@@ -1539,7 +1539,7 @@
   if (!isYouTube) {
     try {
       EventTarget.prototype.dispatchEvent = function (event) {
-        if (!isEnabled() || isCurrentPageWhitelisted()) {
+        if (isEmbeddedPlayerFrame || !isEnabled() || isCurrentPageWhitelisted()) {
           return originalDispatchEvent.apply(this, arguments);
         }
 
@@ -2127,7 +2127,7 @@
   }
 
   function runGenericAntiAdblockBypass() {
-    if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+    if (isEmbeddedPlayerFrame || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
 
     function cleanOverlays() {
       if (!isEnabled()) return;

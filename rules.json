@@ -862,15 +862,9 @@
       "type": "block"
     },
     "condition": {
-      "urlFilter": "*streamvl.top/file/*",
+      "urlFilter": "*streamvl.top/file/*.gif*",
       "resourceTypes": [
-        "script",
-        "sub_frame",
-        "xmlhttprequest",
-        "image",
-        "media",
-        "main_frame",
-        "other"
+        "image"
       ]
     }
   },

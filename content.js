@@ -58,6 +58,19 @@ function safeSendMessage(msg) {
   }
 }
 
+// Detect embedded video player iframes across tube and streaming sites
+const isEmbeddedPlayerFrame = (function () {
+  if (window.self === window.top) return false;
+  try {
+    const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    const path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : '';
+    if (/streamvl|vlstream|play\.|embed\.|player\.|hls\.|stream\.|media\.|cdn\.|video\./.test(host)) return true;
+    if (/\/watch|\/embed\/|\/player\/|\/play\/|\/stream\/|\/hls\/|\/video\/|\/v\//.test(path)) return true;
+    if (document.querySelector && document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
+  } catch (e) {}
+  return false;
+})();
+
 const whitelistedDomains = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'google.com', 'google.com.vn', 'accounts.google.com', 'myaccount.google.com',
@@ -167,7 +180,7 @@ const adSelectors = [
 
   // Popup banners, overlays and catfish ads (qmhsexzd, phimmoi, stream sites)
   '.popup-grid', '.popup-banner',
-  '#popup-container', '.ad-banner',
+  '#popup-container', '#popup-overlay', '.ad-banner',
   '#catfish-banner', '.catfish-banner',
   '.popup-ads', '.ads-popup', '.popup-quangcao', '.quangcao-popup',
   '.banner-popup', '.popup_banner', '.banner_popup',
@@ -184,8 +197,8 @@ function injectAdBlockCSS() {
   // Prevent duplicate insertion
   if (document.getElementById('anti-popunder-adblock-css')) return;
   
-  // Do not inject generic ad blocking CSS on YouTube or whitelisted pages to avoid hiding critical UI elements
-  if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+  // Do not inject generic ad blocking CSS on YouTube, whitelisted pages, or embedded player iframes
+  if (isEmbeddedPlayerFrame || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
   
   const style = document.createElement('style');
   style.id = 'anti-popunder-adblock-css';
@@ -237,7 +250,7 @@ function injectAdBlockCSS() {
   /* Ad network images - only target explicit ad networks, NEVER generic banner/ad strings */
   img[src*="playhubconnect"], img[src*="juicyads"], img[src*="jads.co"],
   img[src*="adsterra"], img[src*="exoclick"], img[src*="adserver"],
-  img[src*="abroadad.cache.wpscdn"], img[src*="streamvl.top/file/"],
+  img[src*="abroadad.cache.wpscdn"], img[src*="streamvl.top/file/"][src*=".gif"],
   img[src*="cm8806.com"], img[src*="9splt.com"], img[src*="yuelongyy"],
   img[src*="adspro.name"], img[src*="cpmgate"], img[src*="monetag"],
   img[src*="propellerads"], img[src*="adtrue"] {
@@ -1202,7 +1215,7 @@ if (currentEnabledState) {
     // + Nằm trực tiếp dưới <body> (direct child hoặc depth <= 3)
     // + Có z-index cực cao (> 9999) nhưng hoàn toàn KHÔNG chứa <video> hay bất kỳ player UI nào trong subtree của nó
     function detectAndCleanAdOverlays() {
-      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
       if (window.location.hostname.includes('youtube.com')) return;
 
       try {
@@ -1392,7 +1405,7 @@ if (currentEnabledState) {
     }
 
     function runOrphanOverlayAndScrollJanitor() {
-      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
       if (window.location.hostname.includes('youtube.com')) return;
 
       // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Nếu video đang toàn màn hình, không can thiệp
@@ -1691,19 +1704,19 @@ if (currentEnabledState) {
 
     // Event-driven initial and load sweeps (no periodic setInterval)
     window.addEventListener('DOMContentLoaded', () => {
-      if (window.location.hostname.includes('youtube.com')) return;
+      if (isEmbeddedPlayerFrame || window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
       scheduleJanitorSweep();
     });
 
     if (document.readyState === 'interactive' || document.readyState === 'complete') {
-      if (!window.location.hostname.includes('youtube.com')) {
+      if (!isEmbeddedPlayerFrame && !window.location.hostname.includes('youtube.com')) {
         scanAndRemoveAds();
         scheduleJanitorSweep();
       }
     }
     window.addEventListener('load', () => {
-      if (window.location.hostname.includes('youtube.com')) return;
+      if (isEmbeddedPlayerFrame || window.location.hostname.includes('youtube.com')) return;
       scanAndRemoveAds();
       scheduleJanitorSweep();
       setTimeout(scheduleJanitorSweep, 1500);
@@ -2703,12 +2716,9 @@ if (currentEnabledState) {
         .jwplayer, .artplayer, .video-js, .plyr,
         [class*="player"] video, [id*="player"] video {
           visibility: visible !important;
-          pointer-events: auto !important;
         }
         iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
           visibility: visible !important;
-          pointer-events: auto !important;
-          cursor: pointer !important;
         }
         /* Bảo vệ tuyệt đối danh sách tập phim, chọn server */
         :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"]) {
@@ -2725,7 +2735,7 @@ if (currentEnabledState) {
     }
 
     function refreshDynamicCosmetics() {
-      if (!isContextValid() || isCurrentPageWhitelisted()) return;
+      if (isEmbeddedPlayerFrame || !isContextValid() || isCurrentPageWhitelisted()) return;
       try {
         chrome.storage.local.get(['dynamicDomainCosmetics'], (res) => {
           if (!res) return;
@@ -3011,7 +3021,7 @@ if (currentEnabledState) {
       }
 
       function sweepFloatingAds(root) {
-        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+        if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
         try {
           const target = root || document;
           // Look for candidates: iframes and fixed/absolute containers
@@ -3046,7 +3056,7 @@ if (currentEnabledState) {
 
       // MutationObserver to neutralize self-healing/resurrection popups instantly before paint
       const guardianObserver = new MutationObserver((mutations) => {
-        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+        if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
         for (const mut of mutations) {
           for (const node of mut.addedNodes) {
             if (node.nodeType === 1) {
@@ -3063,6 +3073,7 @@ if (currentEnabledState) {
       });
 
       const initGuardian = () => {
+        if (isEmbeddedPlayerFrame) return;
         if (document.body) {
           guardianObserver.observe(document.body, { childList: true, subtree: true });
           sweepFloatingAds(document);
