@@ -346,15 +346,11 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* === IRON-CLAD VIDEO PLAYER & TIMELINE PASS-THROUGH GUARANTEE === */
-  /* 1. Transparent container overlays must allow clicks to pass through naturally to the underlying video */
-  .jwplayer .jw-overlays,
-  .jwplayer .jw-controls,
+  /* === VIDEO PLAYER & TIMELINE INTERACTION GUARANTEE === */
+  /* 1. Only pure text/captions/tooltips allow clicks to pass through without blocking */
   .jwplayer .jw-captions,
-  .jwplayer .jw-title,
   .jwplayer .jw-shortcuts-tooltip,
-  .video-js .vjs-text-track-display,
-  .artplayer .art-layers {
+  .video-js .vjs-text-track-display {
     pointer-events: none !important;
   }
 
@@ -380,7 +376,7 @@ function injectAdBlockCSS() {
     pointer-events: auto !important;
   }
 
-  /* Automatically hide mouse cursor when player is inactive (watching movie with resting mouse) */
+  /* Automatically hide mouse cursor and disable hidden controls when player is inactive (natural auto-hide) */
   .jwplayer.jw-flag-user-inactive,
   .jwplayer.jw-flag-user-inactive *,
   .video-js.vjs-user-inactive,
@@ -391,20 +387,30 @@ function injectAdBlockCSS() {
   .dplayer.dplayer-hide-controller * {
     cursor: none !important;
   }
+  .jwplayer.jw-flag-user-inactive .jw-controlbar,
+  .jwplayer.jw-flag-user-inactive .jw-controlbar *,
+  .video-js.vjs-user-inactive .vjs-control-bar,
+  .video-js.vjs-user-inactive .vjs-control-bar *,
+  .artplayer.art-inactive .art-controls,
+  .artplayer.art-inactive .art-controls *,
+  .dplayer.dplayer-hide-controller .dplayer-controller,
+  .dplayer.dplayer-hide-controller .dplayer-controller * {
+    pointer-events: none !important;
+  }
 
-  /* 3. Player control bars, buttons, timeline seekbars must receive 100% user interactions */
-  .jwplayer .jw-controlbar,
-  .jwplayer .jw-controlbar *,
+  /* 3. Player control bars, buttons, timeline seekbars must receive 100% user interactions when active */
+  .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar,
+  .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar *,
   .jwplayer .jw-display-icon-container,
   .jwplayer .jw-display-icon-container *,
   .jwplayer .jw-settings-menu,
   .jwplayer .jw-settings-menu *,
-  .video-js .vjs-control-bar,
-  .video-js .vjs-control-bar *,
-  .artplayer .art-controls,
-  .artplayer .art-controls *,
-  .dplayer .dplayer-controller,
-  .dplayer .dplayer-controller *,
+  .video-js:not(.vjs-user-inactive) .vjs-control-bar,
+  .video-js:not(.vjs-user-inactive) .vjs-control-bar *,
+  .artplayer:not(.art-inactive) .art-controls,
+  .artplayer:not(.art-inactive) .art-controls *,
+  .dplayer:not(.dplayer-hide-controller) .dplayer-controller,
+  .dplayer:not(.dplayer-hide-controller) .dplayer-controller *,
   .dplayer .dplayer-bar-wrap,
   .dplayer .dplayer-bar-wrap *,
   .plyr .plyr__controls,
@@ -414,22 +420,6 @@ function injectAdBlockCSS() {
   [class*="seekbar" i], [class*="seekbar" i] * {
     pointer-events: auto !important;
     cursor: pointer !important;
-  }
-
-  /* 4. Player controlbar interaction & pause states (allows natural 2-3s auto-hide when cursor is resting) */
-  .jw-controlbar:hover,
-  .jw-controlbar:active,
-  .jwplayer:active .jw-controlbar,
-  .jwplayer.jw-state-paused .jw-controlbar,
-  .vjs-control-bar:hover,
-  .vjs-control-bar:active,
-  .video-js.vjs-paused .vjs-control-bar,
-  .art-controls:hover,
-  .dplayer-controller:hover {
-    opacity: 1 !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
-    display: flex !important;
   }
 
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
@@ -2703,26 +2693,31 @@ if (currentEnabledState) {
           pointer-events: auto !important;
           cursor: pointer !important;
         }
-        /* Bảo vệ tuyệt đối danh sách tập phim, chọn server, thanh điều khiển video player */
-        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"], .ytp-chrome-bottom, .ytp-progress-bar, [class*="control-bar"], [class*="progress-bar"], [class*="seekbar"]) {
+        /* Bảo vệ tuyệt đối danh sách tập phim, chọn server */
+        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"], .ytp-chrome-bottom, .ytp-progress-bar) {
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
         }
-        .jw-controlbar:hover,
-        .jw-controlbar:active,
-        .jwplayer:active .jw-controlbar,
-        .jwplayer.jw-state-paused .jw-controlbar {
-          opacity: 1 !important;
-          visibility: visible !important;
+        /* Đảm bảo thanh điều khiển video player luôn nhận tương tác khi active và ẩn tự nhiên khi inactive */
+        .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar,
+        .video-js:not(.vjs-user-inactive) .vjs-control-bar,
+        .artplayer:not(.art-inactive) .art-controls,
+        .dplayer:not(.dplayer-hide-controller) .dplayer-controller,
+        .plyr .plyr__controls,
+        [class*="control-bar" i],
+        [class*="seekbar" i] {
           pointer-events: auto !important;
-          display: flex !important;
         }
         .jwplayer.jw-flag-user-inactive,
         .jwplayer.jw-flag-user-inactive *,
         .video-js.vjs-user-inactive,
         .video-js.vjs-user-inactive * {
           cursor: none !important;
+        }
+        .jwplayer.jw-flag-user-inactive .jw-controlbar,
+        .video-js.vjs-user-inactive .vjs-control-bar {
+          pointer-events: none !important;
         }
       `;
       dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;

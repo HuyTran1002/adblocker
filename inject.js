@@ -613,33 +613,11 @@
     document.addEventListener('click', (e) => {
       try {
         const jwEl = e.target && e.target.closest && e.target.closest('.jwplayer');
-        if (!jwEl) return;
-        
-        // Immediately remove user-inactive class so controls/timeline wake up
-        jwEl.classList.remove('jw-flag-user-inactive');
-
-        // If clicking on control bar, display icon, or menus, let native player handle it
-        if (e.target.closest('.jw-controlbar, .jw-display-icon-container, .jw-settings-menu, .jw-modal')) {
-          return;
-        }
-
-        // If clicking the video display area or background, toggle play/pause via JWPlayer API if available
-        if (typeof window.jwplayer === 'function') {
-          const id = jwEl.id;
-          if (id) {
-            const player = window.jwplayer(id);
-            if (player && typeof player.play === 'function' && typeof player.getState === 'function') {
-              const state = player.getState();
-              if (state === 'playing') {
-                player.pause();
-              } else if (state === 'paused' || state === 'idle') {
-                player.play();
-              }
-            }
-          }
+        if (jwEl && jwEl.classList.contains('jw-flag-user-inactive')) {
+          jwEl.classList.remove('jw-flag-user-inactive');
         }
       } catch (err) {}
-    }, true);
+    }, { capture: true, passive: true });
 
     // Mousemove wakeup for JWPlayer: removing jw-flag-user-inactive immediately reveals timeline
     document.addEventListener('mousemove', (e) => {
