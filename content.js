@@ -384,7 +384,11 @@ function injectAdBlockCSS() {
   .artplayer.art-inactive,
   .artplayer.art-inactive *,
   .dplayer.dplayer-hide-controller,
-  .dplayer.dplayer-hide-controller * {
+  .dplayer.dplayer-hide-controller *,
+  .plyr--hide-controls,
+  .plyr--hide-controls *,
+  [data-ws-cursor-hidden="true"],
+  [data-ws-cursor-hidden="true"] * {
     cursor: none !important;
   }
   .jwplayer.jw-flag-user-inactive .jw-controlbar,
@@ -394,7 +398,11 @@ function injectAdBlockCSS() {
   .artplayer.art-inactive .art-controls,
   .artplayer.art-inactive .art-controls *,
   .dplayer.dplayer-hide-controller .dplayer-controller,
-  .dplayer.dplayer-hide-controller .dplayer-controller * {
+  .dplayer.dplayer-hide-controller .dplayer-controller *,
+  .plyr--hide-controls .plyr__controls,
+  .plyr--hide-controls .plyr__controls *,
+  .fluid_controls_container.fade_out,
+  .fluid_controls_container.fade_out * {
     pointer-events: none !important;
   }
 
@@ -413,10 +421,10 @@ function injectAdBlockCSS() {
   .dplayer:not(.dplayer-hide-controller) .dplayer-controller *,
   .dplayer .dplayer-bar-wrap,
   .dplayer .dplayer-bar-wrap *,
-  .plyr .plyr__controls,
-  .plyr .plyr__controls *,
-  [class*="control-bar" i], [class*="control-bar" i] *,
-  [class*="progress-bar" i], [class*="progress-bar" i] *,
+  .plyr:not(.plyr--hide-controls) .plyr__controls,
+  .plyr:not(.plyr--hide-controls) .plyr__controls *,
+  .fluid_controls_container:not(.fade_out),
+  .fluid_controls_container:not(.fade_out) *,
   [class*="seekbar" i], [class*="seekbar" i] * {
     pointer-events: auto !important;
     cursor: pointer !important;
@@ -436,7 +444,7 @@ function injectAdBlockCSS() {
     [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
     [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
     [class*="hero-anim"], [class*="backdrop"],
-    .thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, .vjs-sublime-skin, [class*="vjs-"],
+    .thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, .vjs-sublime-skin,
     .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"]
   ) {
     visibility: visible !important;
@@ -2779,29 +2787,45 @@ if (currentEnabledState) {
           cursor: pointer !important;
         }
         /* Bảo vệ tuyệt đối danh sách tập phim, chọn server */
-        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"], .ytp-chrome-bottom, .ytp-progress-bar) {
+        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"]) {
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
+        }
+        /* Bảo vệ thanh điều khiển YouTube khỏi bộ lọc ẩn mà không làm đơ cơ chế tự mờ auto-hide */
+        .html5-video-player .ytp-chrome-bottom {
+          display: block !important;
         }
         /* Đảm bảo thanh điều khiển video player luôn nhận tương tác khi active và ẩn tự nhiên khi inactive */
         .jwplayer:not(.jw-flag-user-inactive) .jw-controlbar,
         .video-js:not(.vjs-user-inactive) .vjs-control-bar,
         .artplayer:not(.art-inactive) .art-controls,
         .dplayer:not(.dplayer-hide-controller) .dplayer-controller,
-        .plyr .plyr__controls,
-        [class*="control-bar" i],
+        .plyr:not(.plyr--hide-controls) .plyr__controls,
+        .fluid_controls_container:not(.fade_out),
         [class*="seekbar" i] {
           pointer-events: auto !important;
         }
         .jwplayer.jw-flag-user-inactive,
         .jwplayer.jw-flag-user-inactive *,
         .video-js.vjs-user-inactive,
-        .video-js.vjs-user-inactive * {
+        .video-js.vjs-user-inactive *,
+        .artplayer.art-inactive,
+        .artplayer.art-inactive *,
+        .dplayer.dplayer-hide-controller,
+        .dplayer.dplayer-hide-controller *,
+        .plyr--hide-controls,
+        .plyr--hide-controls *,
+        [data-ws-cursor-hidden="true"],
+        [data-ws-cursor-hidden="true"] * {
           cursor: none !important;
         }
         .jwplayer.jw-flag-user-inactive .jw-controlbar,
-        .video-js.vjs-user-inactive .vjs-control-bar {
+        .video-js.vjs-user-inactive .vjs-control-bar,
+        .artplayer.art-inactive .art-controls,
+        .dplayer.dplayer-hide-controller .dplayer-controller,
+        .plyr--hide-controls .plyr__controls,
+        .fluid_controls_container.fade_out {
           pointer-events: none !important;
         }
       `;

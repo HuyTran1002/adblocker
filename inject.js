@@ -626,28 +626,234 @@
       }, { passive: true, capture: false });
     });
 
-  // --- MAIN WORLD JWPLAYER & HTML5 PLAYER TIMELINE GUARDIAN ---
-  // When user interacts with JWPlayer on movie websites, ensure jw-flag-user-inactive is removed
-  // and clicks cleanly toggle play/pause instead of getting stuck in an inactive state.
+  // --- MAIN WORLD UNIVERSAL VIDEO PLAYER TIMELINE & AUTO-HIDE GUARDIAN ---
+  // Fixes: Timeline sticking indefinitely after click/tap ("dính đó quài ko chịu ẩn đi")
+  // Ensures:
+  // 1. Clicks/taps/mouse movements instantly wake up timeline & controls across all players (JWPlayer, Video.js, ArtPlayer, DPlayer, Plyr, FluidPlayer, HTML5).
+  // 2. An active auto-hide timer (2.5s - 3s) cleanly returns the player to inactive state when idle.
+  // 3. Hovering over seekbar, controlbar, or buttons NEVER hides the controls while user is aiming.
+  // 4. Paused video NEVER hides controls so user can see playback state, seekbar, and play button.
+  // 5. Cursor hides cleanly when idle (cursor: none).
   try {
-    document.addEventListener('click', (e) => {
+    function getWsPlayer(el) {
+      if (!el || el === document || el === document.body || el === document.documentElement) return null;
       try {
-        const jwEl = e.target && e.target.closest && e.target.closest('.jwplayer');
-        if (jwEl && jwEl.classList.contains('jw-flag-user-inactive')) {
-          jwEl.classList.remove('jw-flag-user-inactive');
+        if (el.closest) {
+          const p = el.closest(
+            '.jwplayer, .video-js, .artplayer, .dplayer, .plyr, .fluid_video_wrapper, ' +
+            '[class*="jwplayer" i], [class*="video-js" i], [class*="artplayer" i], [class*="dplayer" i], ' +
+            '.html5-video-player, [class*="player" i]:not(body):not(html), [id*="player" i]:not(body):not(html)'
+          );
+          if (p) return p;
+        }
+        if (el.tagName && el.tagName.toLowerCase() === 'video') {
+          return el.parentElement || el;
+        }
+        let curr = el;
+        let depth = 0;
+        while (curr && curr !== document.body && curr !== document.documentElement && depth < 5) {
+          if (curr.querySelector && curr.querySelector('video')) {
+            return curr;
+          }
+          curr = curr.parentElement;
+          depth++;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function wakeUpPlayerControls(player) {
+      if (!player) return;
+      try {
+        // 1. JWPlayer
+        if (player.classList.contains('jwplayer') || player.querySelector('.jw-controlbar')) {
+          player.classList.remove('jw-flag-user-inactive');
+          player.classList.add('jw-flag-user-active');
+          if (typeof window.jwplayer === 'function') {
+            try {
+              const jw = window.jwplayer(player.id || 0);
+              if (jw && typeof jw.userActive === 'function') jw.userActive();
+            } catch (e) {}
+          }
+        }
+        // 2. Video.js
+        if (player.classList.contains('video-js') || player.querySelector('.vjs-control-bar')) {
+          player.classList.remove('vjs-user-inactive');
+          player.classList.add('vjs-user-active');
+        }
+        // 3. ArtPlayer
+        if (player.classList.contains('artplayer') || player.querySelector('.art-controls')) {
+          player.classList.remove('art-inactive');
+          player.classList.add('art-active');
+        }
+        // 4. DPlayer
+        if (player.classList.contains('dplayer') || player.querySelector('.dplayer-controller')) {
+          player.classList.remove('dplayer-hide-controller');
+        }
+        // 5. Plyr
+        if (player.classList.contains('plyr')) {
+          player.classList.remove('plyr--hide-controls');
+        }
+        // 6. Fluid Player
+        const fluidCtrl = player.querySelector('.fluid_controls_container');
+        if (fluidCtrl) {
+          fluidCtrl.classList.remove('fade_out');
+          fluidCtrl.classList.add('fade_in');
+        }
+        // Reset cursor visibility flag
+        player.removeAttribute('data-ws-cursor-hidden');
+      } catch (e) {}
+    }
+
+    function putPlayerToSleep(player) {
+      if (!player) return;
+      try {
+        const video = player.querySelector('video');
+        // NEVER auto-hide if video is paused, ended, or if cursor is hovering over controls/timeline!
+        if (video && (video.paused || video.ended)) return;
+        if (player._ws_hovering_controls) return;
+
+        // 1. JWPlayer
+        if (player.classList.contains('jwplayer') || player.querySelector('.jw-controlbar')) {
+          player.classList.add('jw-flag-user-inactive');
+          player.classList.remove('jw-flag-user-active');
+          if (typeof window.jwplayer === 'function') {
+            try {
+              const jw = window.jwplayer(player.id || 0);
+              if (jw && typeof jw.userInactive === 'function') jw.userInactive();
+            } catch (e) {}
+          }
+        }
+        // 2. Video.js
+        if (player.classList.contains('video-js') || player.querySelector('.vjs-control-bar')) {
+          player.classList.add('vjs-user-inactive');
+          player.classList.remove('vjs-user-active');
+        }
+        // 3. ArtPlayer
+        if (player.classList.contains('artplayer') || player.querySelector('.art-controls')) {
+          player.classList.add('art-inactive');
+          player.classList.remove('art-active');
+        }
+        // 4. DPlayer
+        if (player.classList.contains('dplayer') || player.querySelector('.dplayer-controller')) {
+          player.classList.add('dplayer-hide-controller');
+        }
+        // 5. Plyr
+        if (player.classList.contains('plyr')) {
+          player.classList.add('plyr--hide-controls');
+        }
+        // 6. Fluid Player
+        const fluidCtrl = player.querySelector('.fluid_controls_container');
+        if (fluidCtrl) {
+          fluidCtrl.classList.remove('fade_in');
+          fluidCtrl.classList.add('fade_out');
+        }
+        // Mark cursor hidden when idle
+        player.setAttribute('data-ws-cursor-hidden', 'true');
+      } catch (e) {}
+    }
+
+    function schedulePlayerSleep(player, delay = 2500) {
+      if (!player) return;
+      if (player._ws_sleep_timer) {
+        clearTimeout(player._ws_sleep_timer);
+        player._ws_sleep_timer = null;
+      }
+      const video = player.querySelector('video');
+      if (video && (video.paused || video.ended)) return; // Keep visible while paused
+      if (player._ws_hovering_controls) return; // Keep visible while hovering controls
+
+      player._ws_sleep_timer = setTimeout(() => {
+        putPlayerToSleep(player);
+      }, delay);
+    }
+
+    // Wake up & auto-hide on click / tap (Mobile & Desktop)
+    ['click', 'touchend', 'pointerdown'].forEach(evName => {
+      document.addEventListener(evName, (e) => {
+        try {
+          const player = getWsPlayer(e.target);
+          if (player) {
+            wakeUpPlayerControls(player);
+            schedulePlayerSleep(player, 3000);
+          }
+        } catch (err) {}
+      }, { capture: true, passive: true });
+    });
+
+    // Wake up & auto-hide on mousemove inside player container (Desktop)
+    document.addEventListener('mousemove', (e) => {
+      try {
+        const player = getWsPlayer(e.target);
+        if (player) {
+          wakeUpPlayerControls(player);
+          schedulePlayerSleep(player, 2500);
         }
       } catch (err) {}
     }, { capture: true, passive: true });
 
-    // Mousemove wakeup for JWPlayer: removing jw-flag-user-inactive immediately reveals timeline
-    document.addEventListener('mousemove', (e) => {
+    // Control bar hover protection: NEVER hide while hovering over seekbar, buttons, or controls
+    document.addEventListener('mouseover', (e) => {
       try {
-        const jwEl = e.target && e.target.closest && e.target.closest('.jwplayer');
-        if (jwEl && jwEl.classList.contains('jw-flag-user-inactive')) {
-          jwEl.classList.remove('jw-flag-user-inactive');
+        const ctrl = e.target && e.target.closest && e.target.closest(
+          '.jw-controlbar, .vjs-control-bar, .art-controls, .dplayer-controller, ' +
+          '.plyr__controls, .fluid_controls_container, [class*="control-bar" i], ' +
+          '[class*="seekbar" i], [class*="progress-bar" i], [class*="slider" i]'
+        );
+        if (ctrl) {
+          const player = getWsPlayer(ctrl);
+          if (player) {
+            player._ws_hovering_controls = true;
+            if (player._ws_sleep_timer) {
+              clearTimeout(player._ws_sleep_timer);
+              player._ws_sleep_timer = null;
+            }
+            wakeUpPlayerControls(player);
+          }
         }
       } catch (err) {}
     }, { passive: true, capture: true });
+
+    document.addEventListener('mouseout', (e) => {
+      try {
+        const ctrl = e.target && e.target.closest && e.target.closest(
+          '.jw-controlbar, .vjs-control-bar, .art-controls, .dplayer-controller, ' +
+          '.plyr__controls, .fluid_controls_container, [class*="control-bar" i], ' +
+          '[class*="seekbar" i], [class*="progress-bar" i], [class*="slider" i]'
+        );
+        if (ctrl) {
+          const player = getWsPlayer(ctrl);
+          if (player) {
+            player._ws_hovering_controls = false;
+            schedulePlayerSleep(player, 1500);
+          }
+        }
+      } catch (err) {}
+    }, { passive: true, capture: true });
+
+    // Video playback state tracking
+    document.addEventListener('play', (e) => {
+      if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'video') {
+        const player = getWsPlayer(e.target);
+        if (player) {
+          wakeUpPlayerControls(player);
+          schedulePlayerSleep(player, 2500);
+        }
+      }
+    }, { capture: true, passive: true });
+
+    document.addEventListener('pause', (e) => {
+      if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'video') {
+        const player = getWsPlayer(e.target);
+        if (player) {
+          if (player._ws_sleep_timer) {
+            clearTimeout(player._ws_sleep_timer);
+            player._ws_sleep_timer = null;
+          }
+          wakeUpPlayerControls(player);
+        }
+      }
+    }, { capture: true, passive: true });
   } catch (e) {}
 
   // --- BODY POINTER-EVENTS & SCROLL GUARDIAN (MAIN WORLD) ---
