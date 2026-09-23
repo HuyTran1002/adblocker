@@ -224,6 +224,25 @@
         configurable: true
       });
 
+      // Defuse WPAdMngr, WPShSdk, and push notification hijackers
+      const dummyAdManager = {
+        init: function () { },
+        push: function () { },
+        show: function () { },
+        run: function () { },
+        register: function () { },
+        on: function () { }
+      };
+      ['wpadmngr', 'wpshsdk', '_wpsh', 'admpid', '_adp'].forEach(key => {
+        try {
+          Object.defineProperty(window, key, {
+            get() { return dummyAdManager; },
+            set(val) { /* ignore */ },
+            configurable: true
+          });
+        } catch (e) { }
+      });
+
       // Passive safety patch for jQuery .position() on animevietsub home-v1.js:373 without defining properties on window
       if (window.jQuery && window.jQuery.fn && window.jQuery.fn.position && !window.jQuery.fn.position._safePatched) {
         const origPos = window.jQuery.fn.position;
@@ -241,13 +260,14 @@
         const lower = String(urlStr).toLowerCase();
         const keywords = [
           'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads',
-          'popcash', 'propellerads', 'exoclick', 'clktag', 'onclickads', 'exdynsrv',
+          'popcash', 'propellerads', 'exoclick', 'exosrv', 'clktag', 'onclickads', 'exdynsrv',
           'juicyads', 'mgid.com', 'taboola', 'outbrain', 'adnxs', 'onclickalgo',
           'highperformancegate', 'highcpmgate', 'greatcpmgate', 'eclick.vn', 'novanet.vn',
           'magsrv.com', 'mnaspm.com', 'mayzaent.com', 'prplad.com', 'monetag.com', 'smartpop',
           '/ad?type=', 'adspro.name', 'streamux.top', 'hbet.loan', 'lu88.ist',
           'tx88.army', 'vu88.foo', '9bet.beer', 'du88.money', 'vua88.eco', '789club.zip',
-          'ima3.js', 'trafficjunky', 'tsyndicate', 'a-ads.com'
+          'ima3.js', 'trafficjunky', 'tsyndicate', 'a-ads.com',
+          'wpadmngr', 'wpshsdk', 'detectivefrozepriceless', 'hilltopads', 'clickadu', 'adxad', 'adtng', 'etahub'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {

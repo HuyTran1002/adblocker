@@ -1991,7 +1991,24 @@ if (currentEnabledState) {
         return `${tag}[data-id="${CSS.escape(dataId)}"]`;
       }
 
-      // 3. Image or iframe with concise src filename (strip long query string)
+      // 3. Container containing an ad iframe or iframe itself with recognized source
+      const ifr = tag === 'iframe' ? el : (el.querySelector ? el.querySelector('iframe') : null);
+      if (ifr) {
+        const ifrSrc = ifr.getAttribute('src') || ifr.getAttribute('data-src') || '';
+        if (ifrSrc && !ifrSrc.startsWith('data:') && !ifrSrc.startsWith('blob:')) {
+          try {
+            const urlHost = new URL(ifrSrc, window.location.href).hostname;
+            if (urlHost && urlHost.includes('.')) {
+              if (tag === 'iframe') {
+                return `iframe[src*="${CSS.escape(urlHost)}"]`;
+              }
+              return `${tag}:has(iframe[src*="${CSS.escape(urlHost)}"])`;
+            }
+          } catch(e) {}
+        }
+      }
+
+      // 4. Image or iframe with concise src filename (strip long query string)
       const srcAttr = el.getAttribute('src');
       if (srcAttr && !srcAttr.startsWith('data:') && !srcAttr.startsWith('blob:') && srcAttr.length > 5) {
         try {
@@ -2003,7 +2020,7 @@ if (currentEnabledState) {
         } catch (e) {}
       }
 
-      // 4. Anchor with concise href (strip long query parameters)
+      // 5. Anchor with concise href (strip long query parameters)
       if (tag === 'a') {
         const hrefAttr = el.getAttribute('href');
         if (hrefAttr && !hrefAttr.startsWith('javascript:') && !hrefAttr.startsWith('#') && hrefAttr.length > 4) {
@@ -2017,7 +2034,7 @@ if (currentEnabledState) {
         }
       }
 
-      // 5. Clean class if unique or specific on page
+      // 6. Clean class if unique or specific on page
       const cleanCls = getCleanClassName(el);
       if (cleanCls) {
         const candidate = `${tag}.${CSS.escape(cleanCls)}`;
@@ -2028,7 +2045,7 @@ if (currentEnabledState) {
         } catch (e) {}
       }
 
-      // 6. Up to 2 levels hierarchy max (parent > child)
+      // 7. Up to 2 levels hierarchy max (parent > child)
       if (el.parentElement && el.parentElement !== document.body && el.parentElement !== document.documentElement) {
         const parent = el.parentElement;
         let parentSel = '';
@@ -2048,7 +2065,7 @@ if (currentEnabledState) {
         }
       }
 
-      // 7. Compact nth-of-type
+      // 8. Compact nth-of-type
       let sibling = el.previousElementSibling;
       let nth = 1;
       while (sibling) {
@@ -2063,7 +2080,34 @@ if (currentEnabledState) {
       const selector = getRobustSelector(el);
       if (!selector) return;
 
-      el.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
+      // 1. Immediately wipe content so media/iframes stop playing
+      try { el.innerHTML = ''; } catch(e) {}
+
+      // 2. Hide element aggressively
+      el.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; max-width: 0 !important; max-height: 0 !important;');
+
+      // 3. Anti-resurrection safeguard: prevent ad script MutationObserver from unhiding or repopulating el
+      try {
+        const origSetAttr = el.setAttribute;
+        el.setAttribute = function(name, val) {
+          if (name === 'style' || name === 'class') return;
+          return origSetAttr.apply(this, arguments);
+        };
+      } catch(e) {}
+
+      // 4. Remove element from DOM
+      try { el.remove(); } catch(e) {}
+
+      // 5. Restore scroll if the blocked element locked it
+      try {
+        if (document.body && document.body.style.overflow === 'hidden' && !hasValidInteractiveModal()) {
+          document.body.style.overflow = '';
+          document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
+        }
+        if (document.documentElement && document.documentElement.style.overflow === 'hidden' && !hasValidInteractiveModal()) {
+          document.documentElement.style.overflow = '';
+        }
+      } catch(e) {}
       
       // Save to storage
       const domain = window.location.hostname;
@@ -2134,6 +2178,11 @@ if (currentEnabledState) {
         pickerStyle = document.createElement('style');
         pickerStyle.id = 'adblock-max-picker-style';
         pickerStyle.textContent = `
+          /* Prevent iframes from swallowing mouse events so user can select iframe ads and wrappers */
+          iframe:not([id^="adblock-max"]) {
+            pointer-events: none !important;
+          }
+
           #adblock-max-target-badge {
             position: fixed !important;
             bottom: 14px !important;
@@ -2476,6 +2525,42 @@ if (currentEnabledState) {
       function lockElement(target) {
         if (!target || target === pickerOverlay || target === pickerBadge || (pickerBadge && pickerBadge.contains(target))) return;
         if (target === document.body || target === document.documentElement) return;
+
+        // Auto-detect if target is inside a floating popup/banner container (fixed/absolute with high z-index)
+        let rootFloater = null;
+        let curr = target;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          try {
+            const cs = window.getComputedStyle(curr);
+            const pos = cs.position;
+            const zIndex = parseInt(cs.zIndex, 10);
+            if ((pos === 'fixed' || pos === 'absolute') && (zIndex >= 100 || cs.zIndex === 'auto' || isNaN(zIndex))) {
+              if (!isInsideVideoPlayer(curr) && !isMovieBannerOrPoster(curr)) {
+                rootFloater = curr;
+              }
+            }
+          } catch(e) {}
+          curr = curr.parentElement;
+        }
+
+        if (rootFloater && rootFloater !== target) {
+          const history = [target];
+          let p = target.parentElement;
+          while (p && p !== rootFloater.parentElement) {
+            history.push(p);
+            if (p === rootFloater) break;
+            p = p.parentElement;
+          }
+          targetHistory = history;
+          // Default to the full floating popup container so the whole ad is blocked!
+          historyIndex = history.length - 1;
+          const selected = targetHistory[historyIndex];
+          isLocked = true;
+          currentHoveredTarget = selected;
+          updateOverlay(selected);
+          return;
+        }
+
         targetHistory = [target];
         historyIndex = 0;
         isLocked = true;
@@ -2923,4 +3008,153 @@ if (currentEnabledState) {
       }, 150);
     })();
     // === END 91porn / 91porna Landing Modal Guardian ===
+
+    // === UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
+    // Neutralizes self-healing floating popups, TikTok-style vertical overlays,
+    // top/bottom floaters, and transparent clickjack overlays across tube/streaming sites.
+    (function universalFloatingAdGuardian() {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.location.hostname.includes('youtube.com')) return;
+
+      const AD_FRAME_DOMAINS = [
+        'wpadmngr', 'wpshsdk', 'exosrv', 'exoclick', 'realsrv', 'magsrv', 'trafficjunky',
+        'tsyndicate', 'adsterra', 'hilltopads', 'popcash', 'popads', 'monetag', 'clickadu',
+        'adxad', 'adtng', 'etahub', 'stripchat', 'chaturbate', 'juicyads', 'cpmgate',
+        'frozepriceless', 'linkroyal'
+      ];
+
+      function isFloatingAdElement(el) {
+        if (!el || el.nodeType !== 1) return false;
+        if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el) || isMovieBannerOrPoster(el)) return false;
+        if (el === document.body || el === document.documentElement) return false;
+        // Never touch target picker UI
+        if (el.id && el.id.startsWith('adblock-max-')) return false;
+
+        try {
+          const tag = el.tagName.toLowerCase();
+          
+          // 1. Check if it is an iframe from known ad networks
+          if (tag === 'iframe') {
+            const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
+            if (AD_FRAME_DOMAINS.some(d => src.includes(d))) return true;
+          }
+
+          // 2. Check if element contains an ad iframe
+          if (el.querySelector) {
+            const iframes = el.querySelectorAll('iframe');
+            for (let i = 0; i < iframes.length; i++) {
+              const src = (iframes[i].src || iframes[i].getAttribute('data-src') || '').toLowerCase();
+              if (AD_FRAME_DOMAINS.some(d => src.includes(d))) return true;
+            }
+          }
+
+          // 3. Detect high-z-index floating overlays & dialogs
+          const style = window.getComputedStyle(el);
+          const pos = style.position;
+          const zIndex = parseInt(style.zIndex, 10);
+
+          if (pos === 'fixed' || pos === 'absolute') {
+            // A. Invisible full-screen clickjack overlay
+            if (zIndex >= 9999) {
+              const width = el.offsetWidth || 0;
+              const height = el.offsetHeight || 0;
+              const vw = window.innerWidth || 1000;
+              const vh = window.innerHeight || 800;
+              const opacity = parseFloat(style.opacity);
+              if (width >= vw * 0.9 && height >= vh * 0.9 && (opacity === 0 || style.backgroundColor === 'transparent' || style.visibility === 'hidden')) {
+                // If it has no legitimate modal content
+                if (!hasValidInteractiveModal() && !el.querySelector('dialog, form, input')) {
+                  return true;
+                }
+              }
+            }
+
+            // B. Floating popup dialog with ad attributes (e.g. z-index >= 99990)
+            if (zIndex >= 99990) {
+              const text = (el.textContent || '').toLowerCase();
+              const hasAdText = text.includes('advertisement') || text.includes('trending now') || text.includes('nhận hoa hồng') || text.includes('quảng cáo');
+              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.className || '') || /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.id || '');
+              if (hasAdText || hasAdClass) {
+                return true;
+              }
+            }
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      function sweepFloatingAds(root) {
+        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+        try {
+          const target = root || document;
+          // Look for candidates: iframes and fixed/absolute containers
+          const iframes = target.querySelectorAll('iframe');
+          iframes.forEach(ifr => {
+            if (isFloatingAdElement(ifr)) {
+              let container = ifr.parentElement;
+              // If parent is a dedicated floating wrapper, remove the wrapper
+              if (container && container !== document.body && container.childElementCount <= 2) {
+                const cs = window.getComputedStyle(container);
+                if (cs.position === 'fixed' || cs.position === 'absolute') {
+                  container.innerHTML = '';
+                  container.remove();
+                  return;
+                }
+              }
+              ifr.remove();
+            }
+          });
+
+          // Check fixed elements on top of body
+          const candidates = target.querySelectorAll('[style*="fixed"], [style*="z-index"], [class*="popup"], [class*="overlay"], [class*="floater"]');
+          candidates.forEach(el => {
+            if (isFloatingAdElement(el)) {
+              el.innerHTML = '';
+              el.remove();
+              scheduleJanitorSweep();
+            }
+          });
+        } catch (e) {}
+      }
+
+      // MutationObserver to neutralize self-healing/resurrection popups instantly before paint
+      const guardianObserver = new MutationObserver((mutations) => {
+        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+        for (const mut of mutations) {
+          for (const node of mut.addedNodes) {
+            if (node.nodeType === 1) {
+              if (isInsideVideoPlayer(node) || isMovieBannerOrPoster(node)) continue;
+              if (isFloatingAdElement(node)) {
+                node.innerHTML = '';
+                node.remove();
+              } else if (node.querySelectorAll) {
+                sweepFloatingAds(node);
+              }
+            }
+          }
+        }
+      });
+
+      const initGuardian = () => {
+        if (document.body) {
+          guardianObserver.observe(document.body, { childList: true, subtree: true });
+          sweepFloatingAds(document);
+        }
+      };
+
+      if (document.body) {
+        initGuardian();
+      } else {
+        document.addEventListener('DOMContentLoaded', initGuardian, { once: true });
+      }
+
+      // Initial fast sweep intervals for delayed ad scripts
+      let sweeps = 0;
+      const interval = setInterval(() => {
+        sweepFloatingAds(document);
+        if (++sweeps > 20) clearInterval(interval);
+      }, 300);
+    })();
+    // === END UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
+
 
