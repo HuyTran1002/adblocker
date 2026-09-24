@@ -1885,7 +1885,17 @@
         "popads.net",
         "ethnicexpressions.org",
         "deloplen.com",
-        "onclickalgo.com"
+        "onclickalgo.com",
+        "attacheatableoverlabor.com",
+        "effectivecpmnetwork.com",
+        "eyebrowscrambledlater.com",
+        "adxadserv.com",
+        "static.adxadserv.com",
+        "onclickmax.com",
+        "visariomedia.com",
+        "zlinkm.com",
+        "s.zlinkm.com",
+        "d13k7prax1yi04.cloudfront.net"
       ],
       "resourceTypes": [
         "main_frame",
@@ -1910,6 +1920,171 @@
         "script",
         "stylesheet",
         "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 316,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*pu.js*",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 317,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||attacheatableoverlabor.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 318,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||effectivecpmnetwork.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 319,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||eyebrowscrambledlater.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 320,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*splash.php*",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 321,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||onclickmax.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 322,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||adxadserv.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 323,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||visariomedia.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 324,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||zlinkm.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
         "other"
       ]
     }

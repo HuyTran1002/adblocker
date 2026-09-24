@@ -45,6 +45,186 @@
     }
   } catch (e) {}
 
+  // Universal Popunder Config Neutralizer (pu.js / POPUP_CONFIG)
+  // Ubiquitous pop-under library on streaming sites creates an invisible full-screen z-index 99999999
+  // clickjack overlay. Pre-defining POPUP_CONFIG with isVip: true causes pu.js to abort immediately!
+  try {
+    const safeVipConfig = Object.freeze({
+      cooldown: 99999999,
+      ads: [],
+      isVip: true
+    });
+    Object.defineProperty(window, 'POPUP_CONFIG', {
+      get() { return safeVipConfig; },
+      set(val) {
+        // Silently discard attempts by page scripts to configure popup ads
+      },
+      configurable: false
+    });
+    // Neutralize initPopup function if declared globally
+    Object.defineProperty(window, 'initPopup', {
+      get() { return function() {}; },
+      set(val) {},
+      configurable: false
+    });
+  } catch (e) {}
+
+  // Universal Adsterra & Social Bar Engine Neutralizer
+  // Preemptively neutralizes Adsterra Social Bar / In-Page Push / Interstitial scripts that create [id^="atContainer-"]
+  try {
+    let _atAsyncContainers = {};
+    Object.defineProperty(window, 'atAsyncContainers', {
+      get() { return _atAsyncContainers; },
+      set(val) { _atAsyncContainers = {}; },
+      configurable: true
+    });
+    let _atOptions = {};
+    Object.defineProperty(window, 'atOptions', {
+      get() { return _atOptions; },
+      set(val) {},
+      configurable: true
+    });
+    let _atAsyncOptions = [];
+    Object.defineProperty(window, 'atAsyncOptions', {
+      get() { return _atAsyncOptions; },
+      set(val) {},
+      configurable: true
+    });
+  } catch (e) {}
+
+  // Universal Transparent Clickjack & Floating Ad Overlay Interceptor (Pre-DOM Drop Hook)
+  // Preemptively catches and drops invisible overlays and self-healing ad containers (pu.js / atContainer / ExoClick)
+  // Prevents overlays from ever entering the DOM so they cannot block clicks or show persistent popups
+  try {
+    function isSuspectOverlayNode(node) {
+      if (!node || node.nodeType !== 1) return false;
+      const tag = (node.tagName || '').toLowerCase();
+      const id = (node.id || '').toLowerCase();
+      const className = (typeof node.className === 'string') ? node.className.toLowerCase() : '';
+
+      // 1. Intercept Adsterra Social Bar containers, ExoClick splash ads & floating ad boxes immediately
+      if (id.startsWith('atcontainer') || id.includes('atcontainer') || className.includes('atcontainer') ||
+          className.includes('adsbyexoclick') || id.includes('exoclick') || id.includes('splash') ||
+          (node.getAttribute && (node.getAttribute('data-zoneid') || node.getAttribute('data-ad-id')))) {
+        return true;
+      }
+
+      // 2. Intercept ad iframes from known splash/ad networks
+      if (tag === 'iframe') {
+        const src = (node.src || node.getAttribute('data-src') || '').toLowerCase();
+        if (/splash\.php|syndication\.|exosrv|realsrv|adxadserv|onclickmax|eyebrowscrambledlater|visariomedia|zlinkm/.test(src)) {
+          return true;
+        }
+      }
+
+      if (tag !== 'div' && tag !== 'span' && tag !== 'a') return false;
+      if (node.childElementCount > 0 || (node.textContent && node.textContent.trim().length > 30)) return false;
+
+      const css = (node.style && node.style.cssText) ? node.style.cssText.toLowerCase() : '';
+      const hasHighZ = css.includes('99999999') || css.includes('2147483647') || (node.style && node.style.zIndex && parseInt(node.style.zIndex, 10) >= 9999);
+      const isFixed = css.includes('fixed') || css.includes('absolute');
+      const isFullScreen = (css.includes('width:100%') || css.includes('width: 100%') || css.includes('width:100vw')) &&
+                           (css.includes('height:100%') || css.includes('height: 100%') || css.includes('height:100vh'));
+      const isTransparent = css.includes('transparent') || css.includes('opacity:0') || css.includes('opacity: 0');
+
+      if (isFixed && (hasHighZ || (isFullScreen && (isTransparent || css.includes('cursor'))))) {
+        return true;
+      }
+      return false;
+    }
+
+    const origAppendChild = Node.prototype.appendChild;
+    Node.prototype.appendChild = function(child) {
+      if (child && isSuspectOverlayNode(child)) {
+        console.log('[Anti Pop-Under] Preemptively blocked appending clickjack/ad overlay to DOM:', child);
+        try {
+          child.style.display = 'none';
+          child.style.pointerEvents = 'none';
+        } catch(e) {}
+        return child; // Silently drop: never attach to DOM
+      }
+      return origAppendChild.apply(this, arguments);
+    };
+
+    const origInsertBefore = Node.prototype.insertBefore;
+    Node.prototype.insertBefore = function(newNode, referenceNode) {
+      if (newNode && isSuspectOverlayNode(newNode)) {
+        console.log('[Anti Pop-Under] Preemptively blocked inserting clickjack/ad overlay to DOM:', newNode);
+        try {
+          newNode.style.display = 'none';
+          newNode.style.pointerEvents = 'none';
+        } catch(e) {}
+        return newNode; // Silently drop: never attach to DOM
+      }
+      return origInsertBefore.apply(this, arguments);
+    };
+
+    const origAppend = Element.prototype.append;
+    if (origAppend) {
+      Element.prototype.append = function(...nodes) {
+        const safeNodes = nodes.filter(n => {
+          if (n && n.nodeType === 1 && isSuspectOverlayNode(n)) {
+            console.log('[Anti Pop-Under] Preemptively blocked appending clickjack/ad overlay via Element.append:', n);
+            try {
+              n.style.display = 'none';
+              n.style.pointerEvents = 'none';
+            } catch(e) {}
+            return false;
+          }
+          return true;
+        });
+        return origAppend.apply(this, safeNodes);
+      };
+    }
+  } catch (e) {}
+
+  // Zero-Latency CSS Overlay Killer
+  try {
+    const overlayKillerStyle = document.createElement('style');
+    overlayKillerStyle.id = 'webshield-overlay-killer';
+    overlayKillerStyle.textContent = `
+      div[style*="99999999"],
+      div[style*="2147483647"],
+      div[style*="width: 100%"][style*="height: 100%"][style*="fixed"],
+      div[style*="width:100%"][style*="height:100%"][style*="fixed"],
+      div[style*="width: 100vw"][style*="height: 100vh"][style*="fixed"],
+      div[style*="width:100vw"][style*="height:100vh"][style*="fixed"],
+      div[style*="position: fixed"][style*="top: 0"][style*="left: 0"][style*="width: 100%"][style*="height: 100%"],
+      div[style*="position:fixed"][style*="top:0"][style*="left:0"][style*="width:100%"][style*="height:100%"],
+      div[style*="position: fixed"][style*="top: 0px"][style*="left: 0px"][style*="width: 100%"][style*="height: 100%"],
+      div[style*="position:fixed"][style*="top:0px"][style*="left:0px"][style*="width:100%"][style*="height:100%"],
+      div[style*="cursor: pointer"][style*="fixed"][style*="transparent"],
+      div[style*="cursor:pointer"][style*="fixed"][style*="transparent"],
+      [id^="atContainer-"], [id*="atContainer-"], [class*="atContainer-"],
+      [id*="at-container"], [class*="at-container"],
+      .adsbyexoclick, ins.adsbyexoclick, [data-zoneid],
+      iframe[src*="splash.php"], iframe[src*="syndication."],
+      iframe[src*="exosrv."], iframe[src*="realsrv."],
+      iframe[src*="adxadserv."], iframe[src*="onclickmax."],
+      iframe[src*="eyebrowscrambledlater."],
+      div[id*="cboxOverlay"], div[id*="colorbox"]:has(iframe) {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
+        z-index: -999999 !important;
+      }
+      .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
+        pointer-events: none !important;
+      }
+    `;
+    const targetMount = document.head || document.documentElement;
+    if (targetMount) {
+      targetMount.appendChild(overlayKillerStyle);
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        (document.head || document.documentElement).appendChild(overlayKillerStyle);
+      }, { once: true });
+    }
+  } catch(e) {}
+
   // --- EMBEDDED PLAYER IFRAME DETECTION ---
   // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, vlstream.net),
   // API overrides (getComputedStyle, offsetHeight, getBoundingClientRect, bait stubs, CSS injection)
@@ -569,23 +749,24 @@
           '[class*="fluid_player" i], [id*="fluid_player" i], ' +
           '[class*="media" i], [id*="media" i], ' +
           '.html5-video-player, [class*="ytp-" i], #movie_player, #edgeplayer-root, ' +
-          '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i]'
+          '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i], ' +
+          '#playleft, [id*="playleft" i], .MacPlayer, [class*="MacPlayer" i]'
         );
         if (inPlayerContainer) return true;
       }
 
       // 4. Hoặc là sibling trực tiếp nằm chung container cha với thẻ <video>
-      // hoặc bất kỳ cha nào (depth < 5) có chứa thẻ <video> hoặc có class/id liên quan player
+      // hoặc bất kỳ cha nào (depth < 10) có chứa thẻ <video> hoặc có class/id liên quan player
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && p !== document.documentElement && depth < 5) {
+      while (p && p !== document.body && p !== document.documentElement && depth < 10) {
         if (p.querySelector && p.querySelector('video, audio')) {
           return true;
         }
         const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
         const pId = (p.id || '').toLowerCase();
-        if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pClass) ||
-            /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pId)) {
+        if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pClass) ||
+            /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pId)) {
           return true;
         }
         p = p.parentElement;
@@ -661,7 +842,7 @@
   // --- VIDEO PLAYER NATIVE PASS-THROUGH (ZERO INTERFERENCE) ---
   // WebShield respects the website's native video player (JWPlayer, Video.js, Plyr, YouTube, etc.).
   // All clicks, touches, timeline scrubbing, auto-hide, and play/pause logic flow 100% naturally
-  // to the player without any artificial DOM manipulation or forced timers.
+  // to the player without any artificial DOM manipulation, forced timers, or event hijacking.
 
   // --- BODY POINTER-EVENTS & SCROLL GUARDIAN (MAIN WORLD) ---
   function ensureBodyPointerEvents() {
@@ -701,8 +882,8 @@
       const target = e.target;
       if (!target) return;
 
-      // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video Player & Native Controls Pass-Through
-      // Nếu click trực tiếp vào <video>, <audio> hoặc các thành phần điều khiển player (controls, timeline, volume, play button, v.v.):
+      // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: NÉ TRÌNH PHÁT VIDEO RA 100%
+      // Mọi thao tác click, tua, dừng, điều khiển âm lượng phát sinh từ bên trong Video Player:
       // RETURN NGAY LẬP TỨC để trình phát nhận 100% tương tác tự nhiên, tuyệt đối không can thiệp!
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag === 'video' || tag === 'audio') return;
@@ -723,8 +904,27 @@
         '.fluid_controls_container, .vjs-control-bar, .jw-controls, [class*="control-bar"], ' +
         '[class*="controls"], [class*="controller"], .ytp-chrome-bottom, .art-controls, ' +
         '.dplayer-controller, [class*="play-btn"], [class*="btn-play"], [class*="play_btn"], ' +
-        '[class*="vjs-play-control"], [class*="jw-icon-playback"]'
+        '[class*="vjs-play-control"], [class*="jw-icon-playback"], #playleft, [id*="playleft" i], .MacPlayer'
       )) {
+        return;
+      }
+
+      // 2. Chặn lớp phủ tàng hình clickjacking ngoài player (nếu có)
+      if (isClickjackOverlay(target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { 
+          target.style.pointerEvents = 'none';
+          target.remove(); 
+        } catch (err) {}
+        console.log('[Anti Pop-Under] Intercepted click on full-screen clickjack overlay outside player, removed:', target);
+        // CRITICAL FIX: Forward click to the real element underneath so the user's action is never lost!
+        try {
+          const underlying = document.elementFromPoint(e.clientX, e.clientY);
+          if (underlying && underlying !== target && !isClickjackOverlay(underlying)) {
+            underlying.click();
+          }
+        } catch (err) {}
         return;
       }
 
@@ -1025,7 +1225,7 @@
       const bgMatch = style.backgroundColor.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
       if (bgMatch && bgMatch[1]) {
         bgAlpha = parseFloat(bgMatch[1]);
-      } else if (style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)') {
+      } else if (!style.backgroundColor || style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)' || (style.backgroundColor.startsWith('rgba(') && style.backgroundColor.endsWith(', 0)'))) {
         bgAlpha = 0;
       }
 
@@ -1104,6 +1304,7 @@
       if (el.closest(
         '.jwplayer, .plyr, .video-js, .vjs-, .mejs-, .flowplayer, .artplayer, .dplayer,' +
         '.art-mask, .art-layers, .art-controls, .art-control-progress, .jw-controls, .jw-overlays, .jw-preview,' +
+        '#playleft, [id*="playleft" i], .MacPlayer, [class*="MacPlayer" i],' +
         '[class*="player"], [id*="player"],' +
         '[class*="video"], [id*="video"],' +
         '[class*="aspect-video"], [class*="screen"], [id*="screen"],' +
@@ -1115,10 +1316,10 @@
         '[class*="xem"], [id*="xem"]'
       )) return true;
 
-      // Inside any container that holds a <video> element (max 5 levels up)
+      // Inside any container that holds a <video> element (max 10 levels up)
       let p = el.parentElement;
       let depth = 0;
-      while (p && p !== document.body && depth < 5) {
+      while (p && p !== document.body && depth < 10) {
         if (p.querySelector && p.querySelector('video')) return true;
         p = p.parentElement;
         depth++;

@@ -190,7 +190,15 @@ const adSelectors = [
   // DPlayer & Video Pre-roll Ad Overlays (51cg1, tube players)
   '.dplayer-pre-bg', '.dplayer-pre-countdown', '.dplayer-pre-img',
   '[class*="dplayer-pre-"]', '.dplayer-pre-playing .dplayer-pre-bg',
-  '.dplayer-pre-playing .dplayer-pre-countdown', '.dplayer-pre-playing .dplayer-pre-img'
+  '.dplayer-pre-playing .dplayer-pre-countdown', '.dplayer-pre-playing .dplayer-pre-img',
+  // Javmost, Adsterra Social Bar & ExoClick Splash Overlays
+  '[id^="atContainer-"]', '[id*="atContainer-"]', '[class*="atContainer-"]',
+  '[id*="at-container"]', '[class*="at-container"]',
+  '.adsbyexoclick', 'ins.adsbyexoclick', 'ins[data-zoneid]',
+  'iframe[src*="splash.php"]', 'iframe[src*="syndication.exosrv"]',
+  'iframe[src*="realsrv."]', 'iframe[src*="adxadserv."]',
+  'iframe[src*="onclickmax."]', 'iframe[src*="eyebrowscrambledlater."]',
+  '#cboxOverlay', '#colorbox:has(iframe)'
 ];
 
 function injectAdBlockCSS() {
@@ -240,11 +248,25 @@ function injectAdBlockCSS() {
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
   .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper,
-  .dplayer-pre-bg, .dplayer-pre-countdown, .dplayer-pre-img, [class*="dplayer-pre-"] {
+  .dplayer-pre-bg, .dplayer-pre-countdown, .dplayer-pre-img, [class*="dplayer-pre-"],
+  div[style*="99999999"], div[style*="2147483647"],
+  div[style*="width: 100%"][style*="height: 100%"][style*="fixed"],
+  div[style*="width:100%"][style*="height:100%"][style*="fixed"],
+  div[style*="width: 100vw"][style*="height: 100vh"][style*="fixed"],
+  div[style*="width:100vw"][style*="height:100vh"][style*="fixed"],
+  div[style*="position: fixed"][style*="top: 0"][style*="left: 0"][style*="width: 100%"][style*="height: 100%"],
+  div[style*="position:fixed"][style*="top:0"][style*="left:0"][style*="width:100%"][style*="height:100%"],
+  div[style*="position: fixed"][style*="top: 0px"][style*="left: 0px"][style*="width: 100%"][style*="height: 100%"],
+  div[style*="position:fixed"][style*="top:0px"][style*="left:0px"][style*="width:100%"][style*="height:100%"],
+  div[style*="cursor: pointer"][style*="fixed"][style*="transparent"],
+  div[style*="cursor:pointer"][style*="fixed"][style*="transparent"] {
     display: none !important;
     visibility: hidden !important;
+    pointer-events: none !important;
     width: 0 !important;
     height: 0 !important;
+    opacity: 0 !important;
+    z-index: -999999 !important;
   }
 
   /* Ad network images - only target explicit ad networks, NEVER generic banner/ad strings */
@@ -374,12 +396,17 @@ function injectAdBlockCSS() {
     .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"],
     [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
     [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
-    [class*="hero-anim"], [class*="backdrop"],
+    [class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"],
     .thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, .vjs-sublime-skin,
     .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"]
   ) {
     visibility: visible !important;
     pointer-events: auto !important;
+  }
+
+  /* JWPlayer & video player controls backdrops MUST ALWAYS have pointer-events: none so clicks pass through to video */
+  .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
+    pointer-events: none !important;
   }
 
   .swiper, .swiper-wrapper {
@@ -677,23 +704,24 @@ if (currentEnabledState) {
             '[class*="fluid_player" i], [id*="fluid_player" i], ' +
             '[class*="media" i], [id*="media" i], ' +
             '.html5-video-player, [class*="ytp-" i], #movie_player, #edgeplayer-root, ' +
-            '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i]'
+            '[class*="screen-box" i], [id*="playBox" i], [class*="aspect-video" i], ' +
+            '#playleft, [id*="playleft" i], .MacPlayer, [class*="MacPlayer" i]'
           );
           if (inPlayerContainer) return true;
         }
 
         // 4. Hoặc là sibling trực tiếp nằm chung container cha với thẻ <video>
-        // hoặc bất kỳ cha nào (depth < 5) có chứa thẻ <video> hoặc có class/id liên quan player
+        // hoặc bất kỳ cha nào (depth < 10) có chứa thẻ <video> hoặc có class/id liên quan player
         let p = el.parentElement;
         let depth = 0;
-        while (p && p !== document.body && p !== document.documentElement && depth < 5) {
+        while (p && p !== document.body && p !== document.documentElement && depth < 10) {
           if (p.querySelector && p.querySelector('video, audio')) {
             return true;
           }
           const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
           const pId = (p.id || '').toLowerCase();
-          if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pClass) ||
-              /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media/i.test(pId)) {
+          if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pClass) ||
+              /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pId)) {
             return true;
           }
           p = p.parentElement;
@@ -731,15 +759,15 @@ if (currentEnabledState) {
         
         const keywords = [
           'player', 'video', 'control', 'jwplayer', 'plyr', 'artplayer', 'dplayer', 'vjs', 'media', 'vp-', 'ytp-',
-          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track', 'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen'
+          'time', 'progress', 'duration', 'seekbar', 'slider', 'timeline', 'halim', 'elapsed', 'scrubber', 'seek', 'track', 'thumb', 'volume', 'buffer', 'play', 'pause', 'fullscreen', 'playleft', 'macplayer'
         ];
 
         if (keywords.some(kw => elId.includes(kw) || elClass.includes(kw))) {
           // If it is inside or near a player container
-          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, [class*="player"], [id*="player"], [class*="video"], [id*="video"]')) {
+          if (el.closest && el.closest('.jwplayer, .plyr, .video-js, .vjs-, .flowplayer, .artplayer, .dplayer, #playleft, [id*="playleft" i], .MacPlayer, [class*="MacPlayer" i], [class*="player"], [id*="player"], [class*="video"], [id*="video"]')) {
             return true;
           }
-          if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('time') || elClass.includes('progress') || elClass.includes('duration')) {
+          if (elId.includes('player') || elId.includes('video') || elId.includes('control') || elClass.includes('player') || elClass.includes('video') || elClass.includes('control') || elClass.includes('time') || elClass.includes('progress') || elClass.includes('duration') || elId.includes('playleft') || elClass.includes('macplayer')) {
             return true;
           }
         }
@@ -771,7 +799,7 @@ if (currentEnabledState) {
           '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
           '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
           '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
-          '[class*="hero-anim"], [class*="backdrop"], ' +
+          '[class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"], ' +
           '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], [id*="poster"], ' +
           '[class*="thumb"], [id*="thumb"], [class*="cover"], [id*="cover"], [class*="episode"], [id*="episode"], ' +
           '[class*="server"], [id*="server"], [class*="play-list"], [id*="play-list"], [class*="movie"], [id*="movie"], ' +
@@ -1759,19 +1787,9 @@ if (currentEnabledState) {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
-        // Neutralize TokyoMotion & tube in-player ad overlay clickjackers (#nuevoa / .vast_clickthrough_layer)
-        const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot');
-        if (adOverlay) {
-          e.preventDefault();
-          e.stopPropagation();
-          adOverlay.remove();
-          console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay:', adOverlay);
-          return;
-        }
-
         // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
-        // BẮT BUỘC: Nếu target hoặc bất kỳ phần tử cha nào thuộc về video player hay poster/nội dung phim:
-        // RETURN NGAY LẬP TỨC! Tuyệt đối không gọi preventDefault, stopPropagation hay xóa phần tử!
+        // Hoàn toàn né trình phát video ra, trả quyền kiểm soát 100% tự nhiên cho trình phát như khi tắt extension:
+        // Tuyệt đối không can thiệp, không dispatch synthetic event, không preventDefault/stopPropagation
         if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
           return;
         }
@@ -1782,6 +1800,35 @@ if (currentEnabledState) {
             return;
           }
           pCheck = pCheck.parentElement;
+        }
+
+        // Neutralize TokyoMotion & tube in-player ad overlay clickjackers (#nuevoa / .vast_clickthrough_layer)
+        const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot');
+        if (adOverlay) {
+          e.preventDefault();
+          e.stopPropagation();
+          adOverlay.remove();
+          console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay:', adOverlay);
+          return;
+        }
+
+        // Neutralize full-screen transparent clickjack overlays (pu.js / pop-under floaters)
+        const css = (target.style && target.style.cssText) ? target.style.cssText.toLowerCase() : '';
+        const isClickjack = css.includes('99999999') || css.includes('2147483647') ||
+          (target.style && parseInt(target.style.zIndex, 10) >= 9999 && (css.includes('fixed') || css.includes('absolute')) && (css.includes('transparent') || css.includes('opacity:0')));
+        if (isClickjack) {
+          e.preventDefault();
+          e.stopPropagation();
+          target.style.pointerEvents = 'none';
+          target.remove();
+          console.log('[Anti Pop-Under] Intercepted and removed clickjack overlay:', target);
+          try {
+            const underlying = document.elementFromPoint(e.clientX, e.clientY);
+            if (underlying && underlying !== target) {
+              underlying.click();
+            }
+          } catch(err) {}
+          return;
         }
 
         // 1. Detect if click is inside an anchor (<a>)
@@ -2701,9 +2748,12 @@ if (currentEnabledState) {
         document.documentElement.appendChild(dynamicCosmeticStyle);
       }
       const overrideProtection = `
-        :is(.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, .poster-film, .film-item, .movie-item, .tray-item, .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], [class*="hero-anim"], [class*="backdrop"]) {
+        :is(.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, .poster-film, .film-item, .movie-item, .tray-item, .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], [class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"]) {
           visibility: visible !important;
           pointer-events: auto !important;
+        }
+        .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
+          pointer-events: none !important;
         }
         .swiper, .swiper-wrapper { visibility: visible !important; }
         img:is([src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"], [src*="poster"], [src*="thumb"], [src*="cover"], [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"], [src*="ophim"], [src*="vsmov"], [src*="themoviedb"], [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]) {
@@ -2945,8 +2995,10 @@ if (currentEnabledState) {
       const AD_FRAME_DOMAINS = [
         'wpadmngr', 'wpshsdk', 'exosrv', 'exoclick', 'realsrv', 'magsrv', 'trafficjunky',
         'tsyndicate', 'adsterra', 'hilltopads', 'popcash', 'popads', 'monetag', 'clickadu',
-        'adxad', 'adtng', 'etahub', 'stripchat', 'chaturbate', 'juicyads', 'cpmgate',
-        'frozepriceless', 'linkroyal', 'ethnicexpressions', 'deloplen', 'adtrue'
+        'adxad', 'adxadserv', 'adtng', 'etahub', 'stripchat', 'chaturbate', 'juicyads', 'cpmgate',
+        'frozepriceless', 'linkroyal', 'ethnicexpressions', 'deloplen', 'adtrue',
+        'eyebrowscrambledlater', 'onclickmax', 'visariomedia', 'zlinkm', 'splash.php',
+        'kettledroopingcontinuation', 'protrafficinspector'
       ];
 
       function isFloatingAdElement(el) {
@@ -2958,6 +3010,15 @@ if (currentEnabledState) {
 
         try {
           const tag = el.tagName.toLowerCase();
+          const id = (el.id || '').toLowerCase();
+          const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+
+          // 0. Explicit Adsterra Social Bar container, ExoClick ad block or splash
+          if (id.startsWith('atcontainer') || id.includes('atcontainer') || cls.includes('atcontainer') ||
+              cls.includes('adsbyexoclick') || id.includes('exoclick') ||
+              (el.getAttribute && (el.getAttribute('data-zoneid') || el.getAttribute('data-ad-id')))) {
+            return true;
+          }
           
           // 1. Check if it is an iframe from known ad networks
           if (tag === 'iframe') {
@@ -2981,15 +3042,32 @@ if (currentEnabledState) {
 
           if (pos === 'fixed' || pos === 'absolute') {
             // A. Invisible full-screen clickjack overlay
-            if (zIndex >= 9999) {
-              const width = el.offsetWidth || 0;
-              const height = el.offsetHeight || 0;
-              const vw = window.innerWidth || 1000;
-              const vh = window.innerHeight || 800;
+            if (zIndex >= 999) {
+              const rect = el.getBoundingClientRect();
+              const width = rect.width || el.offsetWidth || 0;
+              const height = rect.height || el.offsetHeight || 0;
+              const vw = window.innerWidth || document.documentElement.clientWidth || 1000;
+              const vh = window.innerHeight || document.documentElement.clientHeight || 800;
               const opacity = parseFloat(style.opacity);
-              if (width >= vw * 0.9 && height >= vh * 0.9 && (opacity === 0 || style.backgroundColor === 'transparent' || style.visibility === 'hidden')) {
-                // If it has no legitimate modal content
-                if (!hasValidInteractiveModal() && !el.querySelector('dialog, form, input')) {
+
+              let bgAlpha = 1;
+              const bg = style.backgroundColor || '';
+              const bgMatch = bg.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+              if (bgMatch && bgMatch[1]) {
+                bgAlpha = parseFloat(bgMatch[1]);
+              } else if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)' || (bg.startsWith('rgba(') && bg.endsWith(', 0)'))) {
+                bgAlpha = 0;
+              }
+              const isTransparent = opacity < 0.15 || bgAlpha < 0.15 || style.visibility === 'hidden';
+              const coversViewport = (width >= vw * 0.75 && height >= vh * 0.75) ||
+                                     (rect.top <= 10 && rect.left <= 10 && rect.bottom >= (vh - 10) && rect.right >= (vw - 10));
+
+              if (coversViewport && isTransparent) {
+                // Confirm it has no genuine user inputs, media, or legitimate form
+                const text = (el.textContent || '').trim();
+                const hasSubstantialText = text.length > 50 && !/quảng cáo|advertisement|sponsor|click|tiếp tục/i.test(text);
+                const hasInteractiveControls = el.querySelector('dialog, form, input:not([type="hidden"]), select, textarea, button[type="submit"]');
+                if (!hasSubstantialText && !hasInteractiveControls) {
                   return true;
                 }
               }
@@ -3042,8 +3120,17 @@ if (currentEnabledState) {
             }
           });
 
+          // Directly purge Adsterra atContainers, ExoClick splash & popups
+          const adContainers = target.querySelectorAll('[id^="atContainer-"], [id*="atContainer-"], [class*="atContainer-"], [id*="at-container"], .adsbyexoclick, ins[data-zoneid], iframe[src*="splash.php"], #cboxOverlay, #colorbox:has(iframe)');
+          adContainers.forEach(c => {
+            try {
+              c.innerHTML = '';
+              c.remove();
+            } catch (e) {}
+          });
+
           // Check fixed elements on top of body
-          const candidates = target.querySelectorAll('[style*="fixed"], [style*="z-index"], [class*="popup"], [class*="overlay"], [class*="floater"]');
+          const candidates = target.querySelectorAll('body > div, body > a, [style*="fixed"], [style*="z-index"], [class*="popup"], [class*="overlay"], [class*="floater"]');
           candidates.forEach(el => {
             if (isFloatingAdElement(el)) {
               el.innerHTML = '';
