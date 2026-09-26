@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 
 const SRC = path.resolve(__dirname);
-const OUT = path.dirname(SRC);
 
 const REQUIRED_FILES = [
   'manifest.json', 'background.js', 'inject.js', 'content.js',
@@ -11,7 +11,7 @@ const REQUIRED_FILES = [
 ];
 
 function buildPackage(platform) {
-  const tmpDir = path.join(OUT, `adblock_max_${platform}_tmp`);
+  const tmpDir = path.join(os.tmpdir(), `webshield_${platform}_tmp`);
 
   if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -41,16 +41,13 @@ function buildPackage(platform) {
   fs.writeFileSync(path.join(tmpDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   const zipName = `webshield-v${manifest.version}-${platform}.zip`;
-  const zipPath = path.join(OUT, zipName);
-  const zipPathInRoot = path.join(SRC, zipName);
+  const zipPath = path.join(SRC, zipName);
 
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-  if (fs.existsSync(zipPathInRoot)) fs.unlinkSync(zipPathInRoot);
 
   const psCmd = `powershell -NoProfile -Command "Compress-Archive -Path '${tmpDir}\\*' -DestinationPath '${zipPath}' -Force"`;
   execSync(psCmd, { stdio: 'pipe' });
 
-  fs.copyFileSync(zipPath, zipPathInRoot);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
   const zipStat = fs.statSync(zipPath);
