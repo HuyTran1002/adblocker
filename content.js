@@ -2843,63 +2843,11 @@ if (currentEnabledState) {
         });
       } catch (e) {}
     }
-    // === qmhsexze Specific Tube Theme Thumbnail Fix ===
-    // Strictly isolate this CSS fix to qmhsexze domains ONLY.
-    // Never inject on generic websites to prevent collapsing .thumb height and hiding .vertical-align elements.
-    (function fixQmhsexThumbnailLayout() {
-      const isQmh = window.location.hostname.includes('qmhsex');
-      if (!isQmh) return;
-
-      const injectFix = () => {
-        if (document.getElementById('webshield-tube-theme-fix')) return;
-
-        try {
-          const style = document.createElement('style');
-          style.id = 'webshield-tube-theme-fix';
-          style.textContent = `
-            .thumb .clip-link {
-              position: relative !important;
-              top: 0 !important;
-              bottom: 0 !important;
-              left: 0 !important;
-              right: 0 !important;
-              width: 100% !important;
-              height: 100% !important;
-              display: block !important;
-            }
-            .thumb .clip {
-              position: absolute !important;
-              top: 0 !important;
-              left: 0 !important;
-              width: 100% !important;
-              height: 100% !important;
-            }
-            .thumb .clip img {
-              width: 100% !important;
-              height: 100% !important;
-              object-fit: cover !important;
-              display: block !important;
-            }
-            .thumb .vertical-align {
-              display: none !important;
-            }
-          `;
-          (document.head || document.documentElement).appendChild(style);
-        } catch(e) {}
-      };
-
-      if (document.body) {
-        injectFix();
-      } else {
-        document.addEventListener('DOMContentLoaded', injectFix, { once: true });
-      }
-    })();
-
     // === motphimc.app PopupAd Guardian ===
     // Radix UI Dialog popup overlay renders after 1500ms delay;
     // CSS alone can't catch it reliably, so we use a MutationObserver.
     (function motphimPopupGuard() {
-      if (!window.location.hostname.includes('motphimc')) return;
+      if (!currentEnabledState || isCurrentPageWhitelisted() || !window.location.hostname.includes('motphimc')) return;
 
       const GAMBLING_HREFS = [
         'rikvip', 'rikvipchinhhang', '78win', 'adcenter', 'bom88', 'gem88',
