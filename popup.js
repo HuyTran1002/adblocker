@@ -828,7 +828,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.9.4";
+      const version = manifest.version || "3.9.5";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
