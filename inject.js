@@ -1155,7 +1155,7 @@
   }
 
   // Send message to content script (which forwards to background)
-  function reportBlocked(url, reason) {
+  function reportBlocked(url, reason, count) {
     if (!isEnabled()) return;
 
     // Always immediately post event to window so content.js can receive it in real-time
@@ -1163,13 +1163,14 @@
       window.postMessage({
         type: 'ANTI_POPUP_BLOCKED_EVENT',
         url: url,
-        reason: reason
+        reason: reason,
+        count: count
       }, '*');
     } catch (e) {}
 
     if (!contentScriptReady) {
       if (pendingReports.length < 50) {
-        pendingReports.push({ url: url, reason: reason });
+        pendingReports.push({ url: url, reason: reason, count: count });
       }
       console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
       return;
@@ -1184,7 +1185,8 @@
       window.postMessage({
         type: 'ANTI_POPUP_BLOCKED_EVENT',
         url: report.url,
-        reason: report.reason
+        reason: report.reason,
+        count: report.count
       }, '*');
       console.log(`[Anti Pop-Under] Flushed queued block report to "${report.url}". Reason: ${report.reason}`);
     }
@@ -1943,7 +1945,7 @@
             reportedVideoAds.delete(firstKey);
           }
           const adCount = Math.min(2, (obj.adPlacements?.length || obj.playerAds?.length || 1));
-          reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video`);
+          reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video`, adCount);
         }
       } catch (e) { }
     }

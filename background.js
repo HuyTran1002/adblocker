@@ -455,6 +455,27 @@ chrome.runtime.onStartup.addListener(() => {
 
 // Tab-specific blocked counters (Map<tabId, number>)
 const tabBlockedCounts = new Map();
+// Tab-specific domains (Map<tabId, string>) to avoid resetting count when navigating on the same site/domain
+const tabDomains = new Map();
+
+function extractCleanDomain(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    }
+  } catch (e) {}
+  return '';
+}
+
+function isSameBaseDomain(d1, d2) {
+  if (!d1 || !d2) return false;
+  const cd1 = d1.replace(/^www\./i, '').toLowerCase();
+  const cd2 = d2.replace(/^www\./i, '').toLowerCase();
+  if (cd1 === cd2) return true;
+  return cd1.endsWith('.' + cd2) || cd2.endsWith('.' + cd1);
+}
 
 // Update extension badge text safely for a specific tab
 function updateTabBadge(tabId, count) {
@@ -488,12 +509,20 @@ function updateTabBadge(tabId, count) {
   }
 }
 
-// Reset tab counter when navigating to a new URL
+// Reset tab counter ONLY when navigating to a DIFFERENT website/domain
 if (chrome.tabs && chrome.tabs.onUpdated) {
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.status === 'loading') {
-      tabBlockedCounts.set(tabId, 0);
-      updateTabBadge(tabId, 0);
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    const newUrl = changeInfo.url || (tab && tab.url);
+    const newDomain = extractCleanDomain(newUrl);
+
+    if (newDomain) {
+      const prevDomain = tabDomains.get(tabId);
+      if (prevDomain && !isSameBaseDomain(prevDomain, newDomain)) {
+        // Tab moved to a completely different website (e.g. youtube.com -> facebook.com)
+        tabBlockedCounts.set(tabId, 0);
+        updateTabBadge(tabId, 0);
+      }
+      tabDomains.set(tabId, newDomain);
     }
   });
 }
@@ -502,6 +531,7 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
 if (chrome.tabs && chrome.tabs.onRemoved) {
   chrome.tabs.onRemoved.addListener((tabId) => {
     tabBlockedCounts.delete(tabId);
+    tabDomains.delete(tabId);
   });
 }
 
@@ -819,13 +849,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       const blockedUrl = message.url || "quảng cáo ẩn";
-      inMemoryBlockedCount++;
+      const countIncrement = typeof message.count === 'number' && message.count > 0 ? message.count : 1;
+      inMemoryBlockedCount += countIncrement;
 
       // Track blocked count per tab
       let tabCount = 0;
       const tabId = (sender && sender.tab && sender.tab.id) ? sender.tab.id : null;
       if (tabId !== null && tabId !== undefined) {
-        tabCount = (tabBlockedCounts.get(tabId) || 0) + 1;
+        if (cleanDomain && cleanDomain !== 'unknown') {
+          tabDomains.set(tabId, cleanDomain);
+        }
+        tabCount = (tabBlockedCounts.get(tabId) || 0) + countIncrement;
         tabBlockedCounts.set(tabId, tabCount);
         updateTabBadge(tabId, tabCount);
       }

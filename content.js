@@ -63,7 +63,7 @@ function safeSendMessage(msg) {
 // Map<key, timestamp> with 5-minute TTL so re-visits are counted after enough time
 const recentReportedUrls = new Map();
 const REPORT_TTL_MS = 5 * 60 * 1000;
-function reportAdBlocked(url, reason) {
+function reportAdBlocked(url, reason, count) {
   // Only skip if extension is entirely disabled — never skip due to cosmetic whitelist.
   // isCurrentPageWhitelisted() guards CSS injection only; ad block reports must always be forwarded.
   if (!currentEnabledState) return;
@@ -82,7 +82,8 @@ function reportAdBlocked(url, reason) {
   safeSendMessage({
     type: 'AD_BLOCKED',
     url: url || 'quảng cáo ẩn',
-    reason: reason || 'Chặn phần tử quảng cáo'
+    reason: reason || 'Chặn phần tử quảng cáo',
+    count: typeof count === 'number' && count > 0 ? count : 1
   });
 }
 
@@ -628,7 +629,7 @@ if (currentEnabledState) {
       // Handle ad block report
       if (event.data.type === 'ANTI_POPUP_BLOCKED_EVENT') {
         if (!currentEnabledState) return;
-        reportAdBlocked(event.data.url, event.data.reason);
+        reportAdBlocked(event.data.url, event.data.reason, event.data.count);
       }
     }
     window.addEventListener('message', onInjectMessage);

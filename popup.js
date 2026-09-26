@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.9.5" }),
+      getManifest: () => ({ version: "3.9.6" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -504,20 +504,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const applyState = (data) => {
       if (!data) return;
       const enabled = data.enabled !== false;
-      const tabCount = typeof data.tabBlockedCount === 'number' ? data.tabBlockedCount : 0;
-      const totalCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
-      const history = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
-      const disabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
-      const customBlockedSelectors = Array.isArray(data.customBlockedSelectors) ? data.customBlockedSelectors : [];
-      const manualFilters = data.manualFilters || {};
+      const tabCount = typeof data.tabBlockedCount === 'number' ? data.tabBlockedCount : currentCount;
+      const totalCount = typeof data.blockedCount === 'number' ? data.blockedCount : currentTotalCount;
+      const history = Array.isArray(data.blockedHistory) ? data.blockedHistory : undefined;
+      const disabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : undefined;
+      const customBlockedSelectors = Array.isArray(data.customBlockedSelectors) ? data.customBlockedSelectors : undefined;
+      const manualFilters = data.manualFilters;
 
       updateUI(enabled, tabCount, totalCount, history);
-      updateWhitelistUI(disabledDomains);
-      updateCustomRulesUI(manualFilters, customBlockedSelectors);
+      if (disabledDomains) updateWhitelistUI(disabledDomains);
+      if (manualFilters || customBlockedSelectors) {
+        updateCustomRulesUI(manualFilters || {}, customBlockedSelectors || []);
+      }
       if (data.lastFiltersUpdateTimestamp || data.onlineFilterStats) {
         updateFilterTimestampsUI(data.lastFiltersUpdateTimestamp, data.onlineFilterStats);
       }
-      if (currentDomain) {
+      if (currentDomain && disabledDomains) {
         siteToggle.checked = !isDomainInList(currentDomain, disabledDomains);
       }
     };
@@ -682,7 +684,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Clear History
   clearHistoryBtn.addEventListener("click", () => {
     chrome.storage.local.set({ blockedCount: 0, blockedHistory: [] }, () => {
-      updateUI(powerToggle.checked, 0, []);
+      updateUI(powerToggle.checked, 0, 0, []);
     });
   });
 
@@ -828,7 +830,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.9.5";
+      const version = manifest.version || "3.9.6";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
