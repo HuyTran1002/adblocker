@@ -1,12 +1,16 @@
 [
   {
     "id": 100,
-    "priority": 100,
+    "priority": 999900,
     "action": {
       "type": "allow"
     },
     "condition": {
       "requestDomains": [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be",
         "googlevideo.com",
         "ytimg.com",
         "ggpht.com",
@@ -14,11 +18,58 @@
         "www.gstatic.com"
       ],
       "resourceTypes": [
-        "media",
-        "image",
+        "main_frame",
+        "sub_frame",
+        "stylesheet",
         "script",
-        "other",
-        "font"
+        "image",
+        "font",
+        "object",
+        "xmlhttprequest",
+        "ping",
+        "media",
+        "websocket",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 150,
+    "priority": 999900,
+    "action": {
+      "type": "allow"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be"
+      ],
+      "requestDomains": [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be",
+        "googlevideo.com",
+        "ytimg.com",
+        "ggpht.com",
+        "gstatic.com",
+        "www.gstatic.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "stylesheet",
+        "script",
+        "image",
+        "font",
+        "object",
+        "xmlhttprequest",
+        "ping",
+        "media",
+        "websocket",
+        "other"
       ]
     }
   },
@@ -154,6 +205,82 @@
         "media",
         "websocket",
         "font",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 203,
+    "priority": 1000,
+    "action": {
+      "type": "allow"
+    },
+    "condition": {
+      "requestDomains": [
+        "missav.ai",
+        "missav.ws",
+        "missav.com",
+        "missav123.com",
+        "missav888.com",
+        "fourhoi.com",
+        "surrit.com",
+        "recombee.com",
+        "client-rapi-missav.recombee.com",
+        "client.recombee.com",
+        "rapi.recombee.com",
+        "client-rapi.recombee.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "stylesheet",
+        "script",
+        "image",
+        "font",
+        "object",
+        "xmlhttprequest",
+        "ping",
+        "media",
+        "websocket",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 204,
+    "priority": 1000,
+    "action": {
+      "type": "allow"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "missav.ai",
+        "missav.ws",
+        "missav.com",
+        "missav123.com",
+        "missav888.com"
+      ],
+      "requestDomains": [
+        "fourhoi.com",
+        "surrit.com",
+        "recombee.com",
+        "client-rapi-missav.recombee.com",
+        "client.recombee.com",
+        "rapi.recombee.com",
+        "client-rapi.recombee.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "stylesheet",
+        "script",
+        "image",
+        "font",
+        "object",
+        "xmlhttprequest",
+        "ping",
+        "media",
+        "websocket",
         "other"
       ]
     }
@@ -845,7 +972,7 @@
       "type": "block"
     },
     "condition": {
-      "urlFilter": "*adserver*",
+      "urlFilter": "||adserver.",
       "resourceTypes": [
         "script",
         "sub_frame",
@@ -875,7 +1002,7 @@
       "type": "block"
     },
     "condition": {
-      "urlFilter": "*sc88*",
+      "urlFilter": "||sc88*",
       "resourceTypes": [
         "script",
         "sub_frame",
@@ -1895,7 +2022,9 @@
         "visariomedia.com",
         "zlinkm.com",
         "s.zlinkm.com",
-        "d13k7prax1yi04.cloudfront.net"
+        "d13k7prax1yi04.cloudfront.net",
+        "myavlive.com",
+        "creative.myavlive.com"
       ],
       "resourceTypes": [
         "main_frame",
@@ -2090,13 +2219,90 @@
     }
   },
   {
+    "id": 325,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||agileskincareunrented.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 326,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||marvelous-respond.com^",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 327,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*static/media/pc-*",
+      "resourceTypes": [
+        "media",
+        "image",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 328,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*player/html.php*",
+      "resourceTypes": [
+        "sub_frame",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
     "id": 9999,
     "priority": 100,
     "action": {
       "type": "modifyHeaders",
       "requestHeaders": [
-        { "header": "Origin", "operation": "set", "value": "https://huytran1002.github.io" },
-        { "header": "Referer", "operation": "set", "value": "https://huytran1002.github.io/" }
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://huytran1002.github.io"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://huytran1002.github.io/"
+        }
       ]
     },
     "condition": {

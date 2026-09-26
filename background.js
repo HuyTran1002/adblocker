@@ -59,6 +59,7 @@ const SAFE_EXCLUDED = [
   'fptplay', 'vieon', 'tv360', 'vtv', 'vtvgo', 'kplus',
   'animevietsub', 'phim', 'embed', 'm3u8', 'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
   'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn', 'vuighe', 'anime47', 'kkphim', 'subnhanh',
+  'missav', 'fourhoi', 'surrit', 'recombee', 'client-rapi',
   // Video Player Engines, CDNs & Media Infrastructure
   'jwplayer', 'jwplatform', 'jwpcdn', 'jwpsrv', 'videojs', 'zencdn', 'plyr',
   'artplayer', 'dplayer', 'clappr', 'flowplayer', 'hls', 'dashjs',
@@ -308,12 +309,19 @@ async function updateOnlineFilters() {
       lastUpdated: Date.now()
     };
 
+    // Keep dynamicDomainCosmetics reasonable in storage (max 1000 domains)
+    const trimmedDomainCosmetics = {};
+    const domainKeys = Object.keys(allDomainCosmetics).slice(0, 1000);
+    for (const dk of domainKeys) {
+      trimmedDomainCosmetics[dk] = allDomainCosmetics[dk].slice(0, 20);
+    }
+
     // Save to storage
     await chrome.storage.local.set({
       lastFiltersUpdateTimestamp: Date.now(),
       onlineFilterStats: stats,
       dynamicCosmeticFilters: [],
-      dynamicDomainCosmetics: allDomainCosmetics
+      dynamicDomainCosmetics: trimmedDomainCosmetics
     });
 
     console.log('[Anti Pop-Under] Real-time filters successfully updated with genuine applied rules:', stats);
@@ -402,13 +410,8 @@ chrome.runtime.onInstalled.addListener(() => {
         }
       });
     }
-    // Reset history on new session/extension load to avoid memory buildup
     sessionStartTime = Date.now();
-    chrome.storage.local.set({ 
-      blockedCount: 0,
-      blockedHistory: [],
-      sessionStartTime: sessionStartTime
-    });
+    chrome.storage.local.set({ sessionStartTime: sessionStartTime });
   });
   
   // Set badge background color safely
@@ -450,72 +453,429 @@ chrome.runtime.onStartup.addListener(() => {
   });
 });
 
-// Update extension badge text safely
-function updateBadge(count) {
+// Tab-specific blocked counters (Map<tabId, number>)
+const tabBlockedCounts = new Map();
+
+// Update extension badge text safely for a specific tab
+function updateTabBadge(tabId, count) {
   if (!chrome.action || !chrome.action.setBadgeText) return;
-  if (count > 0) {
-    chrome.action.setBadgeText({ text: count.toString() });
+  if (!inMemoryEnabled) {
+    if (tabId) {
+      chrome.action.setBadgeText({ tabId: tabId, text: "OFF" });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: "#64748b" });
+      }
+    } else {
+      chrome.action.setBadgeText({ text: "OFF" });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
+      }
+    }
+    return;
+  }
+
+  if (tabId) {
+    if (count > 0) {
+      chrome.action.setBadgeText({ tabId: tabId, text: count.toString() });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: "#6366f1" });
+      }
+    } else {
+      chrome.action.setBadgeText({ tabId: tabId, text: "" });
+    }
   } else {
     chrome.action.setBadgeText({ text: "" });
   }
 }
 
-// Update declarative rules dynamically to allow all requests from whitelisted domains
-function updateDeclarativeRules(disabledDomains) {
-  if (!chrome.declarativeNetRequest) return;
-  
-  const ruleId = 10001; // unique ID for our dynamic rule
-  
-  if (!disabledDomains || disabledDomains.length === 0) {
-    chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [ruleId]
+// Reset tab counter when navigating to a new URL
+if (chrome.tabs && chrome.tabs.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === 'loading') {
+      tabBlockedCounts.set(tabId, 0);
+      updateTabBadge(tabId, 0);
+    }
+  });
+}
+
+// Clean up tab counter when a tab is closed
+if (chrome.tabs && chrome.tabs.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    tabBlockedCounts.delete(tabId);
+  });
+}
+
+// =========================================================================
+// IN-MEMORY STATE & REAL-TIME SYNCHRONIZATION
+// =========================================================================
+let inMemoryBlockedCount = 0;
+let inMemoryBlockedHistory = [];
+let inMemoryEnabled = true;
+let inMemoryDisabledDomains = [];
+let isStateInitialized = false;
+let initStatePromise = null;
+let saveStorageTimer = null;
+
+// Safe promise-based state initializer to completely prevent cold-start race conditions
+function ensureStateInitialized() {
+  if (isStateInitialized) return Promise.resolve();
+  if (!initStatePromise) {
+    initStatePromise = new Promise((resolve) => {
+      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "lastFiltersUpdateTimestamp"], (res) => {
+        const data = res || {};
+        inMemoryEnabled = data.enabled !== false;
+        inMemoryBlockedCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
+        inMemoryBlockedHistory = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
+        inMemoryDisabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
+        isStateInitialized = true;
+
+        // Synchronize DNR rules and badge icon
+        syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
+        if (!inMemoryEnabled) {
+          if (chrome.action && chrome.action.setBadgeText) {
+            chrome.action.setBadgeText({ text: "OFF" });
+            if (chrome.action.setBadgeBackgroundColor) {
+              chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
+            }
+          }
+        } else {
+          if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+            chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
+          }
+          chrome.action.setBadgeText({ text: "" });
+        }
+
+        // Check if 24 hours have passed since last filter update
+        const lastTime = data.lastFiltersUpdateTimestamp || 0;
+        if (Date.now() - lastTime > 24 * 60 * 60 * 1000) {
+          setTimeout(() => {
+            updateOnlineFilters();
+          }, 5000);
+        }
+
+        resolve();
+      });
     });
-  } else {
-    const newRule = {
-      id: ruleId,
-      priority: 3, // higher than all rules in rules.json (priority 1 or 2)
+  }
+  return initStatePromise;
+}
+
+// Debounced flush to storage to prevent freezing LevelDB on ad storms
+function saveStateToStorageDebounced() {
+  if (saveStorageTimer) clearTimeout(saveStorageTimer);
+  saveStorageTimer = setTimeout(() => {
+    chrome.storage.local.set({
+      blockedCount: inMemoryBlockedCount,
+      blockedHistory: inMemoryBlockedHistory
+    });
+  }, 250);
+}
+
+// =========================================================================
+// DECLARATIVE NET REQUEST (DNR) RULES SYNCHRONIZATION
+// =========================================================================
+let isDnrUpdating = false;
+let pendingDnrUpdate = null;
+
+async function syncDnrState(enabled, disabledDomains) {
+  if (!chrome.declarativeNetRequest) return;
+
+  if (isDnrUpdating) {
+    pendingDnrUpdate = { enabled, disabledDomains };
+    return;
+  }
+  isDnrUpdating = true;
+
+  try {
+    // 1. Static ruleset enable/disable (ruleset_1 from rules.json)
+    if (chrome.declarativeNetRequest.updateEnabledRulesets) {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+        [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
+      }).catch(e => console.warn('[WebShield] updateEnabledRulesets error:', e));
+    }
+
+    // 2. Dynamic rules for master bypass & whitelisted domains
+    const MASTER_BYPASS_RULE_ID = 10000;
+    const LEGACY_WHITELIST_RULE_ID = 10001;
+    const MEDIA_CDN_BYPASS_RULE_ID = 10005;
+    const MEDIA_INITIATOR_ALLOW_RULE_ID = 10006;
+    const YOUTUBE_BYPASS_RULE_ID = 10007;
+    const YOUTUBE_INITIATOR_ALLOW_RULE_ID = 10008;
+    const WHITELIST_INITIATOR_RULE_ID = 990001;
+    const WHITELIST_REQUEST_RULE_ID = 990002;
+
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules().catch(() => []);
+    const existingIds = new Set((existingRules || []).map(r => r.id));
+
+    const rulesToRemove = [MASTER_BYPASS_RULE_ID, LEGACY_WHITELIST_RULE_ID, MEDIA_CDN_BYPASS_RULE_ID, MEDIA_INITIATOR_ALLOW_RULE_ID, YOUTUBE_BYPASS_RULE_ID, YOUTUBE_INITIATOR_ALLOW_RULE_ID, WHITELIST_INITIATOR_RULE_ID, WHITELIST_REQUEST_RULE_ID]
+      .filter(id => existingIds.has(id));
+
+    const rulesToAdd = [];
+
+    // Always ensure essential movie image/video CDNs (fourhoi, surrit, missav) and recommendation API are allowed
+    rulesToAdd.push({
+      id: MEDIA_CDN_BYPASS_RULE_ID,
+      priority: 999900,
       action: { type: "allow" },
       condition: {
-        initiatorDomains: disabledDomains,
-        resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"]
+        requestDomains: [
+          "fourhoi.com", "surrit.com", "missav.ai", "missav.ws", "missav.com",
+          "missav123.com", "missav888.com", "recombee.com", "client-rapi-missav.recombee.com",
+          "client.recombee.com", "rapi.recombee.com", "client-rapi.recombee.com"
+        ],
+        resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
       }
-    };
-    chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [ruleId],
-      addRules: [newRule]
     });
+
+    rulesToAdd.push({
+      id: MEDIA_INITIATOR_ALLOW_RULE_ID,
+      priority: 999900,
+      action: { type: "allow" },
+      condition: {
+        initiatorDomains: ["missav.ai", "missav.ws", "missav.com", "missav123.com", "missav888.com"],
+        requestDomains: [
+          "fourhoi.com", "surrit.com", "recombee.com", "client-rapi-missav.recombee.com",
+          "client.recombee.com", "rapi.recombee.com", "client-rapi.recombee.com"
+        ],
+        resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
+      }
+    });
+
+    // Always ensure YouTube and YouTube Live Chat (requests and initiators) are 100% allowed
+    rulesToAdd.push({
+      id: YOUTUBE_BYPASS_RULE_ID,
+      priority: 999900,
+      action: { type: "allow" },
+      condition: {
+        requestDomains: [
+          "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
+          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com"
+        ],
+        resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
+      }
+    });
+
+    rulesToAdd.push({
+      id: YOUTUBE_INITIATOR_ALLOW_RULE_ID,
+      priority: 999900,
+      action: { type: "allow" },
+      condition: {
+        initiatorDomains: ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"],
+        requestDomains: [
+          "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
+          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com"
+        ],
+        resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
+      }
+    });
+
+    if (!enabled) {
+      // Protection paused: allow all requests to completely bypass DNR blocking
+      rulesToAdd.push({
+        id: MASTER_BYPASS_RULE_ID,
+        priority: 999999,
+        action: { type: "allowAllRequests" },
+        condition: {
+          urlFilter: "*",
+          resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"]
+        }
+      });
+    } else {
+      // Protection active: allow all requests on whitelisted domains
+      const cleanDomains = (disabledDomains || [])
+        .map(d => (d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, ''))
+        .filter(d => d && d.includes('.'));
+
+      if (cleanDomains.length > 0) {
+        rulesToAdd.push({
+          id: WHITELIST_INITIATOR_RULE_ID,
+          priority: 999990,
+          action: { type: "allowAllRequests" },
+          condition: {
+            initiatorDomains: cleanDomains,
+            resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
+          }
+        });
+        rulesToAdd.push({
+          id: WHITELIST_REQUEST_RULE_ID,
+          priority: 999990,
+          action: { type: "allow" },
+          condition: {
+            requestDomains: cleanDomains,
+            resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
+          }
+        });
+      }
+    }
+
+    if (rulesToRemove.length > 0 || rulesToAdd.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: rulesToRemove,
+        addRules: rulesToAdd
+      });
+    }
+  } catch (err) {
+    console.warn('[WebShield] syncDnrState notice:', err);
+  } finally {
+    isDnrUpdating = false;
+    if (pendingDnrUpdate) {
+      const next = pendingDnrUpdate;
+      pendingDnrUpdate = null;
+      syncDnrState(next.enabled, next.disabledDomains);
+    }
   }
 }
 
-// Update declarative ruleset state (enable/disable static ruleset and dynamic blocking rules)
-async function updateRulesetState(enabled) {
-  if (!chrome.declarativeNetRequest) return;
-  try {
-    if (chrome.declarativeNetRequest.updateEnabledRulesets) {
-      chrome.declarativeNetRequest.updateEnabledRulesets({
-        [enabled ? "enableRulesetIds" : "disableRulesetIds"]: ["ruleset_1"]
-      }, () => {
-        if (chrome.runtime.lastError) {
-          console.warn('[Anti Pop-Under] updateEnabledRulesets error:', chrome.runtime.lastError);
+// Initialize in-memory state and background listeners
+function initializeBackgroundState() {
+  sanitizeExistingDynamicRules();
+  ensureStateInitialized();
+}
+
+initializeBackgroundState();
+
+
+
+// Watch storage changes to keep in-memory cache and DNR in sync
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local") {
+    let dnrNeedsUpdate = false;
+
+    if (changes.enabled) {
+      inMemoryEnabled = changes.enabled.newValue !== false;
+      dnrNeedsUpdate = true;
+      if (!inMemoryEnabled) {
+        if (chrome.action && chrome.action.setBadgeText) {
+          chrome.action.setBadgeText({ text: "OFF" });
+          if (chrome.action.setBadgeBackgroundColor) {
+            chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
+          }
         }
-      });
+      } else {
+        if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+          chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
+        }
+        updateBadge(inMemoryBlockedCount);
+      }
     }
 
-    const MASTER_BYPASS_RULE_ID = 10000;
-    if (!enabled) {
-      // Install top-priority allow-all dynamic rule to immediately bypass all dynamic blocking rules
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: [MASTER_BYPASS_RULE_ID],
-        addRules: [{
-          id: MASTER_BYPASS_RULE_ID,
-          priority: 99999,
-          action: { type: "allow" },
-          condition: {
-            urlFilter: "*",
-            resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"]
-          }
-        }]
+    if (changes.disabledDomains) {
+      inMemoryDisabledDomains = changes.disabledDomains.newValue || [];
+      dnrNeedsUpdate = true;
+    }
+
+    if (changes.blockedCount && typeof changes.blockedCount.newValue === 'number') {
+      inMemoryBlockedCount = changes.blockedCount.newValue;
+      if (changes.blockedCount.newValue === 0) {
+        tabBlockedCounts.clear();
+        if (chrome.tabs && chrome.tabs.query) {
+          chrome.tabs.query({}, (tabs) => {
+            (tabs || []).forEach(t => updateTabBadge(t.id, 0));
+          });
+        }
+      }
+    }
+
+    if (changes.blockedHistory && Array.isArray(changes.blockedHistory.newValue)) {
+      inMemoryBlockedHistory = changes.blockedHistory.newValue;
+    }
+
+    if (dnrNeedsUpdate) {
+      syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
+    }
+  }
+});
+
+// Listen for messages from content script & popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 1. Report ad blocked from content script
+  if (message.type === "AD_BLOCKED") {
+    ensureStateInitialized().then(() => {
+      if (!inMemoryEnabled) {
+        sendResponse({ success: false, reason: "disabled" });
+        return;
+      }
+
+      let domain = "Trang web";
+      if (sender.tab && sender.tab.url) {
+        try {
+          domain = new URL(sender.tab.url).hostname;
+        } catch (e) {}
+      } else if (sender.url) {
+        try {
+          domain = new URL(sender.url).hostname;
+        } catch (e) {}
+      }
+
+      const cleanDomain = domain.replace(/^www\./i, '').toLowerCase();
+      const isDomainDisabled = inMemoryDisabledDomains.some(d => {
+        const cd = (d || '').replace(/^www\./i, '').toLowerCase();
+        return cleanDomain === cd || cleanDomain.endsWith('.' + cd) || cd.endsWith('.' + cleanDomain);
       });
+
+      if (isDomainDisabled) {
+        sendResponse({ success: false, reason: "whitelisted" });
+        return;
+      }
+
+      const blockedUrl = message.url || "quảng cáo ẩn";
+      inMemoryBlockedCount++;
+
+      // Track blocked count per tab
+      let tabCount = 0;
+      const tabId = (sender && sender.tab && sender.tab.id) ? sender.tab.id : null;
+      if (tabId !== null && tabId !== undefined) {
+        tabCount = (tabBlockedCounts.get(tabId) || 0) + 1;
+        tabBlockedCounts.set(tabId, tabCount);
+        updateTabBadge(tabId, tabCount);
+      }
+
+      const now = Date.now();
+      const isDuplicate = inMemoryBlockedHistory.length > 0 &&
+        inMemoryBlockedHistory[0].url === blockedUrl &&
+        (now - inMemoryBlockedHistory[0].timestamp < 2000);
+
+      if (!isDuplicate) {
+        inMemoryBlockedHistory.unshift({
+          url: blockedUrl,
+          domain: domain,
+          timestamp: now
+        });
+        if (inMemoryBlockedHistory.length > 15) {
+          inMemoryBlockedHistory.length = 15;
+        }
+      }
+
+      saveStateToStorageDebounced();
+
+      sendResponse({ success: true, count: inMemoryBlockedCount, tabCount: tabCount });
+    });
+    return true;
+  }
+
+  // 2. Direct instantaneous state request from popup
+  if (message.type === "GET_POPUP_STATE") {
+    ensureStateInitialized().then(() => {
+      const tabId = message.tabId;
+      const tabCount = (tabId !== undefined && tabId !== null) ? (tabBlockedCounts.get(tabId) || 0) : 0;
+      sendResponse({
+        enabled: inMemoryEnabled,
+        blockedCount: inMemoryBlockedCount,
+        tabBlockedCount: tabCount,
+        blockedHistory: inMemoryBlockedHistory,
+        disabledDomains: inMemoryDisabledDomains
+      });
+    });
+    return true;
+  }
+
+  // 3. Set protection enabled/disabled from popup
+  if (message.type === "SET_ENABLED") {
+    const isEnabled = message.enabled !== false;
+    inMemoryEnabled = isEnabled;
+    chrome.storage.local.set({ enabled: isEnabled });
+    syncDnrState(isEnabled, inMemoryDisabledDomains);
+    if (!isEnabled) {
       if (chrome.action && chrome.action.setBadgeText) {
         chrome.action.setBadgeText({ text: "OFF" });
         if (chrome.action.setBadgeBackgroundColor) {
@@ -523,95 +883,43 @@ async function updateRulesetState(enabled) {
         }
       }
     } else {
-      // Remove bypass rule and restore normal blocking
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: [MASTER_BYPASS_RULE_ID]
-      });
       if (chrome.action && chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
       }
-      chrome.storage.local.get(["blockedCount"], (res) => {
-        updateBadge((res && res.blockedCount) || 0);
-      });
-    }
-  } catch (err) {
-    console.warn('[Anti Pop-Under] updateRulesetState notice:', err);
-  }
-}
-
-// Watch storage changes to update badge & dynamic allow rules
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local") {
-    if (changes.blockedCount) {
-      updateBadge(changes.blockedCount.newValue);
-    }
-    if (changes.disabledDomains) {
-      updateDeclarativeRules(changes.disabledDomains.newValue);
-    }
-    if (changes.enabled) {
-      updateRulesetState(changes.enabled.newValue);
-    }
-  }
-});
-
-// Initialize badge and declarative rules on startup
-chrome.storage.local.get(["blockedCount", "disabledDomains", "enabled", "lastFiltersUpdateTimestamp"], (result) => {
-  if (result) {
-    const enabled = result.enabled !== false;
-    updateRulesetState(enabled);
-    if (enabled) {
-      if (result.blockedCount) {
-        updateBadge(result.blockedCount);
-      }
-      if (result.disabledDomains) {
-        updateDeclarativeRules(result.disabledDomains);
+      chrome.action.setBadgeText({ text: "" });
+      if (chrome.tabs && chrome.tabs.query) {
+        chrome.tabs.query({}, (tabs) => {
+          (tabs || []).forEach(t => {
+            const count = tabBlockedCounts.get(t.id) || 0;
+            updateTabBadge(t.id, count);
+          });
+        });
       }
     }
-
-    // Check if 24 hours have passed since last filter update
-    const lastTime = result.lastFiltersUpdateTimestamp || 0;
-    if (Date.now() - lastTime > 24 * 60 * 60 * 1000) {
-      setTimeout(() => {
-        updateOnlineFilters();
-      }, 5000);
-    }
-  }
-});
-
-// Listen for messages from content script & popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "AD_BLOCKED") {
-    const blockedUrl = message.url || "quảng cáo ẩn";
-    const domain = sender.tab && sender.tab.url ? new URL(sender.tab.url).hostname : "Trang web";
-    
-    // Get and update count & history
-    chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory"], (result) => {
-      const res = result || {};
-      if (res.enabled === false) return;
-      const currentCount = res.blockedCount || 0;
-      const history = res.blockedHistory || [];
-      
-      const newCount = currentCount + 1;
-      const newHistoryItem = {
-        url: blockedUrl,
-        domain: domain,
-        timestamp: Date.now()
-      };
-      
-      // Keep last 15 items in history
-      const newHistory = [newHistoryItem, ...history].slice(0, 15);
-      
-      chrome.storage.local.set({
-        blockedCount: newCount,
-        blockedHistory: newHistory
-      });
-    });
-    
-    sendResponse({ success: true });
+    sendResponse({ success: true, enabled: isEnabled });
     return;
   }
 
-  // Real-time filter update requested by popup
+  // 4. Toggle domain whitelist from popup
+  if (message.type === "TOGGLE_DOMAIN") {
+    const targetDomain = (message.domain || "").trim().toLowerCase().replace(/^www\./i, '');
+    if (targetDomain) {
+      let updated = [...inMemoryDisabledDomains];
+      const isCurrentlyDisabled = updated.some(d => (d || '').replace(/^www\./i, '').toLowerCase() === targetDomain);
+      if (message.disabled) {
+        if (!isCurrentlyDisabled) updated.push(targetDomain);
+      } else {
+        updated = updated.filter(d => (d || '').replace(/^www\./i, '').toLowerCase() !== targetDomain);
+      }
+      inMemoryDisabledDomains = updated;
+      chrome.storage.local.set({ disabledDomains: updated });
+      syncDnrState(inMemoryEnabled, updated);
+      sendResponse({ success: true, disabledDomains: updated });
+      return;
+    }
+  }
+
+  // 5. Real-time filter update requested by popup
   if (message.type === "FETCH_LATEST_FILTERS") {
     updateOnlineFilters().then((result) => {
       sendResponse(result);
@@ -696,91 +1004,4 @@ if (chrome.contextMenus && chrome.contextMenus.onClicked) {
   });
 }
 
-// =========================================================================
-// DECLARATIVE NET REQUEST (DNR) RULES SYNCHRONIZATION
-// =========================================================================
 
-async function syncDnrRuleset(isEnabled) {
-  if (typeof chrome === 'undefined' || !chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateEnabledRulesets) return;
-  try {
-    if (isEnabled) {
-      await chrome.declarativeNetRequest.updateEnabledRulesets({
-        enableRulesetIds: ['ruleset_1']
-      });
-      console.log('[Anti Pop-Under] DNR static ruleset enabled');
-    } else {
-      await chrome.declarativeNetRequest.updateEnabledRulesets({
-        disableRulesetIds: ['ruleset_1']
-      });
-      console.log('[Anti Pop-Under] DNR static ruleset disabled (protection paused)');
-    }
-  } catch (e) {
-    console.warn('[Anti Pop-Under] syncDnrRuleset error:', e);
-  }
-}
-
-async function syncDnrWhitelist(disabledDomains) {
-  if (typeof chrome === 'undefined' || !chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) return;
-  try {
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    const ruleIdsToRemove = (existingRules || [])
-      .filter(r => r.id >= 990000 && r.id < 999990)
-      .map(r => r.id);
-
-    const newRules = [];
-    if (Array.isArray(disabledDomains) && disabledDomains.length > 0) {
-      const cleanDomains = disabledDomains
-        .map(d => (d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
-        .filter(d => d && d.includes('.'));
-
-      if (cleanDomains.length > 0) {
-        newRules.push({
-          id: 990001,
-          priority: 999999,
-          action: { type: 'allowAllRequests' },
-          condition: {
-            initiatorDomains: cleanDomains,
-            resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other']
-          }
-        });
-        newRules.push({
-          id: 990002,
-          priority: 999999,
-          action: { type: 'allow' },
-          condition: {
-            requestDomains: cleanDomains,
-            resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other']
-          }
-        });
-      }
-    }
-
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: ruleIdsToRemove,
-      addRules: newRules
-    });
-    console.log('[Anti Pop-Under] Synced DNR whitelist dynamic rules:', newRules.length);
-  } catch (e) {
-    console.warn('[Anti Pop-Under] syncDnrWhitelist error:', e);
-  }
-}
-
-// Watch storage changes to dynamically toggle DNR rulesets and whitelisted domains
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local') {
-    if (changes.enabled) {
-      syncDnrRuleset(changes.enabled.newValue !== false);
-    }
-    if (changes.disabledDomains) {
-      syncDnrWhitelist(changes.disabledDomains.newValue || []);
-    }
-  }
-});
-
-// Initial boot synchronization
-chrome.storage.local.get(['enabled', 'disabledDomains'], (res) => {
-  if (res) {
-    syncDnrRuleset(res.enabled !== false);
-    syncDnrWhitelist(res.disabledDomains || []);
-  }
-});

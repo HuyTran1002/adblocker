@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.8.9" }),
+      getManifest: () => ({ version: "3.9.4" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -81,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const statusCard = document.getElementById("status-card");
   const statusBadge = document.getElementById("status-badge");
   const blockedCountEl = document.getElementById("blocked-count");
+  const totalBlockedCountEl = document.getElementById("total-blocked-count");
   const historyList = document.getElementById("history-list");
   const emptyState = document.getElementById("empty-state");
   const clearHistoryBtn = document.getElementById("clear-history-btn");
@@ -105,6 +106,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const updateBtnText = document.getElementById("update-btn-text");
 
   let currentCount = 0;
+  let currentTotalCount = 0;
+  let currentTabId = null;
   let currentDomain = "";
 
   // Relative Time Formatter in Vietnamese
@@ -122,7 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Update Main UI View
-  function updateUI(enabled, count, history) {
+  function updateUI(enabled, count, totalCount, history) {
     powerToggle.checked = enabled;
     if (enabled) {
       statusCard.classList.remove("disabled");
@@ -139,6 +142,11 @@ document.addEventListener("DOMContentLoaded", () => {
       blockedCountEl.classList.add("pulse");
       setTimeout(() => blockedCountEl.classList.remove("pulse"), 200);
       currentCount = count;
+    }
+
+    if (totalBlockedCountEl && typeof totalCount === 'number') {
+      totalBlockedCountEl.textContent = totalCount.toLocaleString("vi-VN");
+      currentTotalCount = totalCount;
     }
 
     const items = historyList.querySelectorAll(".history-item");
@@ -171,24 +179,41 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Domain Match Helper (handles www and subdomains)
+  function isDomainInList(domain, list) {
+    if (!domain || !Array.isArray(list)) return false;
+    const cleanD = domain.trim().toLowerCase().replace(/^www\./i, '');
+    return list.some(item => {
+      const cleanItem = (item || '').trim().toLowerCase().replace(/^www\./i, '');
+      return cleanD === cleanItem || cleanD.endsWith('.' + cleanItem) || cleanItem.endsWith('.' + cleanD);
+    });
+  }
+
   // Active Tab Domain Check
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs && tabs[0] && tabs[0].url) {
+    const activeTab = tabs && tabs[0];
+    currentTabId = activeTab && activeTab.id;
+    const tabUrl = (activeTab && (activeTab.url || activeTab.pendingUrl)) || '';
+
+    if (tabUrl.startsWith('http://') || tabUrl.startsWith('https://')) {
       try {
-        const urlObj = new URL(tabs[0].url);
+        const urlObj = new URL(tabUrl);
         currentDomain = urlObj.hostname;
         siteToggleLabel.textContent = `Chặn trên ${currentDomain}`;
-        
+        siteToggle.disabled = false;
+
         chrome.storage.local.get(["disabledDomains"], (res) => {
           const disabledDomains = (res && res.disabledDomains) || [];
-          siteToggle.checked = !disabledDomains.includes(currentDomain);
+          siteToggle.checked = !isDomainInList(currentDomain, disabledDomains);
         });
       } catch (e) {
         siteToggleLabel.textContent = "Chặn trên trang này";
         siteToggle.disabled = true;
       }
     } else {
+      siteToggleLabel.textContent = "Trang hệ thống";
       siteToggle.disabled = true;
+      siteToggle.checked = false;
     }
   });
 
@@ -212,9 +237,10 @@ document.addEventListener("DOMContentLoaded", () => {
         tag.querySelector(".tag-remove-btn").addEventListener("click", (e) => {
           const domToRemove = e.currentTarget.getAttribute("data-domain");
           chrome.storage.local.get(["disabledDomains"], (res) => {
-            const updated = ((res && res.disabledDomains) || []).filter(d => d !== domToRemove);
+            const cleanRemove = (domToRemove || '').trim().toLowerCase().replace(/^www\./i, '');
+            const updated = ((res && res.disabledDomains) || []).filter(d => (d || '').trim().toLowerCase().replace(/^www\./i, '') !== cleanRemove);
             chrome.storage.local.set({ disabledDomains: updated }, () => {
-              if (domToRemove === currentDomain) {
+              if (isDomainInList(currentDomain, [cleanRemove])) {
                 siteToggle.checked = true;
                 chrome.tabs.query({ active: true, currentWindow: true }, (t) => {
                   if (t && t[0] && t[0].id) chrome.tabs.reload(t[0].id);
@@ -310,16 +336,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add Domain to Whitelist
   function addDomainToWhitelist(domainStr) {
     if (!domainStr) return;
-    const cleanDomain = domainStr.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const cleanDomain = domainStr.trim().toLowerCase().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
     if (!cleanDomain) return;
 
     chrome.storage.local.get(["disabledDomains"], (res) => {
       const disabledDomains = (res && res.disabledDomains) || [];
-      if (!disabledDomains.includes(cleanDomain)) {
+      if (!isDomainInList(cleanDomain, disabledDomains)) {
         disabledDomains.push(cleanDomain);
         chrome.storage.local.set({ disabledDomains: disabledDomains }, () => {
           whitelistInput.value = "";
-          if (cleanDomain === currentDomain) {
+          if (isDomainInList(currentDomain, [cleanDomain])) {
             siteToggle.checked = false;
             chrome.tabs.query({ active: true, currentWindow: true }, (t) => {
               if (t && t[0] && t[0].id) chrome.tabs.reload(t[0].id);
@@ -473,35 +499,69 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Load Initial Storage State
-  chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
-    const result = rawResult || {};
-    const enabled = result.enabled !== false;
-    const count = result.blockedCount || 0;
-    const history = result.blockedHistory || [];
-    const disabledDomains = result.disabledDomains || [];
-    const customBlockedSelectors = result.customBlockedSelectors || [];
-    const manualFilters = result.manualFilters || {};
+  // Fast Initial State Loading (Directly from Background In-Memory State + Storage fallback)
+  function loadInitialState() {
+    const applyState = (data) => {
+      if (!data) return;
+      const enabled = data.enabled !== false;
+      const tabCount = typeof data.tabBlockedCount === 'number' ? data.tabBlockedCount : 0;
+      const totalCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
+      const history = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
+      const disabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
+      const customBlockedSelectors = Array.isArray(data.customBlockedSelectors) ? data.customBlockedSelectors : [];
+      const manualFilters = data.manualFilters || {};
 
-    updateUI(enabled, count, history);
-    updateWhitelistUI(disabledDomains);
-    updateCustomRulesUI(manualFilters, customBlockedSelectors);
-    updateFilterTimestampsUI(result.lastFiltersUpdateTimestamp, result.onlineFilterStats);
-  });
+      updateUI(enabled, tabCount, totalCount, history);
+      updateWhitelistUI(disabledDomains);
+      updateCustomRulesUI(manualFilters, customBlockedSelectors);
+      if (data.lastFiltersUpdateTimestamp || data.onlineFilterStats) {
+        updateFilterTimestampsUI(data.lastFiltersUpdateTimestamp, data.onlineFilterStats);
+      }
+      if (currentDomain) {
+        siteToggle.checked = !isDomainInList(currentDomain, disabledDomains);
+      }
+    };
+
+    // 1. Instant response from background in-memory state with current tabId
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const activeTab = tabs && tabs[0];
+      currentTabId = activeTab && activeTab.id;
+      try {
+        chrome.runtime.sendMessage({ type: "GET_POPUP_STATE", tabId: currentTabId }, (res) => {
+          if (!chrome.runtime.lastError && res) {
+            applyState(res);
+          }
+        });
+      } catch (e) {}
+    });
+
+    // 2. Storage query as reliable source
+    chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
+      applyState(rawResult || {});
+    });
+  }
+
+  loadInitialState();
 
   // Main Power Toggle Handler
   powerToggle.addEventListener("change", () => {
     const isEnabled = powerToggle.checked;
-    chrome.storage.local.set({ enabled: isEnabled }, () => {
-      if (isEnabled) {
-        statusCard.classList.remove("disabled");
-        statusCard.classList.add("active");
-        statusBadge.textContent = "Đang bảo vệ";
-      } else {
-        statusCard.classList.remove("active");
-        statusCard.classList.add("disabled");
-        statusBadge.textContent = "Đã tạm dừng";
-      }
+
+    if (isEnabled) {
+      statusCard.classList.remove("disabled");
+      statusCard.classList.add("active");
+      statusBadge.textContent = "Đang bảo vệ";
+    } else {
+      statusCard.classList.remove("active");
+      statusCard.classList.add("disabled");
+      statusBadge.textContent = "Đã tạm dừng";
+    }
+
+    // Send direct message to background to update in-memory state, DNR rules, and badge immediately
+    chrome.runtime.sendMessage({
+      type: "SET_ENABLED",
+      enabled: isEnabled
+    }, () => {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs && tabs[0] && tabs[0].id) {
           const tabId = tabs[0].id;
@@ -529,65 +589,101 @@ document.addEventListener("DOMContentLoaded", () => {
   siteToggle.addEventListener("change", () => {
     if (!currentDomain) return;
     const isBlocked = siteToggle.checked;
-    chrome.storage.local.get(["disabledDomains"], (res) => {
-      let disabledDomains = (res && res.disabledDomains) || [];
-      if (isBlocked) {
-        disabledDomains = disabledDomains.filter(d => d !== currentDomain);
-      } else {
-        if (!disabledDomains.includes(currentDomain)) disabledDomains.push(currentDomain);
-      }
-      chrome.storage.local.set({ disabledDomains: disabledDomains }, () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs && tabs[0] && tabs[0].id) {
-            const tabId = tabs[0].id;
-            if (chrome.scripting && chrome.scripting.executeScript) {
-              chrome.scripting.executeScript({
-                target: { tabId: tabId, allFrames: true },
-                func: (domains, blocked) => {
-                  try {
-                    sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(domains));
-                    sessionStorage.setItem('__webshield_enabled__', blocked ? 'true' : 'false');
-                  } catch (e) {}
-                },
-                args: [disabledDomains, isBlocked]
-              }).catch(() => {}).finally(() => {
-                chrome.tabs.reload(tabId);
-              });
-            } else {
+    const cleanDomain = currentDomain.trim().toLowerCase().replace(/^www\./i, '');
+
+    // Send direct message to background to toggle domain in memory, storage, and DNR immediately
+    chrome.runtime.sendMessage({
+      type: "TOGGLE_DOMAIN",
+      domain: cleanDomain,
+      disabled: !isBlocked
+    }, () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0] && tabs[0].id) {
+          const tabId = tabs[0].id;
+          if (chrome.scripting && chrome.scripting.executeScript) {
+            chrome.scripting.executeScript({
+              target: { tabId: tabId, allFrames: true },
+              func: (domainName, blocked) => {
+                try {
+                  const raw = sessionStorage.getItem('__webshield_disabled_domains__');
+                  let list = raw ? JSON.parse(raw) : [];
+                  if (blocked) {
+                    list = list.filter(d => d !== domainName);
+                  } else {
+                    if (!list.includes(domainName)) list.push(domainName);
+                  }
+                  sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(list));
+                  sessionStorage.setItem('__webshield_enabled__', blocked ? 'true' : 'false');
+                } catch (e) {}
+              },
+              args: [cleanDomain, isBlocked]
+            }).catch(() => {}).finally(() => {
               chrome.tabs.reload(tabId);
-            }
+            });
+          } else {
+            chrome.tabs.reload(tabId);
           }
-        });
+        }
       });
     });
   });
 
-  // Storage Change Observer (Realtime UI updates)
+  // Storage Change Observer (Realtime UI updates without tearing down the DOM)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local") {
-      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters"], (rawResult) => {
-        const result = rawResult || {};
-        const enabled = result.enabled !== false;
-        const count = result.blockedCount || 0;
-        const history = result.blockedHistory || [];
-        const disabledDomains = result.disabledDomains || [];
-        const customBlockedSelectors = result.customBlockedSelectors || [];
-        const manualFilters = result.manualFilters || {};
+      if (changes.blockedCount || changes.blockedHistory || changes.enabled) {
+        const newTotalCount = changes.blockedCount ? changes.blockedCount.newValue : currentTotalCount;
+        const newEnabled = changes.enabled ? (changes.enabled.newValue !== false) : powerToggle.checked;
+        const newHistory = changes.blockedHistory ? changes.blockedHistory.newValue : null;
 
-        updateUI(enabled, count, history);
-        updateWhitelistUI(disabledDomains);
-        updateCustomRulesUI(manualFilters, customBlockedSelectors);
-
-        if (currentDomain) {
-          siteToggle.checked = !disabledDomains.includes(currentDomain);
+        if (totalBlockedCountEl && typeof newTotalCount === 'number') {
+          totalBlockedCountEl.textContent = newTotalCount.toLocaleString("vi-VN");
+          currentTotalCount = newTotalCount;
         }
-      });
+
+        if (currentTabId) {
+          try {
+            chrome.runtime.sendMessage({ type: "GET_POPUP_STATE", tabId: currentTabId }, (res) => {
+              if (!chrome.runtime.lastError && res) {
+                const tabCount = typeof res.tabBlockedCount === 'number' ? res.tabBlockedCount : 0;
+                if (newHistory !== null) {
+                  updateUI(newEnabled, tabCount, newTotalCount, newHistory);
+                } else {
+                  if (tabCount !== currentCount) {
+                    blockedCountEl.textContent = tabCount;
+                    blockedCountEl.classList.add("pulse");
+                    setTimeout(() => blockedCountEl.classList.remove("pulse"), 200);
+                    currentCount = tabCount;
+                  }
+                  powerToggle.checked = newEnabled;
+                }
+              }
+            });
+          } catch (e) {}
+        }
+      }
+
+      if (changes.disabledDomains) {
+        const domains = changes.disabledDomains.newValue || [];
+        updateWhitelistUI(domains);
+        if (currentDomain) {
+          siteToggle.checked = !isDomainInList(currentDomain, domains);
+        }
+      }
+
+      if (changes.manualFilters || changes.customBlockedSelectors) {
+        chrome.storage.local.get(["manualFilters", "customBlockedSelectors"], (res) => {
+          updateCustomRulesUI((res && res.manualFilters) || {}, (res && res.customBlockedSelectors) || []);
+        });
+      }
     }
   });
 
   // Clear History
   clearHistoryBtn.addEventListener("click", () => {
-    chrome.storage.local.set({ blockedCount: 0, blockedHistory: [] });
+    chrome.storage.local.set({ blockedCount: 0, blockedHistory: [] }, () => {
+      updateUI(powerToggle.checked, 0, []);
+    });
   });
 
   // Start Target Picker Mode on Active Tab
@@ -732,7 +828,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.8.9";
+      const version = manifest.version || "3.9.4";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");

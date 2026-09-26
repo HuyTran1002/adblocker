@@ -15,6 +15,11 @@
     return; // Completely inactive on sensitive/auth domains
   }
 
+  const isYouTube = currentHost.includes('youtube.com') ||
+    currentHost.includes('youtu.be') ||
+    currentHost.includes('google') ||
+    currentHost.includes('doubleclick');
+
   // Synchronous check: if WebShield is disabled globally or for this domain, exit immediately!
   try {
     if (typeof sessionStorage !== 'undefined') {
@@ -98,6 +103,7 @@
   try {
     function isSuspectOverlayNode(node) {
       if (!node || node.nodeType !== 1) return false;
+      if (isYouTube) return false;
       const tag = (node.tagName || '').toLowerCase();
       const id = (node.id || '').toLowerCase();
       const className = (typeof node.className === 'string') ? node.className.toLowerCase() : '';
@@ -179,10 +185,11 @@
   } catch (e) {}
 
   // Zero-Latency CSS Overlay Killer
-  try {
-    const overlayKillerStyle = document.createElement('style');
-    overlayKillerStyle.id = 'webshield-overlay-killer';
-    overlayKillerStyle.textContent = `
+  if (!isYouTube) {
+    try {
+      const overlayKillerStyle = document.createElement('style');
+      overlayKillerStyle.id = 'webshield-overlay-killer';
+      overlayKillerStyle.textContent = `
       div[style*="99999999"],
       div[style*="2147483647"],
       div[style*="width: 100%"][style*="height: 100%"][style*="fixed"],
@@ -224,6 +231,57 @@
       }, { once: true });
     }
   } catch(e) {}
+  }
+
+  // --- LAZY-LOAD RECOVERY FOR MISSAV ONLY ---
+  // Only target missav where broken Alpine/lozad instances need hydration.
+  // Never run globally to avoid breaking native lazy-loaders or responsive thumbnail layouts on other movie sites.
+  function ensureLozadObserver() {
+    if (!window.location.hostname.includes('missav')) return;
+    try {
+      if (typeof window.lozad === 'function') {
+        const observer = window.lozad('.lozad', {
+          loaded: function (el) {
+            el.classList.remove('lozad');
+            el.setAttribute('data-loaded', 'true');
+          }
+        });
+        observer.observe();
+      }
+    } catch (e) {}
+
+    try {
+      const imgs = document.querySelectorAll('img[data-src], img.lozad');
+      for (let i = 0; i < imgs.length; i++) {
+        const el = imgs[i];
+        const dataSrc = el.getAttribute('data-src') || el.getAttribute('data-original');
+        if (dataSrc && (!el.src || el.src.startsWith('data:image/') || el.src === 'about:blank' || el.src.length < 20)) {
+          el.src = dataSrc;
+          el.loading = 'lazy';
+        }
+        if (el.hasAttribute('x-cloak')) el.removeAttribute('x-cloak');
+      }
+    } catch (e) {}
+  }
+
+  if (window.location.hostname.includes('missav')) {
+    let lozadPollCount = 0;
+    const lozadInterval = setInterval(() => {
+      ensureLozadObserver();
+      if (++lozadPollCount > 15) clearInterval(lozadInterval);
+    }, 300);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        ensureLozadObserver();
+        setTimeout(ensureLozadObserver, 500);
+        setTimeout(ensureLozadObserver, 1500);
+      }, { once: true });
+    } else {
+      ensureLozadObserver();
+    }
+  }
+
 
   // --- EMBEDDED PLAYER IFRAME DETECTION ---
   // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, vlstream.net),
@@ -712,10 +770,6 @@
   const originalOpen = window.open;
   const originalClick = HTMLAnchorElement.prototype.click;
 
-  const isYouTube = window.location.hostname.includes('youtube.com') ||
-    window.location.hostname.includes('google') ||
-    window.location.hostname.includes('doubleclick');
-
   // Helper nhận diện ranh giới tuyệt đối của video player DOM
   // Standard 1: Strict Boundary Check
   function isInsideVideoPlayer(el) {
@@ -800,7 +854,7 @@
         '.thumb-overlay, [class*="thumb"], [id*="thumb"], .video-js, [class*="video-js"], ' +
         '.img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"], ' +
         '.carousel, .slider, .swiper, .slick-slider, .owl-carousel, [class*="poster"], ' +
-        '[class*="detail"], [class*="trailer"]'
+        '[class*="detail"], [class*="trailer"], .thumbnail, .preview, .lozad, [class*="thumbnail"], [class*="preview"], [class*="lozad"]'
       )) {
         return true;
       }
@@ -808,7 +862,7 @@
       if (tag === 'img') {
         const src = (el.currentSrc || el.src || el.getAttribute('data-src') || el.getAttribute('data-original') || '').toLowerCase();
         if (src) {
-          const isKnownMovieCDN = /tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov/i.test(src);
+          const isKnownMovieCDN = /tmdb\.org|wsrv\.nl|phimimg\.com|ophim|nguonc\.com|animevietsub|cdn77|themoviedb|vsmov|fourhoi|surrit|missav/i.test(src);
           if (isKnownMovieCDN) return true;
           try {
             const imgHost = new URL(src, window.location.href).hostname.toLowerCase();
@@ -1023,7 +1077,6 @@
   }
 
   // Communication Handshake with content.js (Isolated World)
-
   window.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'ANTI_POPUP_STATE_CHANGE') {
       extensionEnabled = event.data.enabled !== false;
@@ -1038,12 +1091,24 @@
     document.addEventListener('anti-popup-state-change', (e) => {
       if (e.detail && typeof e.detail.enabled !== 'undefined') {
         extensionEnabled = e.detail.enabled !== false;
+        contentScriptReady = true;
+        if (extensionEnabled) {
+          flushPendingReports();
+        }
       }
     });
   } catch (e) {}
 
-  // Request current state from content.js
+  // Request current state from content.js with retry
   window.postMessage({ type: 'ANTI_POPUP_REQUEST_STATE' }, '*');
+  let handshakeAttempts = 0;
+  const handshakeInterval = setInterval(() => {
+    if (contentScriptReady || ++handshakeAttempts > 10) {
+      clearInterval(handshakeInterval);
+      return;
+    }
+    window.postMessage({ type: 'ANTI_POPUP_REQUEST_STATE' }, '*');
+  }, 200);
 
   function isEnabled() {
     if (!extensionEnabled) return false;
@@ -1092,17 +1157,24 @@
   // Send message to content script (which forwards to background)
   function reportBlocked(url, reason) {
     if (!isEnabled()) return;
+
+    // Always immediately post event to window so content.js can receive it in real-time
+    try {
+      window.postMessage({
+        type: 'ANTI_POPUP_BLOCKED_EVENT',
+        url: url,
+        reason: reason
+      }, '*');
+    } catch (e) {}
+
     if (!contentScriptReady) {
-      pendingReports.push({ url: url, reason: reason });
-      console.log(`[Anti Pop-Under] Queued block report to "${url}". Reason: ${reason}`);
+      if (pendingReports.length < 50) {
+        pendingReports.push({ url: url, reason: reason });
+      }
+      console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
       return;
     }
 
-    window.postMessage({
-      type: 'ANTI_POPUP_BLOCKED_EVENT',
-      url: url,
-      reason: reason
-    }, '*');
     console.log(`[Anti Pop-Under] Blocked popup to "${url}". Reason: ${reason}`);
   }
 
@@ -1250,16 +1322,16 @@
     '188bet', 'kubet', 'shbet', '789bet', 'jun88', 'f8bet', 'new88', 'hi88',
     'okvip', '1xbit', '1xbet', 'vi88', 'fi88', 'ee88', 'lixi88', 'mu88',
     'loto', 'quayhu', '\\bslot\\b', 'nha-cai', 'soicau', 'keonhacai', 'bong88',
-    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', 'sc88',
-    'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', 'b52', '789club', 'kuwin',
-    'thabet', 'bk8', 'k8', 'j88', 'mb66', 'gk88', 'pg88', '88clb', 'cwin', 'win88',
-    'lu88', 'vu88', 'man88', 'hbet', 'k88', 'tx88', 'taixiu', 'banca', 'game-bai',
+    'sv388', 'vz99', 'loto188', 'k9win', 'fabet', 'oxbet', 'debet', 'may88', '\\bsc88\\b',
+    'rr88', 'go88', 'sunwin', 'hitclub', 'rikvip', '\\bb52\\b', '789club', 'kuwin',
+    'thabet', 'bk8', '\\bk8\\b', 'j88', 'mb66', 'gk88', 'pg88', '88clb', '\\bcwin\\b', 'win88',
+    'lu88', 'vu88', 'man88', 'hbet', '\\bk88\\b', 'tx88', 'taixiu', 'banca', 'game-bai',
     'qq88', 'xx88', 'bet789',
     'bom88', 'gem88', 'uk88', 'net88', 'vsbet', '6789x', 'adqc', 'musicskins', 'rikvipchinhhang', 'uk88chinhhang'
   ];
 
   const adUrlKeywords = [
-    'adserver', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads',
+    '(?:\\b|//)adserver(?:\\b|\\.)', 'popunder', 'greatcpmgate', 'highcpmgate', 'onclickads',
     'clktag', 'exoclick', 'eclick.vn', 'novanet.vn', 'adsterra', 'popads', 'popcash',
     'cpmrate', 'cpmnetwork', 'cpmgate', 'profitablecpm', 'profitablecpmratenetwork',
     'hilltopads', 'galaksion', 'monetag', 'admaven', 'clickadu', 'richads', 'propush',
@@ -1274,6 +1346,7 @@
     '/preroll', '/midroll', '/postroll', 'streamux.top',
     'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
     'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
+    'agileskincareunrented.com', 'agileskincareunrented', 'marvelous-respond.com', 'marvelous-respond',
     'yqxtm.com', 'kwai.net/bs2/ad-',
     'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim', 'no-ads-under'
   ];
@@ -1818,6 +1891,13 @@
     if (!window.location.hostname.includes('youtube.com')) return;
     if (!isEnabled()) return;
 
+    // NEVER run video ad purge engine inside the YouTube Live Chat iframe!
+    // Live chat frames contain NO video ads and modifying ytInitialData or ytcfg breaks real-time chat!
+    if (window.location.pathname.startsWith('/live_chat')) {
+      console.log('[WebShield] Inside YouTube Live Chat iframe - preserving native real-time chat pipeline.');
+      return;
+    }
+
     console.log('[WebShield] AdGuard Native YouTube Engine Active (Zero-Ad Architecture & Anti-Detection)');
 
     // 1. Recursive ad properties purger (AdGuard / uBlock Origin Standard)
@@ -1895,7 +1975,11 @@
                 item.inFeedAdLayoutRenderer ||
                 item.adBreakServiceRenderer;
               const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
-              if (renderer || targetId.includes('ads') || targetId.includes('engagement-panel-ads')) {
+              // Strictly protect live chat engagement panel from being removed or corrupted
+              if (targetId.includes('live-chat') || targetId.includes('chat')) {
+                continue;
+              }
+              if (renderer || targetId === 'engagement-panel-ads' || targetId.startsWith('engagement-panel-ads')) {
                 obj.splice(i, 1);
               } else {
                 deepPurgeAdProperties(item, depth + 1);
@@ -1934,9 +2018,7 @@
           if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
           if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
         }
-        if (obj.messages) {
-          delete obj.messages;
-        }
+        // NOTE: Never delete obj.messages unconditionally as it destroys YouTube Live Chat data structures
       } catch (e) { }
       return obj;
     }
@@ -2195,9 +2277,27 @@
           removedEnforcement = true;
         });
 
+        // Active Video Ad Skipping (Instant Skip & Neutralize Fallback)
+        // Note: counting is handled by checkAndReportVideoAds (once per video), not here
+        const ytPlayer = document.querySelector('.html5-video-player');
+        if (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) {
+          const video = ytPlayer.querySelector('video');
+          if (video) {
+            video.muted = true;
+            if (isFinite(video.duration) && video.duration > 0) {
+              video.currentTime = video.duration;
+            }
+          }
+          const skipBtn = ytPlayer.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button-container');
+          if (skipBtn) {
+            simulateNativeClick(skipBtn);
+          }
+        }
+
         // Suppress "Experiencing interruptions?" toasts
         const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
         toasts.forEach(toast => {
+          if (toast.closest('ytd-live-chat-frame, #chat, #chatframe, yt-live-chat-renderer')) return;
           const text = (toast.textContent || '').toLowerCase();
           if (
             text.includes('sự cố') ||
