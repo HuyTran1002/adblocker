@@ -36,6 +36,35 @@ if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + 
   // Completely inactive on sensitive/auth domains
 }
 
+// Fallback Main World Injector for Mobile Browsers (Kiwi, Lemur, Firefox Android)
+// Ensures inject.js runs in the page's Main World even if browser ignores 'world: "MAIN"' in manifest.json
+function ensureMainWorldLoaded() {
+  try {
+    const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    if (SENSITIVE_DOMAINS.some(d => host === d || host.endsWith('.' + d))) return;
+    if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
+      return; // Already injected and running in MAIN world!
+    }
+    const root = document.head || document.documentElement;
+    if (!root) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ensureMainWorldLoaded, { once: true });
+      }
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = chrome.runtime.getURL('inject.js');
+    s.async = false;
+    root.appendChild(s);
+    s.onload = () => { try { s.remove(); } catch (e) { } };
+    s.onerror = () => { try { s.remove(); } catch (e) { } };
+  } catch (e) { }
+}
+ensureMainWorldLoaded();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', ensureMainWorldLoaded, { once: true });
+}
+
 // Check whether this extension context is still alive
 function isContextValid() {
   try {
@@ -413,10 +442,16 @@ function injectAdBlockCSS() {
 
   /* === VIDEO PLAYER & EMBED CONTAINER PROTECTION === */
   /* Protect legitimate video players & embed iframes from being hidden by cosmetic filters without breaking their native interactivity */
-  video, audio,
+  video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]),
+  audio:not([hidden]):not(.hidden):not([style*="display: none"]):not([style*="display:none"]),
   .jwplayer, .video-js, .artplayer, .dplayer, .plyr, .xgplayer, .fluid_video_wrapper,
   iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
     display: block !important;
+  }
+
+  /* Tôn trọng tuyệt đối trạng thái ẩn của video xem trước (preview thumbnail / trailer / hidden video) */
+  video.hidden, video[hidden], video.preview.hidden, video[x-cloak] {
+    display: none !important;
   }
 
   /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
@@ -708,7 +743,12 @@ if (currentEnabledState) {
       if (_playerCache.has(el)) return _playerCache.get(el);
       try {
         // Known ad overlays that inject inside player containers must NOT be protected
-        if (el.closest && el.closest('#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot')) return _cachePlayer(el, false);
+        if (el.closest && el.closest(
+          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+          '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
+          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+          'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
+        )) return _cachePlayer(el, false);
 
         const tag = el.tagName ? el.tagName.toLowerCase() : '';
         // 1. Bản thân là thẻ <video>, <audio>, <source>, <track>
@@ -813,6 +853,16 @@ if (currentEnabledState) {
     function isMovieBannerOrPoster(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
+        // Known ad overlays that inject inside player containers must NEVER be treated as posters/banners!
+        if (el.closest && el.closest(
+          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+          '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
+          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+          'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
+        )) {
+          return false;
+        }
+
         const elId = (el.id || '').toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         // NEVER treat elements with explicit ad markers as movie banners!
@@ -839,8 +889,7 @@ if (currentEnabledState) {
           '[class*="server"], [id*="server"], [class*="play-list"], [id*="play-list"], [class*="movie"], [id*="movie"], ' +
           '[class*="film"], [id*="film"], [class*="trailer"], [id*="trailer"], [class*="detail"], [id*="detail"], ' +
           '.watch-now-btn, .main-btn, .btn-episode, .module-play-list-link, .btn-play, .play-btn, .module-info-play, .module-mobile-play, .module-play-list, ' +
-          '.thumb-overlay, .video-js, [class*="video-js"], ' +
-          '[id*="player_one"], .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], ' +
+          '.thumb-overlay, .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], ' +
           '.thumbnail, .preview, .lozad, [class*="thumbnail"], [class*="preview"], [class*="lozad"]'
         )) {
           return true;
@@ -937,6 +986,19 @@ if (currentEnabledState) {
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
           elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) return;
+
+      // Explicit Clickadu Mobile Spot (clb-spot / __clb-), Adsterra Social Bar, ExoClick containers
+      if (elId.includes('clb-spot') || elId.startsWith('__clb') || elClass.includes('clb-spot') ||
+          elId.startsWith('atcontainer') || elId.includes('atcontainer') || elClass.includes('atcontainer') ||
+          elClass.includes('adsbyexoclick') || elId.includes('exoclick') ||
+          (el.getAttribute && (el.getAttribute('data-zoneid') || el.getAttribute('data-ad-id')))) {
+        if (!el.hasAttribute('data-ad-blocked')) {
+          el.setAttribute('data-ad-blocked', 'true');
+          el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
+          reportAdBlocked('ad-spot', 'Chặn container quảng cáo mạng Clickadu/Adsterra');
+        }
+        return;
+      }
 
       // Helper to verify and hide an anchor tag
       const checkAnchor = (anchor) => {
@@ -1875,6 +1937,16 @@ if (currentEnabledState) {
           const href = anchor.href || '';
           if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
 
+          // Chặn các scheme chuyển hướng ứng dụng di động/app stores tự động (intent://, market://,...)
+          const isMobileAppIntent = typeof href === 'string' && /^(?:intent|market|itms-apps?|snssdk\d*|tiktok|lazada|shopee|vnd\.youtube|alipay|weixin):\/\//i.test(href.trim());
+          if (isMobileAppIntent) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[Anti Pop-Under] Blocked mobile app intent link click:', href);
+            reportAdBlocked(href, 'Chặn link mở ứng dụng quảng cáo');
+            return;
+          }
+
           try {
             const targetUrl = new URL(href, window.location.href);
             const currentHost = window.location.hostname.replace(/^www\./i, '');
@@ -1899,6 +1971,69 @@ if (currentEnabledState) {
         }
       } catch (err) {}
     }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
+
+    // --- MOBILE TOUCH OVERLAY INTERCEPTOR (BUBBLING PHASE, ZERO VIDEO/THUMBNAIL INTERFERENCE) ---
+    let contentTouchStartX = 0;
+    let contentTouchStartY = 0;
+    let isContentTouchScrolling = false;
+
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches && e.touches[0]) {
+        contentTouchStartX = e.touches[0].clientX;
+        contentTouchStartY = e.touches[0].clientY;
+        isContentTouchScrolling = false;
+      }
+    }, { passive: true, capture: false });
+
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches && e.touches[0]) {
+        const dx = Math.abs(e.touches[0].clientX - contentTouchStartX);
+        const dy = Math.abs(e.touches[0].clientY - contentTouchStartY);
+        if (dx > 12 || dy > 12) {
+          isContentTouchScrolling = true;
+        }
+      }
+    }, { passive: true, capture: false });
+
+    document.addEventListener('touchend', function(e) {
+      if (isContentTouchScrolling) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return;
+      if (isTargetPickerActive) return;
+      if (!e.isTrusted) return;
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (window.self !== window.top) return;
+
+      try {
+        let target = e.target;
+        if (!target || target.nodeType !== 1) return;
+
+        // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player & thumbnails pass-through
+        if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
+          return;
+        }
+
+        let pCheck = target;
+        while (pCheck && pCheck !== document.body && pCheck !== document.documentElement) {
+          if (isInsideVideoPlayer(pCheck) || isVideoPlayerOrControls(pCheck) || isMovieBannerOrPoster(pCheck)) {
+            return;
+          }
+          pCheck = pCheck.parentElement;
+        }
+
+        // Neutralize clickjack overlays on mobile touch
+        const css = (target.style && target.style.cssText) ? target.style.cssText.toLowerCase() : '';
+        const isClickjack = css.includes('99999999') || css.includes('2147483647') ||
+          (target.style && parseInt(target.style.zIndex, 10) >= 9999 && (css.includes('fixed') || css.includes('absolute')) && (css.includes('transparent') || css.includes('opacity:0')));
+        if (isClickjack) {
+          e.preventDefault();
+          e.stopPropagation();
+          target.style.pointerEvents = 'none';
+          target.remove();
+          console.log('[Anti Pop-Under] Intercepted and removed clickjack overlay on mobile touchend:', target);
+          return;
+        }
+      } catch (err) {}
+    }, false);
 
     // --- MANUAL ELEMENT BLOCKER & TARGET MODE (Element Picker) ---
     let lastRightClickedElement = null;
@@ -1993,9 +2128,27 @@ if (currentEnabledState) {
       
       const tag = el.tagName.toLowerCase();
 
-      // 1. Clean readable ID
-      if (el.id && !/^\d/.test(el.id) && el.id.length < 35 && !/[0-9a-f]{8,}/i.test(el.id)) {
-        return '#' + CSS.escape(el.id);
+      // 1. Dynamic / Randomized ID detection (e.g. #__clb-spot_1981952_gzy_1, #atContainer-123456_xyz)
+      if (el.id) {
+        const idLower = el.id.toLowerCase();
+        // Specifically detect Clickadu / Adsterra / AdSpot dynamic IDs with randomized suffixes
+        if (idLower.includes('clb-spot') || idLower.startsWith('__clb')) {
+          return '[id*="clb-spot"], [id^="__clb"]';
+        }
+        if (idLower.startsWith('atcontainer') || idLower.includes('atcontainer')) {
+          return '[id*="atContainer"], [id*="at-container"]';
+        }
+
+        // Generic detection of randomized suffix (e.g. prefix_12345_abc_1 or prefix-1234_xyz)
+        const randomSuffixMatch = el.id.match(/^([a-zA-Z0-9_\-]+?)[_-](?:[a-zA-Z0-9]{3,8}_\d+|[a-zA-Z0-9]{6,12})$/);
+        if (randomSuffixMatch && randomSuffixMatch[1] && randomSuffixMatch[1].length >= 4) {
+          return `[id^="${CSS.escape(randomSuffixMatch[1])}"]`;
+        }
+
+        // Clean readable static ID
+        if (!/^\d/.test(el.id) && el.id.length < 35 && !/[0-9a-f]{8,}/i.test(el.id)) {
+          return '#' + CSS.escape(el.id);
+        }
       }
 
       // 2. Specific data attribute (short)
@@ -2791,9 +2944,14 @@ if (currentEnabledState) {
           opacity: 1 !important;
           pointer-events: auto !important;
         }
-        /* Bảo vệ container video khỏi bộ lọc ẩn */
-        video, .jwplayer, .video-js, .artplayer, .plyr, .dplayer, [class*="player"] video {
+        /* Bảo vệ container video khỏi bộ lọc ẩn nhưng tôn trọng video ẩn / preview */
+        video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]),
+        .jwplayer, .video-js, .artplayer, .plyr, .dplayer,
+        [class*="player"] video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]) {
           display: block !important;
+        }
+        video.hidden, video[hidden], video.preview.hidden, video[x-cloak] {
+          display: none !important;
         }
       `;
       dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
@@ -2998,6 +3156,81 @@ if (currentEnabledState) {
     })();
     // === END 91porn / 91porna Landing Modal Guardian ===
 
+    // === Video Player Ad Overlay & Preroll Guardian (Video.js, Nuevo, 91porn, sextop1, tokyomotion) ===
+    // Automatically removes ad overlays, preroll banners, and clickjack layers covering #player_one_html5_api
+    (function videoPlayerAdOverlayGuardian() {
+      const AD_OVERLAY_SELECTORS = [
+        '#nuevoa', '#anuevo', '#aclose', '.nva-center', '.nva-midroll', '.nva-preroll', '.nva-banner', '.nva-poster',
+        '.vast_clickthrough_layer', '.midroll_back', '.fluid_vpaid_slot',
+        '.vjs-preroll', '.vjs-ad-container', '.vjs-ad-overlay', '.vjs-overlay',
+        'div[id*="player_one_ad"]', 'div[id*="player_one"][class*="ad"]'
+      ].join(', ');
+
+      function purgeVideoAdOverlays() {
+        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+        try {
+          const overlays = document.querySelectorAll(AD_OVERLAY_SELECTORS);
+          overlays.forEach(overlay => {
+            // Never touch genuine video elements or native control bars
+            const tag = overlay.tagName ? overlay.tagName.toLowerCase() : '';
+            if (tag === 'video' || tag === 'audio') return;
+            if (overlay.classList.contains('vjs-control-bar') || (overlay.closest && overlay.closest('.vjs-control-bar'))) return;
+            if (overlay.id === 'player_one_html5_api' || (overlay.querySelector && overlay.querySelector('video:not([class*="ad"])'))) return;
+
+            console.log('[WebShield] Purged video ad overlay covering video:', overlay);
+            try {
+              overlay.style.setProperty('display', 'none', 'important');
+              overlay.style.setProperty('visibility', 'hidden', 'important');
+              overlay.style.setProperty('pointer-events', 'none', 'important');
+              overlay.remove();
+            } catch (e) {}
+          });
+
+          // Also check any external ad link wrappers inside #player_one, .video-container, or .video-js
+          const playerContainers = document.querySelectorAll('#player_one, .video-container, .video-js, [data-vjs-player]');
+          playerContainers.forEach(container => {
+            const links = container.querySelectorAll('a[target="_blank"], a.vast_clickthrough_layer');
+            links.forEach(link => {
+              const href = (link.href || '').toLowerCase();
+              if (gamblingRegex.test(href) || adUrlRegex.test(href) || link.classList.contains('vast_clickthrough_layer') || /click|redirect|track|zone|cpm/i.test(href)) {
+                try {
+                  link.style.setProperty('display', 'none', 'important');
+                  link.style.setProperty('pointer-events', 'none', 'important');
+                  link.remove();
+                  console.log('[WebShield] Removed external ad link overlay from video container:', href);
+                } catch(e) {}
+              }
+            });
+          });
+        } catch (e) {}
+      }
+
+      purgeVideoAdOverlays();
+
+      const obs = new MutationObserver(() => {
+        purgeVideoAdOverlays();
+      });
+
+      const init = () => {
+        if (document.body) {
+          obs.observe(document.body, { childList: true, subtree: true });
+        }
+        purgeVideoAdOverlays();
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+      } else {
+        init();
+      }
+
+      let tries = 0;
+      const interval = setInterval(() => {
+        purgeVideoAdOverlays();
+        if (++tries > 25) clearInterval(interval);
+      }, 200);
+    })();
+
     // === UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
     // Neutralizes self-healing floating popups, TikTok-style vertical overlays,
     // top/bottom floaters, and transparent clickjack overlays across tube/streaming sites.
@@ -3026,9 +3259,10 @@ if (currentEnabledState) {
           const id = (el.id || '').toLowerCase();
           const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
 
-          // 0. Explicit Adsterra Social Bar container, ExoClick ad block or splash
+          // 0. Explicit Adsterra Social Bar container, ExoClick ad block, Clickadu Mobile Spot or splash
           if (id.startsWith('atcontainer') || id.includes('atcontainer') || cls.includes('atcontainer') ||
               cls.includes('adsbyexoclick') || id.includes('exoclick') ||
+              id.includes('clb-spot') || id.startsWith('__clb') || cls.includes('clb-spot') ||
               (el.getAttribute && (el.getAttribute('data-zoneid') || el.getAttribute('data-ad-id')))) {
             return true;
           }
@@ -3194,6 +3428,34 @@ if (currentEnabledState) {
       }, 300);
     })();
     // === END UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
+
+    // === MissAV Lazy-Load Poster & Thumbnail Hydration Guardian ===
+    if (window.location.hostname.includes('missav')) {
+      const hydrateMissavPosters = () => {
+        try {
+          const imgs = document.querySelectorAll('img.lozad[data-src], img[data-src*="cover-t.jpg"]');
+          for (let i = 0; i < imgs.length; i++) {
+            const img = imgs[i];
+            const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
+            if (dataSrc && (!img.src || img.src.startsWith('data:image/') || img.src.length < 50)) {
+              img.src = dataSrc;
+              img.loading = 'lazy';
+            }
+            if (img.hasAttribute('x-cloak')) img.removeAttribute('x-cloak');
+          }
+        } catch (e) {}
+      };
+
+      hydrateMissavPosters();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', hydrateMissavPosters, { once: true });
+      }
+      let missavPollCount = 0;
+      const missavInterval = setInterval(() => {
+        hydrateMissavPosters();
+        if (++missavPollCount > 10) clearInterval(missavInterval);
+      }, 500);
+    }
 
 
 
