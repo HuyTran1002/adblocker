@@ -19,6 +19,7 @@
   const SENSITIVE_DOMAINS = [
     'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
     'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
+    'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
     'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
     'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
     'paypal.com', 'stripe.com'
@@ -321,7 +322,8 @@
       div[id*="sticky-banner"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[class*="floating-ad"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[style*="inset: 0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
-      div[style*="inset:0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]) {
+      div[style*="inset:0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
+      #catfishPcGuest, .fxMidGrid, .fxMidWrap, [id*="catfishPcGuest"], [class*="fxMidGrid"], [class*="fxMidWrap"] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
@@ -332,6 +334,16 @@
       }
       .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
         pointer-events: none !important;
+      }
+      .plyr--playing .plyr__poster,
+      .plyr--playing [class*="plyr__poster"],
+      .vjs-has-started .vjs-poster,
+      .art-state-playing .art-layer-cover,
+      .dplayer-playing .dplayer-poster {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        display: none !important;
       }
     `;
     const targetMount = document.head || document.documentElement;
@@ -1024,12 +1036,21 @@
   let isScrollingTouch = false;
 
   window.addEventListener('touchstart', (e) => {
+    if (e.target) {
+      const a = e.target.closest ? e.target.closest('a[href]') : null;
+      if (a) {
+        const h = a.getAttribute('href');
+        if (h && !h.startsWith('javascript:') && !h.startsWith('#')) {
+          a.dataset.wsOrigHref = h;
+        }
+      }
+    }
     if (e.touches && e.touches[0]) {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       isScrollingTouch = false;
     }
-  }, { passive: true, capture: false });
+  }, { passive: true, capture: true });
 
   window.addEventListener('touchmove', (e) => {
     if (e.touches && e.touches[0]) {
@@ -1105,14 +1126,16 @@
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag === 'video' || tag === 'audio') return;
 
-      if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
-
-      let checkPlayer = target;
-      while (checkPlayer && checkPlayer !== document.body && checkPlayer !== document.documentElement) {
-        if (isInsideVideoPlayer(checkPlayer) || isMovieBannerOrPoster(checkPlayer)) {
-          return;
+      const hasAnchor = target.tagName === 'A' || (target.closest && target.closest('a'));
+      if (!hasAnchor) {
+        if (isInsideVideoPlayer(target) || isMovieBannerOrPoster(target)) return;
+        let checkPlayer = target;
+        while (checkPlayer && checkPlayer !== document.body && checkPlayer !== document.documentElement) {
+          if (isInsideVideoPlayer(checkPlayer) || isMovieBannerOrPoster(checkPlayer)) {
+            return;
+          }
+          checkPlayer = checkPlayer.parentElement;
         }
-        checkPlayer = checkPlayer.parentElement;
       }
 
       if (target.querySelector && target.querySelector('video, audio')) return;
@@ -1185,6 +1208,18 @@
 
       // 4. Nếu có thẻ <a>, kiểm tra hành vi nhảy trang popunder
       if (anchor && anchor.href) {
+        // Phục hồi link nếu bị script quảng cáo tráo đổi lúc touchstart
+        if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const safeHref = anchor.dataset.wsOrigHref;
+          anchor.setAttribute('href', safeHref);
+          anchor.href = safeHref;
+          console.log('[Anti Pop-Under] Reverted hijacked link in Main World, navigating to:', safeHref);
+          window.location.href = safeHref;
+          return;
+        }
+
         let isExternal = false;
         try {
           const targetHost = new URL(anchor.href, window.location.href).hostname.toLowerCase();
@@ -1583,6 +1618,7 @@
     'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
     'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
     'agileskincareunrented.com', 'agileskincareunrented', 'marvelous-respond.com', 'marvelous-respond',
+    'badlandlispyippee.com', 'badlandlispyippee',
     'yqxtm.com', 'kwai.net/bs2/ad-',
     'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim', 'no-ads-under'
   ];

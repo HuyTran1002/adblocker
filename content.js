@@ -27,6 +27,7 @@ try {
 const SENSITIVE_DOMAINS = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
+  'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
   'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
   'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
   'paypal.com', 'stripe.com'
@@ -413,7 +414,8 @@ function injectAdBlockCSS() {
 
   /* Off-screen bait stubs styling for anti-adblock detection stubs (100% CSP safe, zero inline styles) */
   #_preload-ads-1, #_preload-ads-2, #ads-banner, #google-ads, #adsbox, #ad-banner,
-  .Adv.ad-center-header.adsbox {
+  .Adv.ad-center-header.adsbox,
+  #catfishPcGuest, .fxMidGrid, .fxMidWrap, [id*="catfishPcGuest"], [class*="fxMidGrid"], [class*="fxMidWrap"] {
     position: fixed !important;
     top: -9999px !important;
     left: -9999px !important;
@@ -455,6 +457,7 @@ function injectAdBlockCSS() {
   }
 
   /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
+  /* Chỉ bảo vệ các thành phần hiển thị danh sách phim/banner ngoài website, KHÔNG ép lên poster/cover bên trong video player */
   :is(
     .movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster,
     .poster-film, .film-item, .movie-item, .tray-item,
@@ -462,8 +465,8 @@ function injectAdBlockCSS() {
     [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
     [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
     [class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"],
-    .video-js, .vjs-sublime-skin,
-    .thumb, .thumbnail, [class*="thumb"], [class*="thumbnail"], [class*="poster"], [class*="cover"],
+    .vjs-sublime-skin,
+    .film-poster img, .movie-poster img, .film-item img, .movie-item img,
     .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"]
   ) {
     visibility: visible !important;
@@ -476,6 +479,18 @@ function injectAdBlockCSS() {
     pointer-events: none !important;
   }
 
+  /* GIẢI PHÓNG POSTER & COVER CỦA CÁC TRÌNH PHÁT VIDEO KHI ĐANG PHÁT (TRÁNH BỊ CHE MẤT VIDEO) */
+  .plyr--playing .plyr__poster,
+  .plyr--playing [class*="plyr__poster"],
+  .vjs-has-started .vjs-poster,
+  .art-state-playing .art-layer-cover,
+  .dplayer-playing .dplayer-poster {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    display: none !important;
+  }
+
   .swiper, .swiper-wrapper {
     visibility: visible !important;
   }
@@ -486,7 +501,7 @@ function injectAdBlockCSS() {
     [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"],
     [src*="ophim"], [src*="vsmov"], [src*="themoviedb"],
     [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]
-  ) {
+  ):not(.plyr img):not(.video-js img):not(.artplayer img):not(.dplayer img):not(.jwplayer img):not([class*="player"] img) {
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -705,6 +720,7 @@ if (currentEnabledState) {
       'adxcontent.com', 'adxcontent', 'vl-top-adx', 'vl-main-adx', 'vl-native-adx',
       'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
       'agileskincareunrented.com', 'agileskincareunrented', 'marvelous-respond.com', 'marvelous-respond',
+      'badlandlispyippee.com', 'badlandlispyippee',
       'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim'
     ];
 
@@ -1874,9 +1890,67 @@ if (currentEnabledState) {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
+        // 1. Phân tích thẻ liên kết <a> trước tiên để ngăn chặn Link Hijacking & cờ bạc trá hình:
+        let anchor = null;
+        let curr = target;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          if (curr.tagName === 'A') {
+            anchor = curr;
+            break;
+          }
+          curr = curr.parentElement;
+        }
+
+        if (anchor) {
+          const href = anchor.href || anchor.getAttribute('href') || '';
+          if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+            // Chống thủ đoạn Link Hijacking trên Mobile (script quảng cáo tráo đổi href khi chạm)
+            if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
+              e.preventDefault();
+              e.stopPropagation();
+              const safeHref = anchor.dataset.wsOrigHref;
+              anchor.setAttribute('href', safeHref);
+              anchor.href = safeHref;
+              console.log('[Anti Pop-Under] Reverted hijacked link and navigating safely to:', safeHref);
+              window.location.href = safeHref;
+              return;
+            }
+
+            // Chặn các scheme chuyển hướng ứng dụng di động/app stores tự động (intent://, market://,...)
+            const isMobileAppIntent = typeof href === 'string' && /^(?:intent|market|itms-apps?|snssdk\d*|tiktok|lazada|shopee|vnd\.youtube|alipay|weixin):\/\//i.test(href.trim());
+            if (isMobileAppIntent) {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('[Anti Pop-Under] Blocked mobile app intent link click:', href);
+              reportAdBlocked(href, 'Chặn link mở ứng dụng quảng cáo');
+              return;
+            }
+
+            try {
+              const targetUrl = new URL(href, window.location.href);
+              const currentHost = window.location.hostname.replace(/^www\./i, '');
+              const targetHost = targetUrl.hostname.replace(/^www\./i, '');
+              const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
+
+              if (isExternal) {
+                const safeDomains = ['facebook.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 't.me', 'zalo.me'];
+                if (!safeDomains.some(d => targetHost.includes(d))) {
+                  const matchesGamblingHost = targetHost && /\d{2,}/.test(targetHost) && (targetHost.includes('88') || targetHost.includes('99') || targetHost.includes('789') || /club|bet/i.test(targetHost));
+                  if (gamblingRegex.test(href) || adUrlRegex.test(href) || matchesGamblingHost || href.includes('bit.ly') || href.includes('shortlink') || href.includes('linkroyal') || (href.includes('ab=') && href.includes('rl='))) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[Anti Pop-Under] Blocked known ad/gambling external link click:', href);
+                    reportAdBlocked(href, 'Chặn click chuyển hướng quảng cáo');
+                    return;
+                  }
+                }
+              }
+            } catch (err) {}
+          }
+        }
+
         // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
-        // Hoàn toàn né trình phát video ra, trả quyền kiểm soát 100% tự nhiên cho trình phát như khi tắt extension:
-        // Tuyệt đối không can thiệp, không dispatch synthetic event, không preventDefault/stopPropagation
+        // Sau khi đã loại trừ các liên kết quảng cáo/cờ bạc, cho phép các nút điều khiển player, tua, dừng nhận 100% click tự nhiên
         if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
           return;
         }
@@ -1917,73 +1991,31 @@ if (currentEnabledState) {
           } catch(err) {}
           return;
         }
-
-        // 1. Detect if click is inside an anchor (<a>)
-        let anchor = null;
-        let curr = target;
-        while (curr && curr !== document.body && curr !== document.documentElement) {
-          if (curr.tagName === 'A') {
-            anchor = curr;
-            break;
-          }
-          curr = curr.parentElement;
-        }
-
-        if (anchor) {
-          if (isInsideVideoPlayer(anchor) || isVideoPlayerOrControls(anchor) || isMovieBannerOrPoster(anchor)) {
-            return;
-          }
-
-          const href = anchor.href || '';
-          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
-
-          // Chặn các scheme chuyển hướng ứng dụng di động/app stores tự động (intent://, market://,...)
-          const isMobileAppIntent = typeof href === 'string' && /^(?:intent|market|itms-apps?|snssdk\d*|tiktok|lazada|shopee|vnd\.youtube|alipay|weixin):\/\//i.test(href.trim());
-          if (isMobileAppIntent) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[Anti Pop-Under] Blocked mobile app intent link click:', href);
-            reportAdBlocked(href, 'Chặn link mở ứng dụng quảng cáo');
-            return;
-          }
-
-          try {
-            const targetUrl = new URL(href, window.location.href);
-            const currentHost = window.location.hostname.replace(/^www\./i, '');
-            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
-
-            const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
-
-            if (isExternal) {
-              const safeDomains = ['facebook.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 't.me', 'zalo.me'];
-              if (safeDomains.some(d => targetHost.includes(d))) return;
-
-              // Nếu là link cờ bạc/adserver rõ ràng, chỉ cần chặn chuyển hướng (preventDefault), KHÔNG XÓA element
-              if (gamblingRegex.test(href) || adUrlRegex.test(href)) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('[Anti Pop-Under] Blocked known ad/gambling external link click:', href);
-                reportAdBlocked(href, 'Chặn click chuyển hướng quảng cáo');
-                return;
-              }
-            }
-          } catch (err) {}
-        }
       } catch (err) {}
     }, false); // ALWAYS use bubbling phase (capture: false) so player receives events natively first
 
-    // --- MOBILE TOUCH OVERLAY INTERCEPTOR (BUBBLING PHASE, ZERO VIDEO/THUMBNAIL INTERFERENCE) ---
+    // --- MOBILE TOUCH OVERLAY & HIJACK INTERCEPTOR ---
     let contentTouchStartX = 0;
     let contentTouchStartY = 0;
     let isContentTouchScrolling = false;
 
+    // Ghi nhớ href gốc của thẻ <a> ngay khi vừa chạm ngón tay vào màn hình (chặn đứng thủ đoạn tráo link)
     document.addEventListener('touchstart', function(e) {
+      if (e.target) {
+        const a = e.target.closest ? e.target.closest('a[href]') : null;
+        if (a) {
+          const h = a.getAttribute('href');
+          if (h && !h.startsWith('javascript:') && !h.startsWith('#')) {
+            a.dataset.wsOrigHref = h;
+          }
+        }
+      }
       if (e.touches && e.touches[0]) {
         contentTouchStartX = e.touches[0].clientX;
         contentTouchStartY = e.touches[0].clientY;
         isContentTouchScrolling = false;
       }
-    }, { passive: true, capture: false });
+    }, { passive: true, capture: true });
 
     document.addEventListener('touchmove', function(e) {
       if (e.touches && e.touches[0]) {
@@ -2007,7 +2039,27 @@ if (currentEnabledState) {
         let target = e.target;
         if (!target || target.nodeType !== 1) return;
 
-        // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player & thumbnails pass-through
+        // Kiểm tra thẻ liên kết nếu có bị tráo link hoặc link cờ bạc
+        const anchor = (target.tagName === 'A') ? target : (target.closest ? target.closest('a') : null);
+        if (anchor) {
+          const href = anchor.href || anchor.getAttribute('href') || '';
+          if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const safeHref = anchor.dataset.wsOrigHref;
+            anchor.setAttribute('href', safeHref);
+            anchor.href = safeHref;
+            window.location.href = safeHref;
+            return;
+          }
+          if (href && (gamblingRegex.test(href) || adUrlRegex.test(href))) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+        }
+
+        // Video player pass-through sau khi loại trừ link quảng cáo
         if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
           return;
         }
@@ -2034,6 +2086,21 @@ if (currentEnabledState) {
         }
       } catch (err) {}
     }, false);
+
+    // Vô hiệu hóa cổng kích hoạt Popunder của xnhau.soy (class xn-hta trên <html>)
+    try {
+      if (document.documentElement && document.documentElement.classList.contains('xn-hta')) {
+        document.documentElement.classList.remove('xn-hta');
+      }
+      const xnGateObs = new MutationObserver(() => {
+        if (document.documentElement && document.documentElement.classList.contains('xn-hta')) {
+          document.documentElement.classList.remove('xn-hta');
+        }
+      });
+      if (document.documentElement) {
+        xnGateObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      }
+    } catch(e) {}
 
     // --- MANUAL ELEMENT BLOCKER & TARGET MODE (Element Picker) ---
     let lastRightClickedElement = null;
@@ -2925,8 +2992,19 @@ if (currentEnabledState) {
         .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
           pointer-events: none !important;
         }
+        /* Giải phóng poster & cover của các trình phát video khi đang phát */
+        .plyr--playing .plyr__poster,
+        .plyr--playing [class*="plyr__poster"],
+        .vjs-has-started .vjs-poster,
+        .art-state-playing .art-layer-cover,
+        .dplayer-playing .dplayer-poster {
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          display: none !important;
+        }
         .swiper, .swiper-wrapper { visibility: visible !important; }
-        img:is([src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"], [src*="poster"], [src*="cover"], [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"], [src*="ophim"], [src*="vsmov"], [src*="themoviedb"], [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]) {
+        img:is([src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"], [src*="poster"], [src*="cover"], [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"], [src*="ophim"], [src*="vsmov"], [src*="themoviedb"], [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]):not(.plyr img):not(.video-js img):not(.artplayer img):not(.dplayer img):not(.jwplayer img):not([class*="player"] img) {
           visibility: visible !important;
           pointer-events: auto !important;
         }

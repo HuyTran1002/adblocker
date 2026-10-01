@@ -2288,6 +2288,23 @@
     }
   },
   {
+    "id": 329,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||badlandlispyippee.com^",
+      "resourceTypes": [
+        "script",
+        "sub_frame",
+        "xmlhttprequest",
+        "image",
+        "other"
+      ]
+    }
+  },
+  {
     "id": 9999,
     "priority": 100,
     "action": {
