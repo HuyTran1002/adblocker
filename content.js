@@ -2115,12 +2115,9 @@ if (currentEnabledState) {
     function getRobustSelector(el) {
       if (!el || el === document.body || el === document.documentElement) return null;
       
-      // CRITICAL SAFEGUARD: Never generate selectors that could block video player, movie controls, posters, or thumbnails!
-      if (typeof isVideoPlayerOrControls === 'function' && isVideoPlayerOrControls(el)) return null;
-      if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) return null;
-      if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) return null;
-
-      const tag = el.tagName.toLowerCase();
+      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      // Safeguard: Never generate selector for the core media playback elements
+      if (tag === 'video' || tag === 'audio') return null;
 
       // 1. Dynamic / Randomized ID detection (e.g. #__clb-spot_1981952_gzy_1, #atContainer-123456_xyz)
       if (el.id) {
@@ -2297,16 +2294,13 @@ if (currentEnabledState) {
         const styleAttr = el.getAttribute('style') || '';
         const isFixedOrAbs = (compStyle && (compStyle.position === 'fixed' || compStyle.position === 'absolute')) ||
                              styleAttr.includes('fixed') || styleAttr.includes('z-index');
-        if (isFixedOrAbs) {
-          if (el.parentElement === document.body) {
-            const innerImg = el.querySelector && el.querySelector('img');
-            const innerLink = el.querySelector && el.querySelector('a');
-            if (innerImg || innerLink) {
-              return `body > ${tag}:has(${innerImg ? 'img' : 'a'})`;
+        if (isFixedOrAbs && styleAttr.includes('fixed')) {
+          const cand = el.parentElement === document.body ? `body > ${tag}[style*="fixed"]` : `${tag}[style*="fixed"]`;
+          try {
+            if (document.querySelectorAll(cand).length <= 2) {
+              return cand;
             }
-            return `body > ${tag}[style*="fixed"]`;
-          }
-          return `${tag}[style*="position: fixed"], ${tag}[style*="position:fixed"]`;
+          } catch(e) {}
         }
       } catch(e) {}
 
@@ -2366,22 +2360,17 @@ if (currentEnabledState) {
     function blockElement(el) {
       if (!el) return;
 
-      // CRITICAL SAFEGUARD: Never block video players or movie thumbnails!
-      if (typeof isVideoPlayerOrControls === 'function' && isVideoPlayerOrControls(el)) {
-        showToast('⚠️ Được bảo vệ: Không thể chặn trình phát video!', false);
-        return;
-      }
-      if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) {
-        showToast('⚠️ Được bảo vệ: Không thể chặn thumbnail / poster phim!', false);
-        return;
-      }
-      if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) {
-        showToast('⚠️ Được bảo vệ: Không thể can thiệp vào trình phát video!', false);
+      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      if (tag === 'video' || tag === 'audio') {
+        showToast('🛡️ Được bảo vệ: Không thể chặn luồng phát video/audio!', false);
         return;
       }
 
       const selector = getRobustSelector(el);
-      if (!selector) return;
+      if (!selector) {
+        showToast('⚠️ Không thể tạo bộ chọn CSS cho phần tử này!', false);
+        return;
+      }
 
       // 1. Immediately wipe content so media/iframes stop playing
       try { el.innerHTML = ''; } catch(e) {}
@@ -2834,7 +2823,8 @@ if (currentEnabledState) {
             const pos = cs.position;
             const zIndex = parseInt(cs.zIndex, 10);
             if ((pos === 'fixed' || pos === 'absolute') && (zIndex >= 100 || cs.zIndex === 'auto' || isNaN(zIndex))) {
-              if (!isInsideVideoPlayer(curr) && !isMovieBannerOrPoster(curr)) {
+              const cTag = curr.tagName ? curr.tagName.toLowerCase() : '';
+              if (cTag !== 'video' && cTag !== 'audio') {
                 rootFloater = curr;
               }
             }
@@ -2930,8 +2920,16 @@ if (currentEnabledState) {
       }
 
       function confirmAndBlockElement(el) {
+        const tag = el && el.tagName ? el.tagName.toLowerCase() : '';
+        if (tag === 'video' || tag === 'audio') {
+          showToast('🛡️ Được bảo vệ: Không thể chặn luồng phát video/audio!', false);
+          stopTargetPicker();
+          return;
+        }
+
         const selector = getRobustSelector(el);
         if (!selector) {
+          showToast('⚠️ Không thể xác định phần tử để chặn!', false);
           stopTargetPicker();
           return;
         }
