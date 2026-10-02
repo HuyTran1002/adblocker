@@ -178,6 +178,10 @@ const adSelectors = [
   'div[id*="quang-cao"]',
   
   // Floating, catfish, and sticky ads
+  '#adFloat', '#ad_float', '#ad-float', '.adFloat', '.ad-float',
+  '#floatAd', '#float_ad', '#float-ad', '.floatAd', '.float-ad',
+  '[id*="adFloat" i]', '[class*="adFloat" i]', '[id*="floatAd" i]', '[class*="floatAd" i]',
+  '[id*="float_ad" i]', '[class*="float_ad" i]', '[id*="ad_float" i]', '[class*="ad_float" i]',
   '.catfish-ad', '[class*="catfish-ad"]', '[id*="catfish-ad"]',
   '.floating-ad', '[class*="floating-ad"]', '[id*="floating-ad"]',
   '.float-banner', '[class*="float-banner"]', '[id*="float-banner"]',
@@ -433,79 +437,7 @@ function injectAdBlockCSS() {
   html, body {
     pointer-events: auto !important;
   }
-
-  /* Đảm bảo tất cả các nút xem phim, chọn tập, player control luôn có con trỏ pointer và nhận click */
-  .watch-now-btn, .main-btn, .btn-episode, .module-play-list-link,
-  .btn-play, .play-btn, [class*="episode"], [class*="server"], [class*="play-list"],
-  .module-info-play, .module-mobile-play, .module-play-list {
-    cursor: pointer !important;
-    pointer-events: auto !important;
-  }
-
-  /* === VIDEO PLAYER & EMBED CONTAINER PROTECTION === */
-  /* Protect legitimate video players & embed iframes from being hidden by cosmetic filters without breaking their native interactivity */
-  video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]),
-  audio:not([hidden]):not(.hidden):not([style*="display: none"]):not([style*="display:none"]),
-  .jwplayer, .video-js, .artplayer, .dplayer, .plyr, .xgplayer, .fluid_video_wrapper,
-  iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
-    display: block !important;
-  }
-
-  /* Tôn trọng tuyệt đối trạng thái ẩn của video xem trước (preview thumbnail / trailer / hidden video) */
-  video.hidden, video[hidden], video.preview.hidden, video[x-cloak] {
-    display: none !important;
-  }
-
-  /* === BẢO VỆ TUYỆT ĐỐI BANNER PHIM, POSTER, SLIDER & CAROUSEL (TRÁNH BỊ ẨN ĐEN / MẤT HÌNH) === */
-  /* Chỉ bảo vệ các thành phần hiển thị danh sách phim/banner ngoài website, KHÔNG ép lên poster/cover bên trong video player */
-  :is(
-    .movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster,
-    .poster-film, .film-item, .movie-item, .tray-item,
-    .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"],
-    [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"],
-    [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"],
-    [class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"],
-    .vjs-sublime-skin,
-    .film-poster img, .movie-poster img, .film-item img, .movie-item img,
-    .img-responsive, [class*="video-elem"], [class*="video-box"], [class*="video-item"], [class*="well-sm"]
-  ) {
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
-
-  /* JWPlayer & video player controls backdrops MUST ALWAYS have pointer-events: none so clicks pass through to video */
-  .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
-    pointer-events: none !important;
-  }
-
-  /* GIẢI PHÓNG POSTER & COVER CỦA CÁC TRÌNH PHÁT VIDEO KHI ĐANG PHÁT (TRÁNH BỊ CHE MẤT VIDEO) */
-  .plyr--playing .plyr__poster,
-  .plyr--playing [class*="plyr__poster"],
-  .vjs-has-started .vjs-poster,
-  .art-state-playing .art-layer-cover,
-  .dplayer-playing .dplayer-poster {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    display: none !important;
-  }
-
-  .swiper, .swiper-wrapper {
-    visibility: visible !important;
-  }
-
-  img:is(
-    [src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"],
-    [src*="poster"], [src*="thumb"], [src*="cover"], [src*="cdn77"],
-    [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"],
-    [src*="ophim"], [src*="vsmov"], [src*="themoviedb"],
-    [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]
-  ):not(.plyr img):not(.video-js img):not(.artplayer img):not(.dplayer img):not(.jwplayer img):not([class*="player"] img) {
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }`;
+`;
   (document.head || document.documentElement).appendChild(style);
 }
 
@@ -760,9 +692,9 @@ if (currentEnabledState) {
       try {
         // Known ad overlays that inject inside player containers must NOT be protected
         if (el.closest && el.closest(
-          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
           '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
-          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
           'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
         )) return _cachePlayer(el, false);
 
@@ -871,9 +803,9 @@ if (currentEnabledState) {
       try {
         // Known ad overlays that inject inside player containers must NEVER be treated as posters/banners!
         if (el.closest && el.closest(
-          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+          '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
           '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
-          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+          '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
           'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
         )) {
           return false;
@@ -1157,24 +1089,13 @@ if (currentEnabledState) {
       // Helper to verify and hide an ad video tag
       const checkVideo = (video) => {
         if (video.hasAttribute('data-ad-blocked')) return;
-        if (isMovieBannerOrPoster(video)) return;
+        if (isInsideVideoPlayer(video) || isVideoPlayerOrControls(video) || isMovieBannerOrPoster(video)) return;
         try {
           if (isAdVideo(video)) {
-            // Immediately neutralize the ad video stream playback
-            try {
-              video.muted = true;
-              video.volume = 0;
-              if (isFinite(video.duration) && video.duration > 0) {
-                video.currentTime = video.duration;
-              }
-              video.pause();
-              video.dispatchEvent(new Event('ended'));
-            } catch (err) { }
-
             let elementToHide = video;
             const parent = video.parentElement;
             if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
-              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
+              if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent) && !isInsideVideoPlayer(parent)) {
                 const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
                 if (pClass.includes('video-ad-wrap') || pClass.includes('catfish')) {
                   elementToHide = parent;
@@ -1363,6 +1284,7 @@ if (currentEnabledState) {
         const overlays = document.querySelectorAll(
           'body > [class*="overlay" i], body > [class*="backdrop" i], body > [class*="modal" i], body > [class*="popup" i], ' +
           'body > [class*="catfish" i], body > [class*="ad-" i], body > [class*="-ad" i], body > [id*="overlay" i], body > [id*="backdrop" i], body > [id*="popup" i], body > [id*="catfish" i], body > [id*="ad-" i], ' +
+          'body > [id*="adFloat" i], body > [id*="floatAd" i], body > [class*="adFloat" i], body > [class*="floatAd" i], ' +
           'body > dialog, body > ins, ' +
           'body > * > [class*="overlay" i], body > * > [class*="backdrop" i], body > * > [class*="catfish" i], body > * > [class*="modal" i], body > * > [class*="popup" i]'
         );
@@ -2193,6 +2115,11 @@ if (currentEnabledState) {
     function getRobustSelector(el) {
       if (!el || el === document.body || el === document.documentElement) return null;
       
+      // CRITICAL SAFEGUARD: Never generate selectors that could block video player, movie controls, posters, or thumbnails!
+      if (typeof isVideoPlayerOrControls === 'function' && isVideoPlayerOrControls(el)) return null;
+      if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) return null;
+      if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) return null;
+
       const tag = el.tagName.toLowerCase();
 
       // 1. Dynamic / Randomized ID detection (e.g. #__clb-spot_1981952_gzy_1, #atContainer-123456_xyz)
@@ -2218,17 +2145,36 @@ if (currentEnabledState) {
         }
       }
 
-      // 2. Specific data attribute (short)
-      const dataId = el.getAttribute('data-id') || el.getAttribute('data-ad-id') || el.getAttribute('data-slot');
-      if (dataId && dataId.length < 28) {
-        return `${tag}[data-id="${CSS.escape(dataId)}"]`;
+      // 2. Specific or ad-related data attributes
+      const dataAdAttrs = [
+        'data-ad', 'data-ad-id', 'data-ad-slot', 'data-ad-client', 'data-adunit',
+        'data-adunit-id', 'data-zone', 'data-zoneid', 'data-placement', 'data-placement-id',
+        'data-banner', 'data-dfp-id', 'data-google-query-id', 'data-native', 'data-widget-id',
+        'data-id', 'data-slot'
+      ];
+      for (const attr of dataAdAttrs) {
+        const val = el.getAttribute(attr);
+        if (val !== null) {
+          if (val.length > 0 && val.length < 35) {
+            return `${tag}[${attr}="${CSS.escape(val)}"]`;
+          }
+          return `${tag}[${attr}]`;
+        }
+      }
+
+      // Check ad-related aria-label
+      const ariaLabel = el.getAttribute('aria-label');
+      if (ariaLabel && /(quảng\s*cáo|advertisement|sponsored|promoted)/i.test(ariaLabel)) {
+        return `${tag}[aria-label*="${CSS.escape(ariaLabel.slice(0, 30))}"]`;
       }
 
       // 3. Container containing an ad iframe or iframe itself with recognized source
       const ifr = tag === 'iframe' ? el : (el.querySelector ? el.querySelector('iframe') : null);
       if (ifr) {
-        const ifrSrc = ifr.getAttribute('src') || ifr.getAttribute('data-src') || '';
-        if (ifrSrc && !ifrSrc.startsWith('data:') && !ifrSrc.startsWith('blob:')) {
+        const ifrSrc = (ifr.getAttribute('src') || ifr.getAttribute('data-src') || '').toLowerCase();
+        // SAFEGUARD: Never target iframe if it might be an embedded video player!
+        const isEmbedPlayer = /player|embed|stream|video|m3u8|mp4|media|play|hydrax|dood|streamtape|ok\.ru/i.test(ifrSrc);
+        if (!isEmbedPlayer && ifrSrc && !ifrSrc.startsWith('data:') && !ifrSrc.startsWith('blob:')) {
           try {
             const urlHost = new URL(ifrSrc, window.location.href).hostname;
             if (urlHost && urlHost.includes('.')) {
@@ -2236,6 +2182,56 @@ if (currentEnabledState) {
                 return `iframe[src*="${CSS.escape(urlHost)}"]`;
               }
               return `${tag}:has(iframe[src*="${CSS.escape(urlHost)}"])`;
+            }
+          } catch(e) {}
+        }
+      }
+
+      // 3.5. Container containing ad elements: <ins> (AdSense/ExoClick), explicit ad external links, or sponsor badges
+      if (el.querySelector) {
+        if (el.querySelector('ins.adsbygoogle, ins[data-zoneid], ins[data-ad-client], ins')) {
+          return `${tag}:has(ins)`;
+        }
+        // ONLY match explicit ad network links - NEVER general links (avoids breaking legitimate movie thumbnails & movie links)
+        const adLink = el.querySelector('a[href*="doubleclick"], a[href*="adsterra"], a[href*="exoclick"], a[href*="cpm"], a[href*="popads"], a[href*="onclick"], a[href*="monetag"]');
+        if (adLink && adLink.href) {
+          try {
+            const extHost = new URL(adLink.href, window.location.href).hostname;
+            if (extHost && extHost !== window.location.hostname) {
+              return `${tag}:has(a[href*="${CSS.escape(extHost)}"])`;
+            }
+          } catch(e) {}
+        }
+        if (el.querySelector('[aria-label*="quảng cáo" i], [aria-label*="sponsored" i], [class*="badge-ad" i], [class*="sponsor" i]')) {
+          return `${tag}:has([aria-label*="sponsored" i], [aria-label*="quảng cáo" i], [class*="sponsor" i])`;
+        }
+
+        // 3.6. Container containing an ad image (banner with external host or specific filename)
+        const innerImg = el.querySelector('img[src]');
+        if (innerImg) {
+          const imgSrc = (innerImg.getAttribute('src') || innerImg.getAttribute('data-src') || '').trim();
+          if (imgSrc && !imgSrc.startsWith('data:') && !imgSrc.startsWith('blob:') && imgSrc.length > 5) {
+            try {
+              const imgUrl = new URL(imgSrc, window.location.href);
+              if (imgUrl.hostname && imgUrl.hostname !== window.location.hostname) {
+                return `${tag}:has(img[src*="${CSS.escape(imgUrl.hostname)}"])`;
+              }
+              const cleanUrl = imgSrc.split('?')[0].split('#')[0];
+              const filename = cleanUrl.split('/').filter(Boolean).pop();
+              if (filename && filename.length > 4 && filename.length < 32 && !/^[0-9]+$/.test(filename)) {
+                return `${tag}:has(img[src*="${CSS.escape(filename)}"])`;
+              }
+            } catch(e) {}
+          }
+        }
+
+        // 3.7. Container containing an external link (affiliate, gambling, external ad)
+        const innerLink = el.querySelector('a[href]');
+        if (innerLink && innerLink.href) {
+          try {
+            const linkUrl = new URL(innerLink.href, window.location.href);
+            if (linkUrl.hostname && linkUrl.hostname !== window.location.hostname && !linkUrl.protocol.startsWith('javascript')) {
+              return `${tag}:has(a[href*="${CSS.escape(linkUrl.hostname)}"])`;
             }
           } catch(e) {}
         }
@@ -2278,6 +2274,42 @@ if (currentEnabledState) {
         } catch (e) {}
       }
 
+      // 6.5. Ad-related class patterns (e.g., ad-wrapper-12345, banner_box_abc)
+      if (el.classList && el.classList.length > 0) {
+        for (const cls of Array.from(el.classList)) {
+          if (typeof cls === 'string') {
+            const adMatch = cls.match(/^(ad|ads|banner|sponsor|popup|sticky-ad|floating-ad)[_-]/i);
+            if (adMatch) {
+              const prefixSel = `${tag}[class*="${CSS.escape(adMatch[1])}"]`;
+              try {
+                if (document.querySelectorAll(prefixSel).length <= 5) {
+                  return prefixSel;
+                }
+              } catch(e) {}
+            }
+          }
+        }
+      }
+
+      // 6.6. Floating / Sticky ad detection via computed styles or inline styles
+      try {
+        const compStyle = window.getComputedStyle(el);
+        const styleAttr = el.getAttribute('style') || '';
+        const isFixedOrAbs = (compStyle && (compStyle.position === 'fixed' || compStyle.position === 'absolute')) ||
+                             styleAttr.includes('fixed') || styleAttr.includes('z-index');
+        if (isFixedOrAbs) {
+          if (el.parentElement === document.body) {
+            const innerImg = el.querySelector && el.querySelector('img');
+            const innerLink = el.querySelector && el.querySelector('a');
+            if (innerImg || innerLink) {
+              return `body > ${tag}:has(${innerImg ? 'img' : 'a'})`;
+            }
+            return `body > ${tag}[style*="fixed"]`;
+          }
+          return `${tag}[style*="position: fixed"], ${tag}[style*="position:fixed"]`;
+        }
+      } catch(e) {}
+
       // 7. Up to 2 levels hierarchy max (parent > child)
       if (el.parentElement && el.parentElement !== document.body && el.parentElement !== document.documentElement) {
         const parent = el.parentElement;
@@ -2294,22 +2326,60 @@ if (currentEnabledState) {
         if (parentSel) {
           const selfSel = cleanCls ? `${tag}.${CSS.escape(cleanCls)}` : tag;
           const combined = `${parentSel} > ${selfSel}`;
-          if (combined.length < 45) return combined;
+          if (combined.length < 45) {
+            try {
+              if (document.querySelectorAll(combined).length <= 3) {
+                return combined;
+              }
+            } catch(e) {
+              return combined;
+            }
+          }
         }
       }
 
-      // 8. Compact nth-of-type
+      // 8. Robust contextual hierarchy (never return a fragile naked nth-of-type)
       let sibling = el.previousElementSibling;
       let nth = 1;
       while (sibling) {
         if (sibling.tagName === el.tagName) nth++;
         sibling = sibling.previousElementSibling;
       }
-      return `${tag}:nth-of-type(${nth})`;
+
+      let parentPrefix = '';
+      if (el.parentElement) {
+        if (el.parentElement === document.body) {
+          parentPrefix = 'body > ';
+        } else if (el.parentElement.id && !/^\d/.test(el.parentElement.id)) {
+          parentPrefix = '#' + CSS.escape(el.parentElement.id) + ' > ';
+        } else {
+          const pCls = getCleanClassName(el.parentElement);
+          if (pCls) {
+            parentPrefix = `${el.parentElement.tagName.toLowerCase()}.${CSS.escape(pCls)} > `;
+          }
+        }
+      }
+
+      return `${parentPrefix}${tag}:nth-of-type(${nth})`;
     }
 
     function blockElement(el) {
       if (!el) return;
+
+      // CRITICAL SAFEGUARD: Never block video players or movie thumbnails!
+      if (typeof isVideoPlayerOrControls === 'function' && isVideoPlayerOrControls(el)) {
+        showToast('⚠️ Được bảo vệ: Không thể chặn trình phát video!', false);
+        return;
+      }
+      if (typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(el)) {
+        showToast('⚠️ Được bảo vệ: Không thể chặn thumbnail / poster phim!', false);
+        return;
+      }
+      if (typeof isInsideVideoPlayer === 'function' && isInsideVideoPlayer(el)) {
+        showToast('⚠️ Được bảo vệ: Không thể can thiệp vào trình phát video!', false);
+        return;
+      }
+
       const selector = getRobustSelector(el);
       if (!selector) return;
 
@@ -2984,55 +3054,7 @@ if (currentEnabledState) {
         dynamicCosmeticStyle.id = 'adblock-max-dynamic-cosmetics';
         document.documentElement.appendChild(dynamicCosmeticStyle);
       }
-      const overrideProtection = `
-        :is(.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, .poster-film, .film-item, .movie-item, .tray-item, .halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], [class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], [class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], [class*="hero-anim"], .movie-backdrop, .film-backdrop, [class*="hero-backdrop"]) {
-          visibility: visible !important;
-          pointer-events: auto !important;
-        }
-        .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
-          pointer-events: none !important;
-        }
-        /* Giải phóng poster & cover của các trình phát video khi đang phát */
-        .plyr--playing .plyr__poster,
-        .plyr--playing [class*="plyr__poster"],
-        .vjs-has-started .vjs-poster,
-        .art-state-playing .art-layer-cover,
-        .dplayer-playing .dplayer-poster {
-          opacity: 0 !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-          display: none !important;
-        }
-        .swiper, .swiper-wrapper { visibility: visible !important; }
-        img:is([src*="animevietsub"], [src*="phim"], [src*="film"], [src*="movie"], [src*="poster"], [src*="cover"], [src*="tmdb.org"], [src*="wsrv.nl"], [src*="nguonc.com"], [src*="phimimg.com"], [src*="ophim"], [src*="vsmov"], [src*="themoviedb"], [alt*="phim" i], [alt*="Phim" i], [alt*="tập" i], [alt*="Tập" i]):not(.plyr img):not(.video-js img):not(.artplayer img):not(.dplayer img):not(.jwplayer img):not([class*="player"] img) {
-          visibility: visible !important;
-          pointer-events: auto !important;
-        }
-        video:not([muted]):not([loop]),
-        .jwplayer, .artplayer, .video-js, .plyr,
-        [class*="player"] video, [id*="player"] video {
-          visibility: visible !important;
-        }
-        iframe[src*="player"], iframe[src*="embed"], iframe[src*="stream"], iframe[src*="video"] {
-          visibility: visible !important;
-        }
-        /* Bảo vệ tuyệt đối danh sách tập phim, chọn server */
-        :is([class*="episode"], [class*="server"], [class*="list-ep"], [class*="tap-"], [id*="episode"], [id*="server"]) {
-          visibility: visible !important;
-          opacity: 1 !important;
-          pointer-events: auto !important;
-        }
-        /* Bảo vệ container video khỏi bộ lọc ẩn nhưng tôn trọng video ẩn / preview */
-        video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]),
-        .jwplayer, .video-js, .artplayer, .plyr, .dplayer,
-        [class*="player"] video:not([hidden]):not(.hidden):not(.preview):not(.d-none):not([x-cloak]):not([style*="display: none"]):not([style*="display:none"]) {
-          display: block !important;
-        }
-        video.hidden, video[hidden], video.preview.hidden, video[x-cloak] {
-          display: none !important;
-        }
-      `;
-      dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }\n' + overrideProtection;
+      dynamicCosmeticStyle.textContent = selectors.join(',\n') + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
     }
 
     function refreshDynamicCosmetics() {
@@ -3234,80 +3256,6 @@ if (currentEnabledState) {
     })();
     // === END 91porn / 91porna Landing Modal Guardian ===
 
-    // === Video Player Ad Overlay & Preroll Guardian (Video.js, Nuevo, 91porn, sextop1, tokyomotion) ===
-    // Automatically removes ad overlays, preroll banners, and clickjack layers covering #player_one_html5_api
-    (function videoPlayerAdOverlayGuardian() {
-      const AD_OVERLAY_SELECTORS = [
-        '#nuevoa', '#anuevo', '#aclose', '.nva-center', '.nva-midroll', '.nva-preroll', '.nva-banner', '.nva-poster',
-        '.vast_clickthrough_layer', '.midroll_back', '.fluid_vpaid_slot',
-        '.vjs-preroll', '.vjs-ad-container', '.vjs-ad-overlay', '.vjs-overlay',
-        'div[id*="player_one_ad"]', 'div[id*="player_one"][class*="ad"]'
-      ].join(', ');
-
-      function purgeVideoAdOverlays() {
-        if (!currentEnabledState || isCurrentPageWhitelisted()) return;
-        try {
-          const overlays = document.querySelectorAll(AD_OVERLAY_SELECTORS);
-          overlays.forEach(overlay => {
-            // Never touch genuine video elements or native control bars
-            const tag = overlay.tagName ? overlay.tagName.toLowerCase() : '';
-            if (tag === 'video' || tag === 'audio') return;
-            if (overlay.classList.contains('vjs-control-bar') || (overlay.closest && overlay.closest('.vjs-control-bar'))) return;
-            if (overlay.id === 'player_one_html5_api' || (overlay.querySelector && overlay.querySelector('video:not([class*="ad"])'))) return;
-
-            console.log('[WebShield] Purged video ad overlay covering video:', overlay);
-            try {
-              overlay.style.setProperty('display', 'none', 'important');
-              overlay.style.setProperty('visibility', 'hidden', 'important');
-              overlay.style.setProperty('pointer-events', 'none', 'important');
-              overlay.remove();
-            } catch (e) {}
-          });
-
-          // Also check any external ad link wrappers inside #player_one, .video-container, or .video-js
-          const playerContainers = document.querySelectorAll('#player_one, .video-container, .video-js, [data-vjs-player]');
-          playerContainers.forEach(container => {
-            const links = container.querySelectorAll('a[target="_blank"], a.vast_clickthrough_layer');
-            links.forEach(link => {
-              const href = (link.href || '').toLowerCase();
-              if (gamblingRegex.test(href) || adUrlRegex.test(href) || link.classList.contains('vast_clickthrough_layer') || /click|redirect|track|zone|cpm/i.test(href)) {
-                try {
-                  link.style.setProperty('display', 'none', 'important');
-                  link.style.setProperty('pointer-events', 'none', 'important');
-                  link.remove();
-                  console.log('[WebShield] Removed external ad link overlay from video container:', href);
-                } catch(e) {}
-              }
-            });
-          });
-        } catch (e) {}
-      }
-
-      purgeVideoAdOverlays();
-
-      const obs = new MutationObserver(() => {
-        purgeVideoAdOverlays();
-      });
-
-      const init = () => {
-        if (document.body) {
-          obs.observe(document.body, { childList: true, subtree: true });
-        }
-        purgeVideoAdOverlays();
-      };
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init, { once: true });
-      } else {
-        init();
-      }
-
-      let tries = 0;
-      const interval = setInterval(() => {
-        purgeVideoAdOverlays();
-        if (++tries > 25) clearInterval(interval);
-      }, 200);
-    })();
 
     // === UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
     // Neutralizes self-healing floating popups, TikTok-style vertical overlays,
@@ -3409,8 +3357,8 @@ if (currentEnabledState) {
                                     text.includes('trending now') ||
                                     text.includes('nhận hoa hồng') ||
                                     text.includes('quảng cáo');
-              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.className || '') ||
-                                 /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad)/i.test(el.id || '');
+              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(el.className || '') ||
+                                 /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(el.id || '');
               if (hasFake18OrAd && (hasAdClass || zIndex >= 9000 || el.querySelector('video, iframe, button'))) {
                 return true;
               }
@@ -3506,35 +3454,3 @@ if (currentEnabledState) {
       }, 300);
     })();
     // === END UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
-
-    // === MissAV Lazy-Load Poster & Thumbnail Hydration Guardian ===
-    if (window.location.hostname.includes('missav')) {
-      const hydrateMissavPosters = () => {
-        try {
-          const imgs = document.querySelectorAll('img.lozad[data-src], img[data-src*="cover-t.jpg"]');
-          for (let i = 0; i < imgs.length; i++) {
-            const img = imgs[i];
-            const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
-            if (dataSrc && (!img.src || img.src.startsWith('data:image/') || img.src.length < 50)) {
-              img.src = dataSrc;
-              img.loading = 'lazy';
-            }
-            if (img.hasAttribute('x-cloak')) img.removeAttribute('x-cloak');
-          }
-        } catch (e) {}
-      };
-
-      hydrateMissavPosters();
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hydrateMissavPosters, { once: true });
-      }
-      let missavPollCount = 0;
-      const missavInterval = setInterval(() => {
-        hydrateMissavPosters();
-        if (++missavPollCount > 10) clearInterval(missavInterval);
-      }, 500);
-    }
-
-
-
-

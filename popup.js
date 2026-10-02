@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "3.9.9" }),
+      getManifest: () => ({ version: "4.0.0" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -102,6 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const emptyCustomMsg = document.getElementById("empty-custom-msg");
   const customCountEl = document.getElementById("custom-count");
   const clearCustomRulesBtn = document.getElementById("clear-custom-rules-btn");
+  const copyAllCustomRulesBtn = document.getElementById("copy-all-custom-rules-btn");
   const updateFiltersBtn = document.getElementById("update-filters-btn");
   const updateBtnText = document.getElementById("update-btn-text");
 
@@ -109,6 +110,30 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentTotalCount = 0;
   let currentTabId = null;
   let currentDomain = "";
+
+  // Helper to copy text to clipboard with fallback
+  function copyToClipboard(text, onSuccess) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, onSuccess));
+    } else {
+      fallbackCopy(text, onSuccess);
+    }
+  }
+
+  function fallbackCopy(text, onSuccess) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (onSuccess) onSuccess();
+    } catch (e) {}
+  }
 
   // Relative Time Formatter in Vietnamese
   function formatRelativeTime(timestamp) {
@@ -170,10 +195,22 @@ document.addEventListener("DOMContentLoaded", () => {
         itemEl.innerHTML = `
           <div class="history-details">
             <span class="history-domain">${item.domain || "Web"}</span>
-            <span class="history-url" title="${item.url}">${displayUrl}</span>
+            <span class="history-url" title="Bấm để sao chép: ${item.url || displayUrl}">${displayUrl}</span>
           </div>
           <span class="history-time">${formatRelativeTime(item.timestamp)}</span>
         `;
+        itemEl.style.cursor = "pointer";
+        itemEl.title = `Bấm để sao chép đầy đủ: ${item.url || displayUrl}`;
+        itemEl.addEventListener("click", () => {
+          copyToClipboard(item.url || displayUrl, () => {
+            const urlSpan = itemEl.querySelector(".history-url");
+            if (urlSpan) {
+              const old = urlSpan.textContent;
+              urlSpan.textContent = "✅ Đã chép đầy đủ!";
+              setTimeout(() => { urlSpan.textContent = old; }, 1200);
+            }
+          });
+        });
         historyList.appendChild(itemEl);
       });
     }
@@ -276,12 +313,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const displayCode = selector.length > 28 ? selector.substring(0, 26) + '...' : selector;
 
         item.innerHTML = `
-          <div class="custom-rule-info" title="${selector.replace(/"/g, '&quot;')}">
+          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${selector.replace(/"/g, '&quot;')}">
             <span class="custom-rule-code">${displayCode}</span>
             <span class="custom-rule-domain">${currentDomain || "Trang hiện tại"}</span>
           </div>
-          <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
+          <div class="custom-rule-actions">
+            <button class="custom-rule-copy-btn" title="Sao chép toàn bộ thuộc tính selector này">📋 Chép</button>
+            <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
+          </div>
         `;
+
+        const copyBtn = item.querySelector(".custom-rule-copy-btn");
+        const infoEl = item.querySelector(".custom-rule-info");
+
+        const handleCopy = (e) => {
+          if (e) e.stopPropagation();
+          copyToClipboard(selector, () => {
+            copyBtn.textContent = "✅ Đã chép!";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+              copyBtn.textContent = "📋 Chép";
+              copyBtn.classList.remove("copied");
+            }, 1500);
+          });
+        };
+
+        copyBtn.addEventListener("click", handleCopy);
+        infoEl.addEventListener("click", handleCopy);
 
         const deleteBtn = item.querySelector(".custom-rule-delete-btn");
         deleteBtn.addEventListener("click", () => {
@@ -309,12 +367,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const displayCode = rule.length > 28 ? rule.substring(0, 26) + '...' : rule;
 
         item.innerHTML = `
-          <div class="custom-rule-info" title="${rule.replace(/"/g, '&quot;')}">
+          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${rule.replace(/"/g, '&quot;')}">
             <span class="custom-rule-code">${displayCode}</span>
             <span class="custom-rule-domain">Toàn cục (Mọi trang)</span>
           </div>
-          <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
+          <div class="custom-rule-actions">
+            <button class="custom-rule-copy-btn" title="Sao chép toàn bộ thuộc tính selector này">📋 Chép</button>
+            <button class="custom-rule-delete-btn" title="Gỡ bỏ quy tắc này">🗑️ Gỡ</button>
+          </div>
         `;
+
+        const copyBtn = item.querySelector(".custom-rule-copy-btn");
+        const infoEl = item.querySelector(".custom-rule-info");
+
+        const handleCopy = (e) => {
+          if (e) e.stopPropagation();
+          copyToClipboard(rule, () => {
+            copyBtn.textContent = "✅ Đã chép!";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+              copyBtn.textContent = "📋 Chép";
+              copyBtn.classList.remove("copied");
+            }, 1500);
+          });
+        };
+
+        copyBtn.addEventListener("click", handleCopy);
+        infoEl.addEventListener("click", handleCopy);
 
         const deleteBtn = item.querySelector(".custom-rule-delete-btn");
         deleteBtn.addEventListener("click", () => {
@@ -407,6 +486,29 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   });
+
+  if (copyAllCustomRulesBtn) {
+    copyAllCustomRulesBtn.addEventListener("click", () => {
+      chrome.storage.local.get(["manualFilters", "customBlockedSelectors"], (res) => {
+        const filters = (res && res.manualFilters) || {};
+        const globalRules = (res && res.customBlockedSelectors) || [];
+        const domainRules = (currentDomain && filters[currentDomain]) ? filters[currentDomain] : [];
+        const allRules = Array.from(new Set([...domainRules, ...globalRules]));
+
+        if (allRules.length === 0) {
+          copyAllCustomRulesBtn.textContent = "Trống!";
+          setTimeout(() => { copyAllCustomRulesBtn.textContent = "📋 Chép tất cả"; }, 1200);
+          return;
+        }
+
+        const textToCopy = allRules.join("\n");
+        copyToClipboard(textToCopy, () => {
+          copyAllCustomRulesBtn.textContent = "✅ Đã chép tất cả!";
+          setTimeout(() => { copyAllCustomRulesBtn.textContent = "📋 Chép tất cả"; }, 1500);
+        });
+      });
+    });
+  }
 
   // Filter Timestamps & Stats UI Formatter (Hiển thị quy tắc thực tế 100%)
   function updateFilterTimestampsUI(lastTimestamp, stats) {
@@ -830,7 +932,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "3.9.9";
+      const version = manifest.version || "4.0.0";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");

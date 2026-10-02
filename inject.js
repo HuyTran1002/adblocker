@@ -88,86 +88,6 @@
     });
   } catch (e) {}
 
-  // Universal Video.js & Nuevo Plugin Preroll/Ad Neutralizer
-  // Preemptively neutralizes player.preroll() and video ad overlays on tube & streaming sites (91porn, sextop1, tokyomotion, etc.)
-  // Reveals the real video (#player_one_html5_api) and avoids frozen/blank ad screens
-  try {
-    let _realVideojs = window.videojs;
-
-    function wrapPlayerInstance(player) {
-      if (!player) return player;
-      try {
-        // Neutralize player.preroll ad call so ad video is never requested and ad overlay never created
-        player.preroll = function() {
-          console.log('[WebShield] Neutralized player.preroll ad overlay call!');
-          return this;
-        };
-        if (typeof player.vast === 'function') {
-          player.vast = function() { return this; };
-        }
-        if (typeof player.ima === 'function') {
-          player.ima = function() { return this; };
-        }
-      } catch (e) {}
-      return player;
-    }
-
-    function createWrappedVideojs(origFn) {
-      const wrapped = function(...args) {
-        const instance = origFn.apply(this, args);
-        return wrapPlayerInstance(instance);
-      };
-      try {
-        Object.assign(wrapped, origFn);
-        wrapped.prototype = origFn.prototype;
-        if (typeof origFn.registerPlugin === 'function') {
-          const origReg = origFn.registerPlugin;
-          wrapped.registerPlugin = function(name, pluginFn) {
-            if (name === 'preroll' || name === 'vast' || name === 'ima') {
-              console.log('[WebShield] Intercepted and neutralized videojs.registerPlugin:', name);
-              return origReg.call(this, name, function() { return this; });
-            }
-            return origReg.apply(this, arguments);
-          };
-        }
-        if (typeof origFn.plugin === 'function') {
-          const origPlug = origFn.plugin;
-          wrapped.plugin = function(name, pluginFn) {
-            if (name === 'preroll' || name === 'vast' || name === 'ima') {
-              console.log('[WebShield] Intercepted and neutralized videojs.plugin:', name);
-              return origPlug.call(this, name, function() { return this; });
-            }
-            return origPlug.apply(this, arguments);
-          };
-        }
-        if (typeof origFn.getComponent === 'function') {
-          const PlayerComp = origFn.getComponent('Player');
-          if (PlayerComp && PlayerComp.prototype) {
-            PlayerComp.prototype.preroll = function() { return this; };
-          }
-        }
-      } catch (e) {}
-      return wrapped;
-    }
-
-    if (_realVideojs && typeof _realVideojs === 'function') {
-      _realVideojs = createWrappedVideojs(_realVideojs);
-    }
-
-    Object.defineProperty(window, 'videojs', {
-      configurable: true,
-      enumerable: true,
-      get() { return _realVideojs; },
-      set(val) {
-        if (typeof val === 'function') {
-          _realVideojs = createWrappedVideojs(val);
-        } else {
-          _realVideojs = val;
-        }
-      }
-    });
-  } catch (e) {}
-
   // Universal Adsterra & Social Bar Engine Neutralizer
   // Preemptively neutralizes Adsterra Social Bar / In-Page Push / Interstitial scripts that create [id^="atContainer-"]
   try {
@@ -309,9 +229,9 @@
       iframe[src*="eyebrowscrambledlater."],
       div[id*="cboxOverlay"], div[id*="colorbox"]:has(iframe),
       [id*="clb-spot"], [id^="__clb"], [class*="clb-spot"], [id*="-spot_"][id*="clb"],
-      #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster,
+      #nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner,
       .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot,
-      .vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay,
+      .vjs-preroll, .vjs-ad-container, .vjs-ad-overlay,
       div[id*="player_one_ad"], div[id*="player_one"][class*="ad"],
       ins.adsbygoogle[data-anchor-status],
       ins.adsbygoogle[data-ad-status="filled"][data-anchor-shown="true"],
@@ -323,7 +243,11 @@
       div[class*="floating-ad"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[style*="inset: 0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[style*="inset:0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
-      #catfishPcGuest, .fxMidGrid, .fxMidWrap, [id*="catfishPcGuest"], [class*="fxMidGrid"], [class*="fxMidWrap"] {
+      #catfishPcGuest, .fxMidGrid, .fxMidWrap, [id*="catfishPcGuest"], [class*="fxMidGrid"], [class*="fxMidWrap"],
+      #adFloat, #ad_float, #ad-float, .adFloat, .ad-float,
+      #floatAd, #float_ad, #float-ad, .floatAd, .float-ad,
+      [id*="adFloat" i], [class*="adFloat" i], [id*="floatAd" i], [class*="floatAd" i],
+      [id*="float_ad" i], [class*="float_ad" i], [id*="ad_float" i], [class*="ad_float" i] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
@@ -332,19 +256,7 @@
         opacity: 0 !important;
         z-index: -999999 !important;
       }
-      .jw-controls-backdrop, [class*="controls-backdrop"], [class*="player-backdrop"] {
-        pointer-events: none !important;
-      }
-      .plyr--playing .plyr__poster,
-      .plyr--playing [class*="plyr__poster"],
-      .vjs-has-started .vjs-poster,
-      .art-state-playing .art-layer-cover,
-      .dplayer-playing .dplayer-poster {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        display: none !important;
-      }
+
     `;
     const targetMount = document.head || document.documentElement;
     if (targetMount) {
@@ -355,55 +267,6 @@
       }, { once: true });
     }
   } catch(e) {}
-  }
-
-  // --- LAZY-LOAD RECOVERY FOR MISSAV ONLY ---
-  // Only target missav where broken Alpine/lozad instances need hydration.
-  // Never run globally to avoid breaking native lazy-loaders or responsive thumbnail layouts on other movie sites.
-  function ensureLozadObserver() {
-    if (!window.location.hostname.includes('missav')) return;
-    try {
-      if (typeof window.lozad === 'function') {
-        const observer = window.lozad('.lozad', {
-          loaded: function (el) {
-            el.classList.remove('lozad');
-            el.setAttribute('data-loaded', 'true');
-          }
-        });
-        observer.observe();
-      }
-    } catch (e) {}
-
-    try {
-      const imgs = document.querySelectorAll('img[data-src], img.lozad');
-      for (let i = 0; i < imgs.length; i++) {
-        const el = imgs[i];
-        const dataSrc = el.getAttribute('data-src') || el.getAttribute('data-original');
-        if (dataSrc && (!el.src || el.src.startsWith('data:image/') || el.src === 'about:blank' || el.src.length < 20)) {
-          el.src = dataSrc;
-          el.loading = 'lazy';
-        }
-        if (el.hasAttribute('x-cloak')) el.removeAttribute('x-cloak');
-      }
-    } catch (e) {}
-  }
-
-  if (window.location.hostname.includes('missav')) {
-    let lozadPollCount = 0;
-    const lozadInterval = setInterval(() => {
-      ensureLozadObserver();
-      if (++lozadPollCount > 15) clearInterval(lozadInterval);
-    }, 300);
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        ensureLozadObserver();
-        setTimeout(ensureLozadObserver, 500);
-        setTimeout(ensureLozadObserver, 1500);
-      }, { once: true });
-    } else {
-      ensureLozadObserver();
-    }
   }
 
 
@@ -901,9 +764,9 @@
     try {
       // Known ad overlays that inject inside player containers must NOT be protected
       if (el.closest && el.closest(
-        '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+        '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
         '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
-        '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+        '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
         'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
       )) {
         return false;
@@ -970,9 +833,9 @@
     try {
       // Known ad overlays that inject inside player containers must NEVER be treated as posters/banners!
       if (el.closest && el.closest(
-        '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, .nva-poster, ' +
+        '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
         '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
-        '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, .vjs-overlay, ' +
+        '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
         'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
       )) {
         return false;

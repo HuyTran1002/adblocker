@@ -1037,6 +1037,28 @@ input:not(:checked) ~ .pulse-indicator,
   color: #ffffff;
 }
 
+.secondary-btn-text {
+  background: none;
+  border: none;
+  color: #a5b4fc;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: all 0.15s ease;
+}
+
+.secondary-btn-text:hover {
+  color: #c7d2fe;
+  text-decoration: underline;
+}
+
+.custom-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Custom Rule List Items */
 .custom-rule-item {
   display: flex;
@@ -1061,6 +1083,15 @@ input:not(:checked) ~ .pulse-indicator,
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 3px;
+  transition: background 0.12s ease;
+}
+
+.custom-rule-info:hover .custom-rule-code {
+  color: #c7d2fe;
+  text-decoration: underline;
 }
 
 .custom-rule-code {
@@ -1084,13 +1115,45 @@ input:not(:checked) ~ .pulse-indicator,
   margin-top: 1px;
 }
 
+.custom-rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.custom-rule-copy-btn {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.custom-rule-copy-btn:hover {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
+.custom-rule-copy-btn.copied {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  color: #34d399;
+}
+
 .custom-rule-delete-btn {
   background: rgba(244, 63, 94, 0.12);
   border: 1px solid rgba(244, 63, 94, 0.25);
   color: #f43f5e;
   border-radius: 6px;
   padding: 3px 8px;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
