@@ -2038,34 +2038,6 @@
 
     console.log('[WebShield] AdGuard Native YouTube Engine Active (Zero-Ad Architecture & Anti-Detection)');
 
-    // 1. Recursive ad properties purger (AdGuard / uBlock Origin Standard)
-    const AD_KEYS = new Set([
-      'adPlacements', 'adSlots', 'playerAds', 'masthead',
-      'adPlacementRenderer', 'inFeedAdLayoutRenderer',
-      'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
-    ]);
-
-    function hasAdData(obj) {
-      if (!obj || typeof obj !== 'object') return false;
-      try {
-        if ((Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) ||
-            (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) ||
-            (Array.isArray(obj.playerAds) && obj.playerAds.length > 0)) {
-          return true;
-        }
-        if (obj.playerResponse) {
-          if (typeof obj.playerResponse === 'object') {
-            return hasAdData(obj.playerResponse);
-          }
-          if (typeof obj.playerResponse === 'string' &&
-              (obj.playerResponse.includes('adPlacements') || obj.playerResponse.includes('playerAds') || obj.playerResponse.includes('adSlots'))) {
-            return true;
-          }
-        }
-      } catch (e) { }
-      return false;
-    }
-
     // Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
 
@@ -2073,8 +2045,8 @@
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const v = urlParams.get('v');
-        if (v) return v;
-        const match = window.location.pathname.match(/\/(shorts|watch|live)\/([a-zA-Z0-9_-]+)/);
+        if (v && v.length >= 3) return v;
+        const match = window.location.pathname.match(/\/(shorts|watch|live)\/([a-zA-Z0-9_-]{3,})/);
         if (match) return match[2];
       } catch (e) { }
       return '';
@@ -2086,7 +2058,7 @@
         const videoId = obj?.videoDetails?.videoId ||
                         obj?.playerResponse?.videoDetails?.videoId ||
                         getCurrentVideoId();
-        if (!videoId) return;
+        if (!videoId || videoId.length < 3) return;
 
         const placements = obj.adPlacements || obj.playerResponse?.adPlacements || [];
         const slots = obj.adSlots || [];
@@ -2096,7 +2068,6 @@
                            (Array.isArray(ads) ? ads.length : 0);
 
         if (rawAdCount > 0) {
-          // Key incorporates ad count so subsequent mid-roll ad deliveries in the same video get reported
           const reportKey = `${source}_${videoId}_${rawAdCount}`;
           if (!reportedVideoAds.has(reportKey)) {
             reportedVideoAds.add(reportKey);
@@ -2111,93 +2082,47 @@
       } catch (e) { }
     }
 
-    function deepPurgeAdProperties(obj, depth = 0) {
-      if (!obj || typeof obj !== 'object' || depth > 10) return obj;
+    // uBlock Origin standard JSON pruning: neutralizes adPlacements, playerAds, adSlots
+    function pruneAdData(obj) {
+      if (!obj || typeof obj !== 'object') return obj;
       try {
-        const isLive = !!(obj?.videoDetails?.isLiveContent || obj?.videoDetails?.isLive ||
-                          obj?.playerResponse?.videoDetails?.isLiveContent || obj?.playerResponse?.videoDetails?.isLive ||
-                          window.location.pathname.includes('/live'));
+        let hadAds = false;
+        if (Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) {
+          hadAds = true;
+          obj.adPlacements = [];
+        }
+        if (Array.isArray(obj.playerAds) && obj.playerAds.length > 0) {
+          hadAds = true;
+          obj.playerAds = [];
+        }
+        if (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) {
+          hadAds = true;
+          obj.adSlots = [];
+        }
+        if (hadAds) {
+          checkAndReportVideoAds(obj);
+        }
 
-        // Auto-heal player error / detection warning in playerResponse
-        if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
-          const status = obj.playabilityStatus.status;
-          // If YouTube flagged user as UNPLAYABLE or LOGIN_REQUIRED due to adblock detection,
-          // but streamingData exists, restore playability to OK!
-          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
-            if (obj.streamingData) {
-              obj.playabilityStatus.status = 'OK';
-              delete obj.playabilityStatus.reason;
-              delete obj.playabilityStatus.errorScreen;
-              delete obj.playabilityStatus.messages;
-            }
+        // Handle nested playerResponse
+        if (obj.playerResponse) {
+          if (typeof obj.playerResponse === 'object') {
+            pruneAdData(obj.playerResponse);
+          } else if (typeof obj.playerResponse === 'string') {
+            try {
+              const parsed = JSON.parse(obj.playerResponse);
+              pruneAdData(parsed);
+              obj.playerResponse = JSON.stringify(parsed);
+            } catch (e) { }
           }
         }
-
-        if (Array.isArray(obj)) {
-          for (let i = obj.length - 1; i >= 0; i--) {
-            const item = obj[i];
-            if (item && typeof item === 'object') {
-              const renderer = item.adSlotRenderer ||
-                item.adPlacementRenderer ||
-                item.inFeedAdLayoutRenderer;
-              const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
-              // Strictly protect live chat engagement panel and live stream ad break renderer from being corrupted
-              if (targetId.includes('live-chat') || targetId.includes('chat') || (isLive && item.adBreakServiceRenderer)) {
-                continue;
-              }
-              if (renderer || (!isLive && item.adBreakServiceRenderer) || targetId === 'engagement-panel-ads' || targetId.startsWith('engagement-panel-ads')) {
-                obj.splice(i, 1);
-              } else {
-                deepPurgeAdProperties(item, depth + 1);
-              }
-            }
-          }
-          return obj;
-        }
-
-        // Handle stringified JSON responses (YouTube often nests playerResponse as string)
-        if (typeof obj.playerResponse === 'string') {
-          try {
-            const parsed = JSON.parse(obj.playerResponse);
-            deepPurgeAdProperties(parsed, depth + 1);
-            obj.playerResponse = JSON.stringify(parsed);
-          } catch (e) { }
-        }
-
-        for (const key of Object.keys(obj)) {
-          // On live streams, preserve heartbeat and adBreakService structures needed for live chunk sync
-          if (isLive && (key === 'adBreakHeartbeatParams' || key === 'adBreakService')) {
-            continue;
-          }
-          if (AD_KEYS.has(key)) {
-            if (key === 'adPlacements' || key === 'playerAds' || key === 'adSlots') {
-              obj[key] = [];
-            } else {
-              delete obj[key];
-            }
-          } else if (obj[key] && typeof obj[key] === 'object') {
-            deepPurgeAdProperties(obj[key], depth + 1);
-          }
-        }
-
-        // Clean anti-adblock enforcement dialogs & interruption prompts from payload
-        if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
-          const mr = obj.auxiliaryUi.messageRenderers;
-          if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
-          if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
-          if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
-          if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
-        }
-        // NOTE: Never delete obj.messages unconditionally as it destroys YouTube Live Chat data structures
       } catch (e) { }
       return obj;
     }
 
-    // 2. Intercept window.ytInitialPlayerResponse
+    // 1. Intercept window.ytInitialPlayerResponse
     let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
     if (_ytInitialPlayerResponse) {
-      checkAndReportVideoAds(_ytInitialPlayerResponse);
-      deepPurgeAdProperties(_ytInitialPlayerResponse);
+      pruneAdData(_ytInitialPlayerResponse);
     }
     try {
       Object.defineProperty(window, 'ytInitialPlayerResponse', {
@@ -2205,18 +2130,17 @@
           return _ytInitialPlayerResponse;
         },
         set(val) {
-          checkAndReportVideoAds(val);
-          _ytInitialPlayerResponse = deepPurgeAdProperties(val);
+          _ytInitialPlayerResponse = pruneAdData(val);
         },
         configurable: true,
         enumerable: true
       });
     } catch (e) { }
 
-    // 3. Intercept window.ytInitialData
+    // 2. Intercept window.ytInitialData
     let _ytInitialData = window.ytInitialData;
     if (_ytInitialData) {
-      deepPurgeAdProperties(_ytInitialData);
+      pruneAdData(_ytInitialData);
     }
     try {
       Object.defineProperty(window, 'ytInitialData', {
@@ -2224,235 +2148,34 @@
           return _ytInitialData;
         },
         set(val) {
-          _ytInitialData = deepPurgeAdProperties(val);
+          _ytInitialData = pruneAdData(val);
         },
         configurable: true,
         enumerable: true
       });
     } catch (e) { }
 
-    // 4. Intercept window.ytplayer (Initial HTML5 Player Configuration)
-    function sanitizePlayerArgs(args) {
-      if (!args || typeof args !== 'object') return;
-      try {
-        if (typeof args.player_response === 'string') {
-          try {
-            const parsed = JSON.parse(args.player_response);
-            if (hasAdData(parsed)) {
-              checkAndReportVideoAds(parsed, 'ytplayer');
-              deepPurgeAdProperties(parsed);
-              args.player_response = JSON.stringify(parsed);
-            }
-          } catch (e) { }
-        } else if (typeof args.player_response === 'object' && hasAdData(args.player_response)) {
-          checkAndReportVideoAds(args.player_response, 'ytplayer');
-          deepPurgeAdProperties(args.player_response);
-        }
-        if (typeof args.raw_player_response === 'object' && hasAdData(args.raw_player_response)) {
-          checkAndReportVideoAds(args.raw_player_response, 'ytplayer');
-          deepPurgeAdProperties(args.raw_player_response);
-        }
-      } catch (e) { }
-    }
-
-    function hookYtPlayer(ytplayerObj) {
-      if (!ytplayerObj || ytplayerObj._webshield_hooked) return;
-      try {
-        ytplayerObj._webshield_hooked = true;
-        let _config = ytplayerObj.config;
-        if (_config && _config.args) sanitizePlayerArgs(_config.args);
-        try {
-          Object.defineProperty(ytplayerObj, 'config', {
-            get() { return _config; },
-            set(val) {
-              _config = val;
-              if (_config && _config.args) sanitizePlayerArgs(_config.args);
-            },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) { }
-      } catch (e) { }
-    }
-
-    if (window.ytplayer) hookYtPlayer(window.ytplayer);
-    let _ytplayer = window.ytplayer;
+    // 3. Hook Response.prototype.json (uBlock Origin / AdGuard Standard)
+    // Sanitizes parsed player responses without wrapping window.fetch or breaking video streams
     try {
-      Object.defineProperty(window, 'ytplayer', {
-        get() { return _ytplayer; },
-        set(val) {
-          _ytplayer = val;
-          hookYtPlayer(_ytplayer);
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) { }
-
-    // 5. Intercept ytcfg (YouTube Configuration Object - disable ads experiment flags)
-    function sanitizeYtcfg(cfg) {
-      if (!cfg || typeof cfg !== 'object') return;
-      try {
-        if (cfg.EXPERIMENT_FLAGS && typeof cfg.EXPERIMENT_FLAGS === 'object') {
-          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement = false;
-          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
-          cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
-          cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
+      const originalResponseJson = Response.prototype.json;
+      Response.prototype.json = async function () {
+        const result = await originalResponseJson.apply(this, arguments);
+        if (result && typeof result === 'object') {
+          pruneAdData(result);
         }
-      } catch (e) { }
-    }
-
-    function hookYtcfg(ytcfgObj) {
-      if (!ytcfgObj || ytcfgObj._webshield_hooked) return;
-      try {
-        ytcfgObj._webshield_hooked = true;
-        const origSet = ytcfgObj.set;
-        if (typeof origSet === 'function') {
-          ytcfgObj.set = function (arg) {
-            sanitizeYtcfg(arg);
-            return origSet.apply(this, arguments);
-          };
-        }
-        if (typeof ytcfgObj.get === 'function') {
-          const currentExp = ytcfgObj.get('EXPERIMENT_FLAGS');
-          if (currentExp) sanitizeYtcfg({ EXPERIMENT_FLAGS: currentExp });
-        }
-      } catch (e) { }
-    }
-
-    if (window.ytcfg) {
-      hookYtcfg(window.ytcfg);
-    }
-    let _ytcfg = window.ytcfg;
-    try {
-      Object.defineProperty(window, 'ytcfg', {
-        get() {
-          return _ytcfg;
-        },
-        set(val) {
-          _ytcfg = val;
-          hookYtcfg(_ytcfg);
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) { }
-
-    // 6. Intercept window.fetch for YouTube API endpoints
-    try {
-      const originalFetch = window.fetch;
-      window.fetch = async function (...args) {
-        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
-        if (typeof url === 'string') {
-          // Block tracking pings to YouTube Ad servers directly with 200 OK so player does not error
-          // NOTE: Do NOT block /api/stats/atr or /ptracking as they are critical for live stream bandwidth & playback sync
-          if (url.includes('/api/stats/ads') ||
-              url.includes('/pagead/') ||
-              url.includes('doubleclick.net') ||
-              (url.includes('/api/stats/qoe') && url.includes('adformat'))) {
-            return new Response('', { status: 200, statusText: 'OK' });
-          }
-
-          // Do NOT intercept live stream heartbeats, stats, live chat, or browse requests
-          if (url.includes('/player/heartbeat') ||
-              url.includes('/api/stats') ||
-              url.includes('/youtubei/v1/browse') ||
-              url.includes('/live_chat')) {
-            return originalFetch.apply(this, args);
-          }
-
-          const isPlayerApi = url.includes('/youtubei/v1/player') ||
-            url.includes('/youtubei/v1/next') ||
-            url.includes('/youtubei/v1/reel/reel_item_watch');
-
-          if (isPlayerApi) {
-            const response = await originalFetch.apply(this, args);
-            try {
-              const clone = response.clone();
-              const data = await clone.json();
-              if (hasAdData(data)) {
-                checkAndReportVideoAds(data);
-                deepPurgeAdProperties(data);
-
-                const modifiedBody = JSON.stringify(data);
-                const newHeaders = new Headers(response.headers);
-                // MUST strip content-length & content-encoding so browser does not fail reading decompressed modified payload
-                newHeaders.delete('content-length');
-                newHeaders.delete('Content-Length');
-                newHeaders.delete('content-encoding');
-                newHeaders.delete('Content-Encoding');
-                newHeaders.set('Content-Type', 'application/json; charset=utf-8');
-
-                const modifiedResponse = new Response(modifiedBody, {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: newHeaders
-                });
-                try {
-                  Object.defineProperty(modifiedResponse, 'url', { value: response.url });
-                } catch (e) { }
-                return modifiedResponse;
-              }
-              // No ads found: return original response untouched to guarantee flawless live stream & zero latency
-              return response;
-            } catch (parseErr) {
-              return response;
-            }
-          }
-        }
-        return originalFetch.apply(this, args);
+        return result;
       };
     } catch (e) { }
 
-    // 7. Intercept XMLHttpRequest
-    try {
-      const originalOpen = XMLHttpRequest.prototype.open;
-      const originalSend = XMLHttpRequest.prototype.send;
-
-      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-        this._ytUrl = (typeof url === 'string') ? url : '';
-        return originalOpen.apply(this, [method, url, ...rest]);
-      };
-
-      XMLHttpRequest.prototype.send = function (...args) {
-        if (this._ytUrl && !this._ytUrl.includes('/player/heartbeat') && !this._ytUrl.includes('/browse') && !this._ytUrl.includes('/live_chat') && (
-          this._ytUrl.includes('/youtubei/v1/player') ||
-          this._ytUrl.includes('/youtubei/v1/next') ||
-          this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch')
-        )) {
-          this.addEventListener('readystatechange', function () {
-            if (this.readyState === 4 && this.status === 200) {
-              try {
-                const data = JSON.parse(this.responseText);
-                if (hasAdData(data)) {
-                  checkAndReportVideoAds(data);
-                  deepPurgeAdProperties(data);
-                  const cleanJson = JSON.stringify(data);
-                  if (this.responseType === 'json') {
-                    Object.defineProperty(this, 'response', { value: data, configurable: true });
-                  } else {
-                    Object.defineProperty(this, 'responseText', { value: cleanJson, configurable: true });
-                    Object.defineProperty(this, 'response', { value: cleanJson, configurable: true });
-                  }
-                }
-              } catch (e) { }
-            }
-          });
-        }
-        return originalSend.apply(this, args);
-      };
-    } catch (e) { }
-
-    // 7. Global JSON.parse hook: automatically sanitizes adPlacements from any internal parse
+    // 4. Hook JSON.parse (uBlock Origin Standard json-prune)
     try {
       const originalJSONParse = JSON.parse;
       JSON.parse = function (text, reviver) {
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
-          // Target objects containing ad placements to avoid expensive recursive traversal on live stream / live chat JSONs
-          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse?.adPlacements || result.playerResponse?.playerAds) {
-            checkAndReportVideoAds(result);
-            deepPurgeAdProperties(result);
+          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse) {
+            pruneAdData(result);
           }
         }
         return result;
