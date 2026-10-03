@@ -2402,7 +2402,6 @@
       });
     }
 
-    let adMutedByWebShield = false;
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
@@ -2419,55 +2418,6 @@
           } catch (e) {}
           removedEnforcement = true;
         });
-
-        // Active Video Ad Skipping (Instant Skip, Mute, 16x Speedup & Neutralize Fallback)
-        const ytPlayer = document.querySelector('.html5-video-player');
-        const isAdPlaying = ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'));
-        if (isAdPlaying) {
-          const video = ytPlayer.querySelector('video');
-          if (video) {
-            if (!video.muted) {
-              video.muted = true;
-              adMutedByWebShield = true;
-            }
-            video.playbackRate = 16.0;
-            if (isFinite(video.duration) && video.duration > 0) {
-              video.currentTime = video.duration;
-            }
-          }
-          const skipBtn = ytPlayer.querySelector(
-            '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
-            '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button, .ytp-ad-skip-button-text'
-          );
-          if (skipBtn) {
-            simulateNativeClick(skipBtn);
-            try { skipBtn.click(); } catch (e) {}
-          }
-
-          // Report blocked video ad if not already reported for this ad block cycle
-          const currentVId = getCurrentVideoId() || 'video';
-          const domAdKey = `dom_${currentVId}_${Math.floor(Date.now() / 8000)}`;
-          if (!reportedVideoAds.has(domAdKey)) {
-            reportedVideoAds.add(domAdKey);
-            if (reportedVideoAds.size > 100) {
-              const firstKey = reportedVideoAds.values().next().value;
-              reportedVideoAds.delete(firstKey);
-            }
-            reportBlocked(`https://www.youtube.com/watch?v=${currentVId} (Quảng cáo Video)`, 'Đã chặn quảng cáo video YouTube', 1);
-          }
-        } else {
-          // Restore playback rate & mute state once ad is finished
-          const video = ytPlayer ? ytPlayer.querySelector('video') : null;
-          if (video) {
-            if (video.playbackRate > 2) {
-              video.playbackRate = 1.0;
-            }
-            if (adMutedByWebShield) {
-              video.muted = false;
-              adMutedByWebShield = false;
-            }
-          }
-        }
 
         // Suppress "Experiencing interruptions?" toasts
         const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
@@ -2527,16 +2477,13 @@
       const observer = new MutationObserver(scheduleClear);
       observer.observe(document.documentElement || document.body, {
         childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'id', 'style']
+        subtree: true
       });
     } catch (e) { }
 
-    // Heartbeat check (every 250ms) & navigation listener to neutralize pre-roll & mid-roll ads instantly
-    setInterval(scheduleClear, 250);
+    // Periodic check to dismiss any anti-adblock dialogs & navigation listener
+    setInterval(scheduleClear, 1500);
     window.addEventListener('yt-navigate-finish', scheduleClear, true);
-    window.addEventListener('timeupdate', scheduleClear, true);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
