@@ -229,9 +229,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Reliable Active Tab Resolver (Checks lastFocusedWindow first, falls back to currentWindow)
+  function getActiveTab(cb) {
+    if (!chrome.tabs || !chrome.tabs.query) return cb(null);
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      if (tabs && tabs.length > 0 && tabs[0].id) return cb(tabs[0]);
+      chrome.tabs.query({ active: true, currentWindow: true }, (fbTabs) => {
+        if (fbTabs && fbTabs.length > 0 && fbTabs[0].id) return cb(fbTabs[0]);
+        cb(null);
+      });
+    });
+  }
+
   // Active Tab Domain Check
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const activeTab = tabs && tabs[0];
+  getActiveTab((activeTab) => {
     currentTabId = activeTab && activeTab.id;
     const tabUrl = (activeTab && (activeTab.url || activeTab.pendingUrl)) || '';
 
@@ -609,7 +620,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const applyState = (data) => {
       if (!data) return;
       const enabled = data.enabled !== false;
-      const tabCount = typeof data.tabBlockedCount === 'number' ? data.tabBlockedCount : currentCount;
+      let tabCount = typeof data.tabBlockedCount === 'number' ? data.tabBlockedCount : currentCount;
+      if (tabCount === 0 && currentCount > 0) {
+        tabCount = currentCount;
+      }
       const totalCount = typeof data.blockedCount === 'number' ? data.blockedCount : currentTotalCount;
       const history = Array.isArray(data.blockedHistory) ? data.blockedHistory : undefined;
       const disabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : undefined;
@@ -629,10 +643,31 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    // 1. Instant response from background in-memory state with current tabId
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTab = tabs && tabs[0];
-      currentTabId = activeTab && activeTab.id;
+    getActiveTab((activeTab) => {
+      currentTabId = activeTab ? activeTab.id : null;
+      if (activeTab && (activeTab.url || activeTab.pendingUrl)) {
+        try {
+          const urlObj = new URL(activeTab.url || activeTab.pendingUrl);
+          currentDomain = urlObj.hostname;
+          siteToggleLabel.textContent = `Chặn trên ${currentDomain}`;
+          siteToggle.disabled = false;
+        } catch(e) {}
+      }
+
+      // 1. Instant zero-latency badge synchronization: if the icon badge displays "3", show "3" immediately!
+      if (currentTabId && chrome.action && chrome.action.getBadgeText) {
+        try {
+          chrome.action.getBadgeText({ tabId: currentTabId }, (badgeText) => {
+            const parsed = parseInt(badgeText, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              currentCount = parsed;
+              blockedCountEl.textContent = parsed;
+            }
+          });
+        } catch (e) {}
+      }
+
+      // 2. Instant response from background in-memory state with current tabId
       try {
         chrome.runtime.sendMessage({ type: "GET_POPUP_STATE", tabId: currentTabId }, (res) => {
           if (!chrome.runtime.lastError && res) {
@@ -640,11 +675,11 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
       } catch (e) {}
-    });
 
-    // 2. Storage query as reliable source
-    chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
-      applyState(rawResult || {});
+      // 3. Storage query as reliable source
+      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
+        applyState(rawResult || {});
+      });
     });
   }
 
@@ -755,7 +790,7 @@ document.addEventListener("DOMContentLoaded", () => {
           try {
             chrome.runtime.sendMessage({ type: "GET_POPUP_STATE", tabId: currentTabId }, (res) => {
               if (!chrome.runtime.lastError && res) {
-                const tabCount = typeof res.tabBlockedCount === 'number' ? res.tabBlockedCount : 0;
+                const tabCount = (typeof res.tabBlockedCount === 'number' && res.tabBlockedCount > 0) ? res.tabBlockedCount : currentCount;
                 if (newHistory !== null) {
                   updateUI(newEnabled, tabCount, newTotalCount, newHistory);
                 } else {

@@ -459,6 +459,53 @@ const tabBlockedCounts = new Map();
 // Tab-specific domains (Map<tabId, string>) to avoid resetting count when navigating on the same site/domain
 const tabDomains = new Map();
 
+// Session storage helper (survives Service Worker termination in Manifest V3)
+const sessionStore = (chrome.storage && chrome.storage.session) ? chrome.storage.session : (chrome.storage ? chrome.storage.local : null);
+
+function saveTabStateToStorage() {
+  try {
+    if (!sessionStore) return;
+    const countsObj = {};
+    for (const [tId, cnt] of tabBlockedCounts.entries()) {
+      countsObj[tId] = cnt;
+    }
+    const domainsObj = {};
+    for (const [tId, dom] of tabDomains.entries()) {
+      domainsObj[tId] = dom;
+    }
+    sessionStore.set({
+      __tabBlockedCounts: countsObj,
+      __tabDomains: domainsObj
+    }).catch(() => {});
+  } catch(e) {}
+}
+
+function restoreTabStateFromStorage() {
+  if (!sessionStore) return Promise.resolve();
+  return sessionStore.get(['__tabBlockedCounts', '__tabDomains']).then((res) => {
+    if (res && res.__tabBlockedCounts && typeof res.__tabBlockedCounts === 'object') {
+      for (const [tId, cnt] of Object.entries(res.__tabBlockedCounts)) {
+        const idNum = parseInt(tId, 10);
+        if (!isNaN(idNum) && typeof cnt === 'number') {
+          if (!tabBlockedCounts.has(idNum) || tabBlockedCounts.get(idNum) === 0) {
+            tabBlockedCounts.set(idNum, cnt);
+          }
+        }
+      }
+    }
+    if (res && res.__tabDomains && typeof res.__tabDomains === 'object') {
+      for (const [tId, dom] of Object.entries(res.__tabDomains)) {
+        const idNum = parseInt(tId, 10);
+        if (!isNaN(idNum) && typeof dom === 'string') {
+          if (!tabDomains.has(idNum)) {
+            tabDomains.set(idNum, dom);
+          }
+        }
+      }
+    }
+  }).catch(() => {});
+}
+
 function extractCleanDomain(url) {
   if (!url || typeof url !== 'string') return '';
   try {
@@ -522,8 +569,10 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
         // Tab moved to a completely different website (e.g. youtube.com -> facebook.com)
         tabBlockedCounts.set(tabId, 0);
         updateTabBadge(tabId, 0);
+        saveTabStateToStorage();
       }
       tabDomains.set(tabId, newDomain);
+      saveTabStateToStorage();
     }
   });
 }
@@ -533,6 +582,7 @@ if (chrome.tabs && chrome.tabs.onRemoved) {
   chrome.tabs.onRemoved.addListener((tabId) => {
     tabBlockedCounts.delete(tabId);
     tabDomains.delete(tabId);
+    saveTabStateToStorage();
   });
 }
 
@@ -551,28 +601,39 @@ let saveStorageTimer = null;
 function ensureStateInitialized() {
   if (isStateInitialized) return Promise.resolve();
   if (!initStatePromise) {
-    initStatePromise = new Promise((resolve) => {
-      chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "lastFiltersUpdateTimestamp"], (res) => {
-        const data = res || {};
-        inMemoryEnabled = data.enabled !== false;
-        inMemoryBlockedCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
-        inMemoryBlockedHistory = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
-        inMemoryDisabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
-        isStateInitialized = true;
+    initStatePromise = Promise.all([
+      new Promise((resolve) => {
+        chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "lastFiltersUpdateTimestamp"], (res) => {
+          const data = res || {};
+          inMemoryEnabled = data.enabled !== false;
+          inMemoryBlockedCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
+          inMemoryBlockedHistory = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
+          inMemoryDisabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
+          resolve();
+        });
+      }),
+      restoreTabStateFromStorage()
+    ]).then(() => {
+      isStateInitialized = true;
 
-        // Synchronize DNR rules and badge icon
-        syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
-        if (!inMemoryEnabled) {
-          if (chrome.action && chrome.action.setBadgeText) {
-            chrome.action.setBadgeText({ text: "OFF" });
-            if (chrome.action.setBadgeBackgroundColor) {
-              chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
-            }
+      // Synchronize DNR rules and badge icon
+      syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
+      if (!inMemoryEnabled) {
+        if (chrome.action && chrome.action.setBadgeText) {
+          chrome.action.setBadgeText({ text: "OFF" });
+          if (chrome.action.setBadgeBackgroundColor) {
+            chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
           }
-        } else {
-          if (chrome.action && chrome.action.setBadgeBackgroundColor) {
-            chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
-          }
+        }
+      } else {
+        if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+          chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
+        }
+      }
+    });
+  }
+  return initStatePromise;
+}
           chrome.action.setBadgeText({ text: "" });
         }
 
@@ -911,6 +972,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         tabCount = (tabBlockedCounts.get(tabId) || 0) + countIncrement;
         tabBlockedCounts.set(tabId, tabCount);
         updateTabBadge(tabId, tabCount);
+        saveTabStateToStorage();
       }
 
       const now = Date.now();
@@ -940,9 +1002,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // 2. Direct instantaneous state request from popup
   if (message.type === "GET_POPUP_STATE") {
-    ensureStateInitialized().then(() => {
+    ensureStateInitialized().then(async () => {
       const tabId = message.tabId;
-      const tabCount = (tabId !== undefined && tabId !== null) ? (tabBlockedCounts.get(tabId) || 0) : 0;
+      let tabCount = (tabId !== undefined && tabId !== null) ? (tabBlockedCounts.get(tabId) || 0) : 0;
+
+      // Fail-safe: if tabCount is 0, recover directly from Chrome's action badge text!
+      if (tabCount === 0 && tabId && chrome.action && chrome.action.getBadgeText) {
+        try {
+          const badgeText = await chrome.action.getBadgeText({ tabId: tabId });
+          const parsed = parseInt(badgeText, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            tabCount = parsed;
+            tabBlockedCounts.set(tabId, tabCount);
+            saveTabStateToStorage();
+          }
+        } catch (e) {}
+      }
+
       sendResponse({
         enabled: inMemoryEnabled,
         blockedCount: inMemoryBlockedCount,
