@@ -2082,25 +2082,40 @@
       } catch (e) { }
     }
 
-    // uBlock Origin standard JSON pruning: neutralizes adPlacements, playerAds, adSlots
+    // uBlock Origin / AdGuard standard JSON pruning: neutralizes adPlacements, playerAds, adSlots
     function pruneAdData(obj) {
       if (!obj || typeof obj !== 'object') return obj;
       try {
-        let hadAds = false;
-        if (Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) {
-          hadAds = true;
-          obj.adPlacements = [];
+        // 1. MUST check and report video ads BEFORE clearing array structures
+        checkAndReportVideoAds(obj);
+
+        // 2. Auto-heal player error / detection warning in playerResponse
+        if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
+          const status = obj.playabilityStatus.status;
+          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+            if (obj.streamingData) {
+              obj.playabilityStatus.status = 'OK';
+              delete obj.playabilityStatus.reason;
+              delete obj.playabilityStatus.errorScreen;
+              delete obj.playabilityStatus.messages;
+            }
+          }
         }
-        if (Array.isArray(obj.playerAds) && obj.playerAds.length > 0) {
-          hadAds = true;
-          obj.playerAds = [];
-        }
-        if (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) {
-          hadAds = true;
-          obj.adSlots = [];
-        }
-        if (hadAds) {
-          checkAndReportVideoAds(obj);
+
+        // 3. Clear all ad-related payloads
+        if (Array.isArray(obj.adPlacements)) obj.adPlacements = [];
+        if (Array.isArray(obj.playerAds)) obj.playerAds = [];
+        if (Array.isArray(obj.adSlots)) obj.adSlots = [];
+        if (obj.adBreakHeartbeatParams) delete obj.adBreakHeartbeatParams;
+        if (obj.playbackTracking) delete obj.playbackTracking;
+
+        // Clean anti-adblock enforcement dialogs & interruption prompts from payload
+        if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
+          const mr = obj.auxiliaryUi.messageRenderers;
+          if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
+          if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
+          if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
+          if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
         }
 
         // Handle nested playerResponse
@@ -2155,8 +2170,82 @@
       });
     } catch (e) { }
 
-    // 3. Hook Response.prototype.json (uBlock Origin / AdGuard Standard)
-    // Sanitizes parsed player responses without wrapping window.fetch or breaking video streams
+    // 3. Intercept ytcfg (YouTube Configuration - disable Server-Stitched DAI & instant 1ms ad timeout)
+    function sanitizeYtcfg(cfg) {
+      if (!cfg || typeof cfg !== 'object') return;
+      try {
+        if (cfg.EXPERIMENT_FLAGS && typeof cfg.EXPERIMENT_FLAGS === 'object') {
+          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement = false;
+          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
+          cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
+          cfg.EXPERIMENT_FLAGS.enable_server_stitched_dai = false;
+          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_preroll_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_midroll_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.html5_ad_postroll_timeout_ms = 1;
+          cfg.EXPERIMENT_FLAGS.web_disable_defer_ad = true;
+          cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
+        }
+      } catch (e) { }
+    }
+
+    function hookYtcfg(ytcfgObj) {
+      if (!ytcfgObj || ytcfgObj._webshield_hooked) return;
+      try {
+        ytcfgObj._webshield_hooked = true;
+        const origSet = ytcfgObj.set;
+        if (typeof origSet === 'function') {
+          ytcfgObj.set = function (arg) {
+            sanitizeYtcfg(arg);
+            return origSet.apply(this, arguments);
+          };
+        }
+        if (typeof ytcfgObj.get === 'function') {
+          const currentExp = ytcfgObj.get('EXPERIMENT_FLAGS');
+          if (currentExp) sanitizeYtcfg({ EXPERIMENT_FLAGS: currentExp });
+        }
+      } catch (e) { }
+    }
+
+    if (window.ytcfg) {
+      hookYtcfg(window.ytcfg);
+    }
+    let _ytcfg = window.ytcfg;
+    try {
+      Object.defineProperty(window, 'ytcfg', {
+        get() {
+          return _ytcfg;
+        },
+        set(val) {
+          _ytcfg = val;
+          hookYtcfg(_ytcfg);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) { }
+
+    // 4. Intercept window.fetch for Ad Tracking pings (Return 200 OK so player never triggers adblock 403 penalty)
+    try {
+      const originalFetch = window.fetch;
+      window.fetch = async function (...args) {
+        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
+        if (typeof url === 'string') {
+          if (url.includes('/api/stats/ads') ||
+              url.includes('/api/stats/atr') ||
+              url.includes('/pagead/') ||
+              url.includes('doubleclick.net') ||
+              url.includes('/ptracking') ||
+              (url.includes('/api/stats/qoe') && url.includes('adformat'))) {
+            return new Response('', { status: 200, statusText: 'OK' });
+          }
+        }
+        return originalFetch.apply(this, args);
+      };
+    } catch (e) { }
+
+    // 5. Hook Response.prototype.json (uBlock Origin / AdGuard Standard)
+    // Sanitizes parsed player responses without wrapping or altering media streaming bodies
     try {
       const originalResponseJson = Response.prototype.json;
       Response.prototype.json = async function () {
@@ -2168,13 +2257,13 @@
       };
     } catch (e) { }
 
-    // 4. Hook JSON.parse (uBlock Origin Standard json-prune)
+    // 6. Hook JSON.parse (uBlock Origin Standard json-prune)
     try {
       const originalJSONParse = JSON.parse;
       JSON.parse = function (text, reviver) {
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
-          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse) {
+          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse || result.playabilityStatus) {
             pruneAdData(result);
           }
         }
@@ -2182,7 +2271,7 @@
       };
     } catch (e) { }
 
-    // 8. Inject YouTube Zero-Ad Shield CSS (Hide enforcement modals, banners, and interruption toasts)
+    // 7. Inject YouTube Zero-Ad Shield CSS (Hide enforcement modals, banners, and interruption toasts)
     try {
       if (!document.getElementById('webshield-yt-engine-css')) {
         const style = document.createElement('style');
@@ -2211,7 +2300,7 @@
       }
     } catch (e) { }
 
-    // 9. Neutralize Anti-Adblock Warning Modals, Interruption Toasts & Auto-Unpause Video (Ultra-Smooth Debounced)
+    // 8. Neutralize Anti-Adblock Warning Modals & Native Ad Skip Fallback (Pure Native Trigger, No 16x/Mute/Seek)
     let clearScheduled = false;
     function scheduleClear() {
       if (clearScheduled) return;
@@ -2238,6 +2327,24 @@
           } catch (e) {}
           removedEnforcement = true;
         });
+
+        // Clean DOM Skip Fallback: If an ad was queued in HTML5 player before scripts ran,
+        // trigger native skip button (NO video.playbackRate = 16, NO video.muted = true, NO video.currentTime = duration)
+        const ytPlayer = document.querySelector('.html5-video-player');
+        if (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) {
+          const moviePlayer = document.getElementById('movie_player');
+          if (moviePlayer && typeof moviePlayer.skipAd === 'function') {
+            try { moviePlayer.skipAd(); } catch (e) {}
+          }
+          const skipBtn = ytPlayer.querySelector(
+            '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
+            '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button'
+          );
+          if (skipBtn) {
+            simulateNativeClick(skipBtn);
+            try { skipBtn.click(); } catch (e) {}
+          }
+        }
 
         // Suppress "Experiencing interruptions?" toasts
         const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
