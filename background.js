@@ -609,6 +609,15 @@ function ensureStateInitialized() {
           inMemoryBlockedCount = typeof data.blockedCount === 'number' ? data.blockedCount : 0;
           inMemoryBlockedHistory = Array.isArray(data.blockedHistory) ? data.blockedHistory : [];
           inMemoryDisabledDomains = Array.isArray(data.disabledDomains) ? data.disabledDomains : [];
+
+          // Check if 24 hours have passed since last filter update
+          const lastTime = data.lastFiltersUpdateTimestamp || 0;
+          if (Date.now() - lastTime > 24 * 60 * 60 * 1000) {
+            setTimeout(() => {
+              updateOnlineFilters();
+            }, 5000);
+          }
+
           resolve();
         });
       }),
@@ -630,23 +639,6 @@ function ensureStateInitialized() {
           chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
         }
       }
-    });
-  }
-  return initStatePromise;
-}
-          chrome.action.setBadgeText({ text: "" });
-        }
-
-        // Check if 24 hours have passed since last filter update
-        const lastTime = data.lastFiltersUpdateTimestamp || 0;
-        if (Date.now() - lastTime > 24 * 60 * 60 * 1000) {
-          setTimeout(() => {
-            updateOnlineFilters();
-          }, 5000);
-        }
-
-        resolve();
-      });
     });
   }
   return initStatePromise;
