@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "4.0.2" }),
+      getManifest: () => ({ version: "4.0.3" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -935,7 +935,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "4.0.2";
+      const version = manifest.version || "4.0.3";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");

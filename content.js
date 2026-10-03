@@ -81,8 +81,8 @@ if (SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (currentHost === d || c
 // Ensures inject.js runs in the page's Main World even if browser ignores 'world: "MAIN"' in manifest.json
 function ensureMainWorldLoaded() {
   try {
-    const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
-    if (isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
+    const isYt = host.includes('youtube.com') || host.includes('youtu.be');
+    if (!isYt && (isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d))))) return;
     if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
       return; // Already injected and running in MAIN world!
     }

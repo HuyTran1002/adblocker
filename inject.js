@@ -118,8 +118,8 @@
     return extensionEnabled;
   }
 
-  // Synchronous check: if WebShield is disabled globally or for this domain, exit immediately!
-  if (!isEnabled() || isCurrentPageWhitelisted()) {
+  // Synchronous check: if WebShield is disabled globally or for this domain by user, exit immediately!
+  if (!isEnabled()) {
     return;
   }
 
@@ -2059,29 +2059,33 @@
       return '';
     }
 
-    function checkAndReportVideoAds(obj) {
+    function checkAndReportVideoAds(obj, source = 'api') {
       if (!obj || typeof obj !== 'object') return;
       try {
         const videoId = obj?.videoDetails?.videoId ||
                         obj?.playerResponse?.videoDetails?.videoId ||
                         getCurrentVideoId();
-        if (!videoId || reportedVideoAds.has(videoId)) return;
+        if (!videoId) return;
 
-        const hasVideoAds = (Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) ||
-                            (Array.isArray(obj.playerAds) && obj.playerAds.length > 0) ||
-                            (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) ||
-                            (obj.playerResponse && typeof obj.playerResponse === 'object' &&
-                              ((Array.isArray(obj.playerResponse.adPlacements) && obj.playerResponse.adPlacements.length > 0) ||
-                               (Array.isArray(obj.playerResponse.playerAds) && obj.playerResponse.playerAds.length > 0)));
+        const placements = obj.adPlacements || obj.playerResponse?.adPlacements || [];
+        const slots = obj.adSlots || [];
+        const ads = obj.playerAds || obj.playerResponse?.playerAds || [];
+        const rawAdCount = (Array.isArray(placements) ? placements.length : 0) +
+                           (Array.isArray(slots) ? slots.length : 0) +
+                           (Array.isArray(ads) ? ads.length : 0);
 
-        if (hasVideoAds) {
-          reportedVideoAds.add(videoId);
-          if (reportedVideoAds.size > 50) {
-            const firstKey = reportedVideoAds.values().next().value;
-            reportedVideoAds.delete(firstKey);
+        if (rawAdCount > 0) {
+          // Key incorporates ad count so subsequent mid-roll ad deliveries in the same video get reported
+          const reportKey = `${source}_${videoId}_${rawAdCount}`;
+          if (!reportedVideoAds.has(reportKey)) {
+            reportedVideoAds.add(reportKey);
+            if (reportedVideoAds.size > 100) {
+              const firstKey = reportedVideoAds.values().next().value;
+              reportedVideoAds.delete(firstKey);
+            }
+            const adCount = Math.min(3, rawAdCount);
+            reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video YouTube`, adCount);
           }
-          const adCount = Math.min(2, (obj.adPlacements?.length || obj.playerAds?.length || 1));
-          reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video`, adCount);
         }
       } catch (e) { }
     }
@@ -2398,6 +2402,7 @@
       });
     }
 
+    let adMutedByWebShield = false;
     function clearYouTubeEnforcementDialogs() {
       if (!isEnabled()) return;
       try {
@@ -2415,20 +2420,52 @@
           removedEnforcement = true;
         });
 
-        // Active Video Ad Skipping (Instant Skip & Neutralize Fallback)
-        // Note: counting is handled by checkAndReportVideoAds (once per video), not here
+        // Active Video Ad Skipping (Instant Skip, Mute, 16x Speedup & Neutralize Fallback)
         const ytPlayer = document.querySelector('.html5-video-player');
-        if (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) {
+        const isAdPlaying = ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'));
+        if (isAdPlaying) {
           const video = ytPlayer.querySelector('video');
           if (video) {
-            video.muted = true;
+            if (!video.muted) {
+              video.muted = true;
+              adMutedByWebShield = true;
+            }
+            video.playbackRate = 16.0;
             if (isFinite(video.duration) && video.duration > 0) {
               video.currentTime = video.duration;
             }
           }
-          const skipBtn = ytPlayer.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button-container');
+          const skipBtn = ytPlayer.querySelector(
+            '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
+            '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button, .ytp-ad-skip-button-text'
+          );
           if (skipBtn) {
             simulateNativeClick(skipBtn);
+            try { skipBtn.click(); } catch (e) {}
+          }
+
+          // Report blocked video ad if not already reported for this ad block cycle
+          const currentVId = getCurrentVideoId() || 'video';
+          const domAdKey = `dom_${currentVId}_${Math.floor(Date.now() / 8000)}`;
+          if (!reportedVideoAds.has(domAdKey)) {
+            reportedVideoAds.add(domAdKey);
+            if (reportedVideoAds.size > 100) {
+              const firstKey = reportedVideoAds.values().next().value;
+              reportedVideoAds.delete(firstKey);
+            }
+            reportBlocked(`https://www.youtube.com/watch?v=${currentVId} (Quảng cáo Video)`, 'Đã chặn quảng cáo video YouTube', 1);
+          }
+        } else {
+          // Restore playback rate & mute state once ad is finished
+          const video = ytPlayer ? ytPlayer.querySelector('video') : null;
+          if (video) {
+            if (video.playbackRate > 2) {
+              video.playbackRate = 1.0;
+            }
+            if (adMutedByWebShield) {
+              video.muted = false;
+              adMutedByWebShield = false;
+            }
           }
         }
 
@@ -2490,9 +2527,16 @@
       const observer = new MutationObserver(scheduleClear);
       observer.observe(document.documentElement || document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'id', 'style']
       });
     } catch (e) { }
+
+    // Heartbeat check (every 250ms) & navigation listener to neutralize pre-roll & mid-roll ads instantly
+    setInterval(scheduleClear, 250);
+    window.addEventListener('yt-navigate-finish', scheduleClear, true);
+    window.addEventListener('timeupdate', scheduleClear, true);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
