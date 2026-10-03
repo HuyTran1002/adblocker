@@ -2041,7 +2041,7 @@
     // 1. Recursive ad properties purger (AdGuard / uBlock Origin Standard)
     const AD_KEYS = new Set([
       'adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams', 'masthead',
-      'adPlacementRenderer', 'adBreakService', 'adBreakServiceRenderer', 'playbackTracking',
+      'adPlacementRenderer', 'adBreakService', 'adBreakServiceRenderer',
       'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
     ]);
 
@@ -2093,6 +2093,9 @@
     function deepPurgeAdProperties(obj, depth = 0) {
       if (!obj || typeof obj !== 'object' || depth > 10) return obj;
       try {
+        const isLive = !!(obj?.videoDetails?.isLiveContent || obj?.videoDetails?.isLive ||
+                          obj?.playerResponse?.videoDetails?.isLiveContent || obj?.playerResponse?.videoDetails?.isLive);
+
         // Auto-heal player error / detection warning in playerResponse
         if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
           const status = obj.playabilityStatus.status;
@@ -2114,14 +2117,13 @@
             if (item && typeof item === 'object') {
               const renderer = item.adSlotRenderer ||
                 item.adPlacementRenderer ||
-                item.inFeedAdLayoutRenderer ||
-                item.adBreakServiceRenderer;
+                item.inFeedAdLayoutRenderer;
               const targetId = item?.engagementPanelSectionListRenderer?.targetId || '';
-              // Strictly protect live chat engagement panel from being removed or corrupted
-              if (targetId.includes('live-chat') || targetId.includes('chat')) {
+              // Strictly protect live chat engagement panel and live stream ad break renderer from being corrupted
+              if (targetId.includes('live-chat') || targetId.includes('chat') || (isLive && item.adBreakServiceRenderer)) {
                 continue;
               }
-              if (renderer || targetId === 'engagement-panel-ads' || targetId.startsWith('engagement-panel-ads')) {
+              if (renderer || (!isLive && item.adBreakServiceRenderer) || targetId === 'engagement-panel-ads' || targetId.startsWith('engagement-panel-ads')) {
                 obj.splice(i, 1);
               } else {
                 deepPurgeAdProperties(item, depth + 1);
@@ -2141,6 +2143,10 @@
         }
 
         for (const key of Object.keys(obj)) {
+          // On live streams, preserve heartbeat and adBreakService structures needed for live chunk sync
+          if (isLive && (key === 'adBreakHeartbeatParams' || key === 'adBreakService')) {
+            continue;
+          }
           if (AD_KEYS.has(key)) {
             if (key === 'adPlacements' || key === 'playerAds' || key === 'adSlots') {
               obj[key] = [];
@@ -2211,12 +2217,6 @@
           cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement = false;
           cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
           cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
-          cfg.EXPERIMENT_FLAGS.enable_server_stitched_dai = false;
-          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_preroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_midroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_postroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.web_disable_defer_ad = true;
           cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
         }
       } catch (e) { }
@@ -2265,12 +2265,11 @@
         const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
         if (typeof url === 'string') {
           // Block tracking pings to YouTube Ad servers directly with 200 OK so player does not error
+          // NOTE: Do NOT block /api/stats/atr or /ptracking as they are critical for live stream bandwidth & playback sync
           if (url.includes('/api/stats/ads') ||
-              url.includes('/api/stats/atr') ||
               url.includes('/pagead/') ||
               url.includes('doubleclick.net') ||
-              url.includes('/ptracking') ||
-              url.includes('/api/stats/qoe') && url.includes('adformat')) {
+              (url.includes('/api/stats/qoe') && url.includes('adformat'))) {
             return new Response('', { status: 200, statusText: 'OK' });
           }
 
@@ -2353,7 +2352,8 @@
       JSON.parse = function (text, reviver) {
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
-          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse || result.playabilityStatus) {
+          // Target objects containing ad placements to avoid expensive recursive traversal on live stream / live chat JSONs
+          if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse?.adPlacements || result.playerResponse?.playerAds) {
             checkAndReportVideoAds(result);
             deepPurgeAdProperties(result);
           }
