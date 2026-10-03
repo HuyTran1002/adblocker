@@ -922,6 +922,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         inMemoryBlockedHistory.unshift({
           url: blockedUrl,
           domain: domain,
+          reason: message.reason || '',
+          count: countIncrement,
           timestamp: now
         });
         if (inMemoryBlockedHistory.length > 15) {

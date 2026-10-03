@@ -2040,10 +2040,31 @@
 
     // 1. Recursive ad properties purger (AdGuard / uBlock Origin Standard)
     const AD_KEYS = new Set([
-      'adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams', 'masthead',
-      'adPlacementRenderer', 'adBreakService', 'adBreakServiceRenderer',
+      'adPlacements', 'adSlots', 'playerAds', 'masthead',
+      'adPlacementRenderer', 'inFeedAdLayoutRenderer',
       'adTagParameters', 'adLayoutLoggingData', 'invideoAdOptions', 'adModule'
     ]);
+
+    function hasAdData(obj) {
+      if (!obj || typeof obj !== 'object') return false;
+      try {
+        if ((Array.isArray(obj.adPlacements) && obj.adPlacements.length > 0) ||
+            (Array.isArray(obj.adSlots) && obj.adSlots.length > 0) ||
+            (Array.isArray(obj.playerAds) && obj.playerAds.length > 0)) {
+          return true;
+        }
+        if (obj.playerResponse) {
+          if (typeof obj.playerResponse === 'object') {
+            return hasAdData(obj.playerResponse);
+          }
+          if (typeof obj.playerResponse === 'string' &&
+              (obj.playerResponse.includes('adPlacements') || obj.playerResponse.includes('playerAds') || obj.playerResponse.includes('adSlots'))) {
+            return true;
+          }
+        }
+      } catch (e) { }
+      return false;
+    }
 
     // Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
@@ -2094,7 +2115,8 @@
       if (!obj || typeof obj !== 'object' || depth > 10) return obj;
       try {
         const isLive = !!(obj?.videoDetails?.isLiveContent || obj?.videoDetails?.isLive ||
-                          obj?.playerResponse?.videoDetails?.isLiveContent || obj?.playerResponse?.videoDetails?.isLive);
+                          obj?.playerResponse?.videoDetails?.isLiveContent || obj?.playerResponse?.videoDetails?.isLive ||
+                          window.location.pathname.includes('/live'));
 
         // Auto-heal player error / detection warning in playerResponse
         if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
@@ -2209,7 +2231,65 @@
       });
     } catch (e) { }
 
-    // 4. Intercept ytcfg (YouTube Configuration Object - disable ads experiment flags)
+    // 4. Intercept window.ytplayer (Initial HTML5 Player Configuration)
+    function sanitizePlayerArgs(args) {
+      if (!args || typeof args !== 'object') return;
+      try {
+        if (typeof args.player_response === 'string') {
+          try {
+            const parsed = JSON.parse(args.player_response);
+            if (hasAdData(parsed)) {
+              checkAndReportVideoAds(parsed, 'ytplayer');
+              deepPurgeAdProperties(parsed);
+              args.player_response = JSON.stringify(parsed);
+            }
+          } catch (e) { }
+        } else if (typeof args.player_response === 'object' && hasAdData(args.player_response)) {
+          checkAndReportVideoAds(args.player_response, 'ytplayer');
+          deepPurgeAdProperties(args.player_response);
+        }
+        if (typeof args.raw_player_response === 'object' && hasAdData(args.raw_player_response)) {
+          checkAndReportVideoAds(args.raw_player_response, 'ytplayer');
+          deepPurgeAdProperties(args.raw_player_response);
+        }
+      } catch (e) { }
+    }
+
+    function hookYtPlayer(ytplayerObj) {
+      if (!ytplayerObj || ytplayerObj._webshield_hooked) return;
+      try {
+        ytplayerObj._webshield_hooked = true;
+        let _config = ytplayerObj.config;
+        if (_config && _config.args) sanitizePlayerArgs(_config.args);
+        try {
+          Object.defineProperty(ytplayerObj, 'config', {
+            get() { return _config; },
+            set(val) {
+              _config = val;
+              if (_config && _config.args) sanitizePlayerArgs(_config.args);
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) { }
+      } catch (e) { }
+    }
+
+    if (window.ytplayer) hookYtPlayer(window.ytplayer);
+    let _ytplayer = window.ytplayer;
+    try {
+      Object.defineProperty(window, 'ytplayer', {
+        get() { return _ytplayer; },
+        set(val) {
+          _ytplayer = val;
+          hookYtPlayer(_ytplayer);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) { }
+
+    // 5. Intercept ytcfg (YouTube Configuration Object - disable ads experiment flags)
     function sanitizeYtcfg(cfg) {
       if (!cfg || typeof cfg !== 'object') return;
       try {
@@ -2258,7 +2338,7 @@
       });
     } catch (e) { }
 
-    // 5. Intercept window.fetch for YouTube API endpoints
+    // 6. Intercept window.fetch for YouTube API endpoints
     try {
       const originalFetch = window.fetch;
       window.fetch = async function (...args) {
@@ -2273,32 +2353,48 @@
             return new Response('', { status: 200, statusText: 'OK' });
           }
 
+          // Do NOT intercept live stream heartbeats, stats, live chat, or browse requests
+          if (url.includes('/player/heartbeat') ||
+              url.includes('/api/stats') ||
+              url.includes('/youtubei/v1/browse') ||
+              url.includes('/live_chat')) {
+            return originalFetch.apply(this, args);
+          }
+
           const isPlayerApi = url.includes('/youtubei/v1/player') ||
             url.includes('/youtubei/v1/next') ||
-            url.includes('/youtubei/v1/reel/reel_item_watch') ||
-            url.includes('/youtubei/v1/browse');
+            url.includes('/youtubei/v1/reel/reel_item_watch');
 
           if (isPlayerApi) {
             const response = await originalFetch.apply(this, args);
             try {
               const clone = response.clone();
               const data = await clone.json();
-              checkAndReportVideoAds(data);
-              deepPurgeAdProperties(data);
+              if (hasAdData(data)) {
+                checkAndReportVideoAds(data);
+                deepPurgeAdProperties(data);
 
-              const modifiedBody = JSON.stringify(data);
-              const newHeaders = new Headers(response.headers);
-              newHeaders.set('Content-Type', 'application/json; charset=utf-8');
+                const modifiedBody = JSON.stringify(data);
+                const newHeaders = new Headers(response.headers);
+                // MUST strip content-length & content-encoding so browser does not fail reading decompressed modified payload
+                newHeaders.delete('content-length');
+                newHeaders.delete('Content-Length');
+                newHeaders.delete('content-encoding');
+                newHeaders.delete('Content-Encoding');
+                newHeaders.set('Content-Type', 'application/json; charset=utf-8');
 
-              const modifiedResponse = new Response(modifiedBody, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: newHeaders
-              });
-              try {
-                Object.defineProperty(modifiedResponse, 'url', { value: response.url });
-              } catch (e) { }
-              return modifiedResponse;
+                const modifiedResponse = new Response(modifiedBody, {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: newHeaders
+                });
+                try {
+                  Object.defineProperty(modifiedResponse, 'url', { value: response.url });
+                } catch (e) { }
+                return modifiedResponse;
+              }
+              // No ads found: return original response untouched to guarantee flawless live stream & zero latency
+              return response;
             } catch (parseErr) {
               return response;
             }
@@ -2308,7 +2404,7 @@
       };
     } catch (e) { }
 
-    // 6. Intercept XMLHttpRequest
+    // 7. Intercept XMLHttpRequest
     try {
       const originalOpen = XMLHttpRequest.prototype.open;
       const originalSend = XMLHttpRequest.prototype.send;
@@ -2319,24 +2415,25 @@
       };
 
       XMLHttpRequest.prototype.send = function (...args) {
-        if (this._ytUrl && (
+        if (this._ytUrl && !this._ytUrl.includes('/player/heartbeat') && !this._ytUrl.includes('/browse') && !this._ytUrl.includes('/live_chat') && (
           this._ytUrl.includes('/youtubei/v1/player') ||
           this._ytUrl.includes('/youtubei/v1/next') ||
-          this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch') ||
-          this._ytUrl.includes('/youtubei/v1/browse')
+          this._ytUrl.includes('/youtubei/v1/reel/reel_item_watch')
         )) {
           this.addEventListener('readystatechange', function () {
             if (this.readyState === 4 && this.status === 200) {
               try {
                 const data = JSON.parse(this.responseText);
-                checkAndReportVideoAds(data);
-                deepPurgeAdProperties(data);
-                const cleanJson = JSON.stringify(data);
-                if (this.responseType === 'json') {
-                  Object.defineProperty(this, 'response', { value: data, configurable: true });
-                } else {
-                  Object.defineProperty(this, 'responseText', { value: cleanJson, configurable: true });
-                  Object.defineProperty(this, 'response', { value: cleanJson, configurable: true });
+                if (hasAdData(data)) {
+                  checkAndReportVideoAds(data);
+                  deepPurgeAdProperties(data);
+                  const cleanJson = JSON.stringify(data);
+                  if (this.responseType === 'json') {
+                    Object.defineProperty(this, 'response', { value: data, configurable: true });
+                  } else {
+                    Object.defineProperty(this, 'responseText', { value: cleanJson, configurable: true });
+                    Object.defineProperty(this, 'response', { value: cleanJson, configurable: true });
+                  }
                 }
               } catch (e) { }
             }

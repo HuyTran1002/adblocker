@@ -192,15 +192,18 @@ document.addEventListener("DOMContentLoaded", () => {
             if (displayUrl.length > 32) displayUrl = displayUrl.substring(0, 32) + "...";
           } catch (e) {}
         }
+        const countBadge = (item.count && item.count > 1)
+          ? `<span class="history-count-badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.5px 5px; font-size: 10px; font-weight: 700; margin-left: 5px;" title="${item.count} quảng cáo">${item.count} QC</span>`
+          : '';
         itemEl.innerHTML = `
           <div class="history-details">
-            <span class="history-domain">${item.domain || "Web"}</span>
+            <span class="history-domain">${item.domain || "Web"}${countBadge}</span>
             <span class="history-url" title="Bấm để sao chép: ${item.url || displayUrl}">${displayUrl}</span>
           </div>
           <span class="history-time">${formatRelativeTime(item.timestamp)}</span>
         `;
         itemEl.style.cursor = "pointer";
-        itemEl.title = `Bấm để sao chép đầy đủ: ${item.url || displayUrl}`;
+        itemEl.title = `Bấm để sao chép đầy đủ: ${item.url || displayUrl}${item.count && item.count > 1 ? ` (${item.count} quảng cáo đã chặn)` : ''}`;
         itemEl.addEventListener("click", () => {
           copyToClipboard(item.url || displayUrl, () => {
             const urlSpan = itemEl.querySelector(".history-url");
