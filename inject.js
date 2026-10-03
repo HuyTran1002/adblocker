@@ -2102,12 +2102,11 @@
           }
         }
 
-        // 3. Clear all ad-related payloads
+        // 3. Clear all ad-related payloads (preserve playbackTracking to avoid player validation errors)
         if (Array.isArray(obj.adPlacements)) obj.adPlacements = [];
         if (Array.isArray(obj.playerAds)) obj.playerAds = [];
         if (Array.isArray(obj.adSlots)) obj.adSlots = [];
         if (obj.adBreakHeartbeatParams) delete obj.adBreakHeartbeatParams;
-        if (obj.playbackTracking) delete obj.playbackTracking;
 
         // Clean anti-adblock enforcement dialogs & interruption prompts from payload
         if (obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers) {
@@ -2175,16 +2174,21 @@
       if (!cfg || typeof cfg !== 'object') return;
       try {
         if (cfg.EXPERIMENT_FLAGS && typeof cfg.EXPERIMENT_FLAGS === 'object') {
-          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement = false;
-          cfg.EXPERIMENT_FLAGS.web_enable_ab_enforcement_v2 = false;
-          cfg.EXPERIMENT_FLAGS.enable_ad_placement_service = false;
-          cfg.EXPERIMENT_FLAGS.enable_server_stitched_dai = false;
-          cfg.EXPERIMENT_FLAGS.html5_ad_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_preroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_midroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.html5_ad_postroll_timeout_ms = 1;
-          cfg.EXPERIMENT_FLAGS.web_disable_defer_ad = true;
-          cfg.EXPERIMENT_FLAGS.disable_child_node_auto_log = true;
+          const exp = cfg.EXPERIMENT_FLAGS;
+          exp.web_enable_ab_enforcement = false;
+          exp.web_enable_ab_enforcement_v2 = false;
+          exp.enable_ad_placement_service = false;
+          exp.enable_server_stitched_dai = false;
+          exp.html5_ss_ad_enabled = false;
+          exp.html5_enable_ss_overlay = false;
+          exp.html5_ss_ad_format = false;
+          exp.html5_server_stitched_dai_group = '';
+          exp.html5_ad_timeout_ms = 1;
+          exp.html5_ad_preroll_timeout_ms = 1;
+          exp.html5_ad_midroll_timeout_ms = 1;
+          exp.html5_ad_postroll_timeout_ms = 1;
+          exp.web_disable_defer_ad = true;
+          exp.disable_child_node_auto_log = true;
         }
       } catch (e) { }
     }
@@ -2195,9 +2199,23 @@
         ytcfgObj._webshield_hooked = true;
         const origSet = ytcfgObj.set;
         if (typeof origSet === 'function') {
-          ytcfgObj.set = function (arg) {
-            sanitizeYtcfg(arg);
-            return origSet.apply(this, arguments);
+          ytcfgObj.set = function (...args) {
+            if (args[0] && typeof args[0] === 'object') {
+              sanitizeYtcfg(args[0]);
+            } else if (typeof args[0] === 'string' && args[0] === 'EXPERIMENT_FLAGS' && args[1] && typeof args[1] === 'object') {
+              sanitizeYtcfg({ EXPERIMENT_FLAGS: args[1] });
+            }
+            return origSet.apply(this, args);
+          };
+        }
+        const origGet = ytcfgObj.get;
+        if (typeof origGet === 'function') {
+          ytcfgObj.get = function (key) {
+            const val = origGet.apply(this, arguments);
+            if (key === 'EXPERIMENT_FLAGS' && val && typeof val === 'object') {
+              sanitizeYtcfg({ EXPERIMENT_FLAGS: val });
+            }
+            return val;
           };
         }
         if (typeof ytcfgObj.get === 'function') {
@@ -2404,12 +2422,14 @@
       const observer = new MutationObserver(scheduleClear);
       observer.observe(document.documentElement || document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'id', 'style']
       });
     } catch (e) { }
 
-    // Periodic check to dismiss any anti-adblock dialogs & navigation listener
-    setInterval(scheduleClear, 1500);
+    // Periodic fast check (every 300ms) to dismiss ads & dialogs with zero lag
+    setInterval(scheduleClear, 300);
     window.addEventListener('yt-navigate-finish', scheduleClear, true);
   }
 
