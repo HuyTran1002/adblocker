@@ -2,6 +2,9 @@
 // @ts-nocheck
 console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
 
+(function() {
+  'use strict';
+
 
 // Skip sensitive authentication, identity provider, developer portal, and extension store domains
 let currentEnabledState = true;
@@ -30,11 +33,48 @@ const SENSITIVE_DOMAINS = [
   'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
   'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
   'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
-  'paypal.com', 'stripe.com'
+  'paypal.com', 'stripe.com',
+  'canva.com', 'figma.com', 'notion.so', 'trello.com'
 ];
+
+const whitelistedDomains = [
+  'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
+  'google.com', 'google.com.vn', 'accounts.google.com', 'myaccount.google.com',
+  'chromewebstore.google.com', 'chrome.google.com',
+  'facebook.com', 'fb.com', 'm.facebook.com',
+  'twitter.com', 'x.com',
+  'github.com', 'gitlab.com', 'apple.com', 'appleid.apple.com',
+  'microsoft.com', 'microsoftonline.com', 'login.microsoftonline.com', 'login.live.com',
+  'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
+  'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
+  'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
+  'auth0.com', 'firebaseapp.com', 'okta.com', 'id.atlassian.com',
+  'canva.com', 'figma.com', 'notion.so'
+];
+
+let customWhitelistedDomains = [];
+
+function isCurrentPageWhitelisted() {
+  try {
+    const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    const isHardcoded = whitelistedDomains.some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain)));
+    const isCustom = (customWhitelistedDomains || []).some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host)));
+    return isHardcoded || isCustom || !currentEnabledState;
+  } catch (e) {
+    return false;
+  }
+}
+
 const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
-if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
-  // Completely inactive on sensitive/auth domains
+if (SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (currentHost === d || currentHost.endsWith('.' + d)))) {
+  currentEnabledState = false;
+  try {
+    if (document.documentElement) {
+      document.documentElement.setAttribute('data-anti-popunder-enabled', 'false');
+    }
+  } catch (e) {}
+  // Completely inactive on sensitive/productivity domains
+  return;
 }
 
 // Fallback Main World Injector for Mobile Browsers (Kiwi, Lemur, Firefox Android)
@@ -42,7 +82,7 @@ if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + 
 function ensureMainWorldLoaded() {
   try {
     const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
-    if (SENSITIVE_DOMAINS.some(d => host === d || host.endsWith('.' + d))) return;
+    if (isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
     if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
       return; // Already injected and running in MAIN world!
     }
@@ -131,32 +171,6 @@ const isEmbeddedPlayerFrame = (function () {
   return false;
 })();
 
-const whitelistedDomains = [
-  'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
-  'google.com', 'google.com.vn', 'accounts.google.com', 'myaccount.google.com',
-  'chromewebstore.google.com', 'chrome.google.com',
-  'facebook.com', 'fb.com', 'm.facebook.com',
-  'twitter.com', 'x.com',
-  'github.com', 'gitlab.com', 'apple.com', 'appleid.apple.com',
-  'microsoft.com', 'microsoftonline.com', 'login.microsoftonline.com', 'login.live.com',
-  'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
-  'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
-  'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
-  'auth0.com', 'firebaseapp.com', 'okta.com', 'id.atlassian.com'
-];
-
-let customWhitelistedDomains = [];
-
-function isCurrentPageWhitelisted() {
-  try {
-    const host = window.location.hostname.toLowerCase();
-    const isHardcoded = whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain));
-    const isCustom = (customWhitelistedDomains || []).some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
-    return isHardcoded || isCustom || !currentEnabledState;
-  } catch (e) {
-    return false;
-  }
-}
 
 const adSelectors = [
   // General explicit ad classes and IDs
@@ -312,18 +326,7 @@ function injectAdBlockCSS() {
   #popBannerAds, #topBannerContainer, #bottomBannerContainer, #underPlayerAdsContainer,
   .under-player-banner, .top-banner-wrapper, .bottom-banner-wrapper,
   .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper,
-  .dplayer-pre-bg, .dplayer-pre-countdown, .dplayer-pre-img, [class*="dplayer-pre-"],
-  div[style*="99999999"], div[style*="2147483647"],
-  div[style*="width: 100%"][style*="height: 100%"][style*="fixed"],
-  div[style*="width:100%"][style*="height:100%"][style*="fixed"],
-  div[style*="width: 100vw"][style*="height: 100vh"][style*="fixed"],
-  div[style*="width:100vw"][style*="height:100vh"][style*="fixed"],
-  div[style*="position: fixed"][style*="top: 0"][style*="left: 0"][style*="width: 100%"][style*="height: 100%"],
-  div[style*="position:fixed"][style*="top:0"][style*="left:0"][style*="width:100%"][style*="height:100%"],
-  div[style*="position: fixed"][style*="top: 0px"][style*="left: 0px"][style*="width: 100%"][style*="height: 100%"],
-  div[style*="position:fixed"][style*="top:0px"][style*="left:0px"][style*="width:100%"][style*="height:100%"],
-  div[style*="cursor: pointer"][style*="fixed"][style*="transparent"],
-  div[style*="cursor:pointer"][style*="fixed"][style*="transparent"] {
+  .dplayer-pre-bg, .dplayer-pre-countdown, .dplayer-pre-img, [class*="dplayer-pre-"] {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
@@ -589,6 +592,7 @@ if (currentEnabledState) {
           }
         });
       } catch (e) {}
+
     }
 
     // Listen for blocking events from inject.js (via window.postMessage)
@@ -2814,42 +2818,6 @@ if (currentEnabledState) {
         if (!target || target === pickerOverlay || target === pickerBadge || (pickerBadge && pickerBadge.contains(target))) return;
         if (target === document.body || target === document.documentElement) return;
 
-        // Auto-detect if target is inside a floating popup/banner container (fixed/absolute with high z-index)
-        let rootFloater = null;
-        let curr = target;
-        while (curr && curr !== document.body && curr !== document.documentElement) {
-          try {
-            const cs = window.getComputedStyle(curr);
-            const pos = cs.position;
-            const zIndex = parseInt(cs.zIndex, 10);
-            if ((pos === 'fixed' || pos === 'absolute') && (zIndex >= 100 || cs.zIndex === 'auto' || isNaN(zIndex))) {
-              const cTag = curr.tagName ? curr.tagName.toLowerCase() : '';
-              if (cTag !== 'video' && cTag !== 'audio') {
-                rootFloater = curr;
-              }
-            }
-          } catch(e) {}
-          curr = curr.parentElement;
-        }
-
-        if (rootFloater && rootFloater !== target) {
-          const history = [target];
-          let p = target.parentElement;
-          while (p && p !== rootFloater.parentElement) {
-            history.push(p);
-            if (p === rootFloater) break;
-            p = p.parentElement;
-          }
-          targetHistory = history;
-          // Default to the full floating popup container so the whole ad is blocked!
-          historyIndex = history.length - 1;
-          const selected = targetHistory[historyIndex];
-          isLocked = true;
-          currentHoveredTarget = selected;
-          updateOverlay(selected);
-          return;
-        }
-
         targetHistory = [target];
         historyIndex = 0;
         isLocked = true;
@@ -2969,13 +2937,40 @@ if (currentEnabledState) {
         historyIndex = 0;
       };
 
-      // Do NOT automatically target or lock onto anything on entry!
-      isLocked = false;
-      targetHistory = [];
-      historyIndex = 0;
-      currentHoveredTarget = null;
-      if (pickerOverlay) pickerOverlay.style.display = 'none';
-      renderInstructionBadge();
+      // Check if target was pre-selected (via context menu on an element or info URL)
+      if (initialElement && initialElement.nodeType === 1 && initialElement !== document.body && initialElement !== document.documentElement) {
+        lockElement(initialElement);
+      } else if (info && (info.srcUrl || info.frameUrl)) {
+        let matched = null;
+        try {
+          const rawUrl = info.srcUrl || info.frameUrl;
+          const cleanUrl = rawUrl.split('?')[0].split('#')[0];
+          const filename = cleanUrl.split('/').filter(Boolean).pop();
+          if (filename && filename.length > 4) {
+            matched = document.querySelector(`img[src*="${CSS.escape(filename)}"], iframe[src*="${CSS.escape(filename)}"]`);
+          }
+          if (!matched) {
+            matched = document.querySelector(`img[src="${CSS.escape(rawUrl)}"], iframe[src="${CSS.escape(rawUrl)}"]`);
+          }
+        } catch(e) {}
+        if (matched) {
+          lockElement(matched);
+        } else {
+          isLocked = false;
+          targetHistory = [];
+          historyIndex = 0;
+          currentHoveredTarget = null;
+          if (pickerOverlay) pickerOverlay.style.display = 'none';
+          renderInstructionBadge();
+        }
+      } else {
+        isLocked = false;
+        targetHistory = [];
+        historyIndex = 0;
+        currentHoveredTarget = null;
+        if (pickerOverlay) pickerOverlay.style.display = 'none';
+        renderInstructionBadge();
+      }
     }
 
     function stopTargetPicker() {
@@ -2985,11 +2980,25 @@ if (currentEnabledState) {
       }
     }
 
-    // Listen for background message (Right-Click Context Menu / Popup Target Button)
+    // Unified message listener (Settings updates, Target Picker, Context Menu)
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+        if (!msg) return;
+
+        if (msg.type === 'SET_ENABLED_STATE') {
+          updateEnabledState(msg.enabled !== false, msg.disabledDomains || customWhitelistedDomains);
+          if (sendResponse) sendResponse({ success: true, enabled: currentEnabledState });
+          return true;
+        }
+
         if (msg.type === 'START_MANUAL_BLOCK' || msg.type === 'START_TARGET_PICKER') {
           startTargetPicker(lastRightClickedElement, msg.info);
+          if (sendResponse) sendResponse({ success: true, active: isTargetPickerActive });
+          return true;
+        }
+
+        if (msg.type === 'STOP_TARGET_PICKER') {
+          stopTargetPicker();
           if (sendResponse) sendResponse({ success: true });
           return true;
         }
@@ -3113,16 +3122,17 @@ if (currentEnabledState) {
 
       function isPopupOrOverlay(el) {
         if (!el || !el.classList) return false;
-        const cls = el.className || '';
+        const cls = (typeof el.className === 'string') ? el.className : (el.getAttribute && el.getAttribute('class')) || '';
+        if (typeof cls !== 'string') return false;
         // Radix Dialog overlay uses z-[9998], modal uses z-[9999]
         if (cls.includes('z-[9998]') || cls.includes('z-[9999]')) return true;
         // dialog role with gambling link inside
-        if (el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true') {
-          const links = el.querySelectorAll('a[href]');
+        if (el.getAttribute && (el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true')) {
+          const links = el.querySelectorAll ? el.querySelectorAll('a[href]') : [];
           for (const a of links) {
             if (GAMBLING_HREFS.some(kw => (a.href || '').toLowerCase().includes(kw))) return true;
           }
-          const imgs = el.querySelectorAll('img[src]');
+          const imgs = el.querySelectorAll ? el.querySelectorAll('img[src]') : [];
           for (const img of imgs) {
             if (GAMBLING_HREFS.some(kw => (img.src || '').toLowerCase().includes(kw))) return true;
           }
@@ -3138,7 +3148,7 @@ if (currentEnabledState) {
         candidates.forEach(el => {
           if (!isInsideVideoPlayer(el) && isPopupOrOverlay(el)) {
             el.remove();
-            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', el.className || el.tagName);
+            console.log('[Anti Pop-Under] Removed motphimc popup overlay:', (typeof el.className === 'string' ? el.className : (el.getAttribute && el.getAttribute('class'))) || el.tagName);
             scheduleJanitorSweep();
           }
         });
@@ -3355,7 +3365,8 @@ if (currentEnabledState) {
                                     text.includes('trending now') ||
                                     text.includes('nhận hoa hồng') ||
                                     text.includes('quảng cáo');
-              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(el.className || '') ||
+              const elClassStr = (typeof el.className === 'string') ? el.className : (el.getAttribute && el.getAttribute('class')) || '';
+              const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(typeof elClassStr === 'string' ? elClassStr : '') ||
                                  /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(el.id || '');
               if (hasFake18OrAd && (hasAdClass || zIndex >= 9000 || el.querySelector('video, iframe, button'))) {
                 return true;
@@ -3452,3 +3463,5 @@ if (currentEnabledState) {
       }, 300);
     })();
     // === END UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
+
+})();

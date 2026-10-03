@@ -22,11 +22,12 @@
     'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
     'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
     'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
-    'paypal.com', 'stripe.com'
+    'paypal.com', 'stripe.com',
+    'canva.com', 'figma.com', 'notion.so', 'trello.com'
   ];
   const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
   if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
-    return; // Completely inactive on sensitive/auth domains
+    return; // Completely inactive on sensitive/auth/productivity domains
   }
 
   const isYouTube = currentHost.includes('youtube.com') ||
@@ -34,24 +35,93 @@
     currentHost.includes('google') ||
     currentHost.includes('doubleclick');
 
-  // Synchronous check: if WebShield is disabled globally or for this domain, exit immediately!
+  // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
+  let initialPlayerResponse = undefined;
+  let initialData = undefined;
+  let ytplayer = undefined;
+  let extensionEnabled = true;
   try {
-    if (typeof sessionStorage !== 'undefined') {
-      if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
-        return; // Disabled globally or for this tab
-      }
-      const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
-      if (rawDisabled) {
-        const disabledList = JSON.parse(rawDisabled);
-        if (Array.isArray(disabledList) && disabledList.some(d => currentHost === d || currentHost.endsWith('.' + d) || d.endsWith('.' + currentHost))) {
-          return; // Whitelisted domain
-        }
-      }
-    }
-    if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
-      return;
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__webshield_enabled__') === 'false') {
+      extensionEnabled = false;
     }
   } catch (e) {}
+  try {
+    if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+      extensionEnabled = false;
+    }
+  } catch (e) {}
+  let contentScriptReady = false;
+  const pendingReports = [];
+  let lastInteractionTime = 0;
+  let lastInteractionEvent = null;
+
+  const whitelistedDomains = [
+    'google.com', 'google.com.vn', 'accounts.google.com',
+    'facebook.com', 'fb.com', 'm.facebook.com',
+    'twitter.com', 'x.com',
+    'github.com', 'apple.com', 'microsoft.com', 'microsoftonline.com',
+    'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
+    'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
+    'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
+    'auth0.com', 'firebaseapp.com', 'okta.com',
+    'canva.com', 'figma.com', 'notion.so'
+  ];
+
+  function isCurrentPageWhitelisted() {
+    try {
+      const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+      if (whitelistedDomains.some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain)))) {
+        return true;
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        if (sessionStorage.getItem('__webshield_enabled__') === 'false') return true;
+        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+        if (rawDisabled) {
+          const disabledList = JSON.parse(rawDisabled);
+          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d) || d.endsWith('.' + host)))) {
+            return true;
+          }
+        }
+      }
+      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+        return true;
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
+
+  function isEnabled() {
+    if (!extensionEnabled) return false;
+    try {
+      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
+        extensionEnabled = false;
+        return false;
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
+          extensionEnabled = false;
+          return false;
+        }
+        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
+        if (rawDisabled) {
+          const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+          const disabledList = JSON.parse(rawDisabled);
+          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d) || d.endsWith('.' + host)))) {
+            extensionEnabled = false;
+            return false;
+          }
+        }
+      }
+    } catch (e) {}
+    return extensionEnabled;
+  }
+
+  // Synchronous check: if WebShield is disabled globally or for this domain, exit immediately!
+  if (!isEnabled() || isCurrentPageWhitelisted()) {
+    return;
+  }
 
   // 91porn / 91porna Landing Modal Suppressor
   // Pre-seed localStorage key '__landing_modal_at__' with today's date (YYYY-MM-DD)
@@ -112,12 +182,11 @@
   } catch (e) {}
 
   // Universal Transparent Clickjack & Floating Ad Overlay Interceptor (Pre-DOM Drop Hook)
-  // Preemptively catches and drops invisible overlays and self-healing ad containers (pu.js / atContainer / ExoClick)
-  // Prevents overlays from ever entering the DOM so they cannot block clicks or show persistent popups
+  // Preemptively catches and drops ad containers from known malicious ad networks
   try {
     function isSuspectOverlayNode(node) {
       if (!node || node.nodeType !== 1) return false;
-      if (isYouTube) return false;
+      if (isYouTube || !isEnabled() || isCurrentPageWhitelisted()) return false;
       const tag = (node.tagName || '').toLowerCase();
       const id = (node.id || '').toLowerCase();
       const className = (typeof node.className === 'string') ? node.className.toLowerCase() : '';
@@ -138,22 +207,6 @@
         }
       }
 
-      if (tag !== 'div' && tag !== 'span' && tag !== 'a') return false;
-      if (node.childElementCount > 0 || (node.textContent && node.textContent.trim().length > 30)) return false;
-
-      const css = (node.style && node.style.cssText) ? node.style.cssText.toLowerCase() : '';
-      const hasHighZ = css.includes('99999999') || css.includes('2147483647') || (node.style && node.style.zIndex && parseInt(node.style.zIndex, 10) >= 9999);
-      const isFixed = css.includes('fixed') || css.includes('absolute');
-      const isFullScreen = ((css.includes('width:100%') || css.includes('width: 100%') || css.includes('width:100vw')) &&
-                            (css.includes('height:100%') || css.includes('height: 100%') || css.includes('height:100vh'))) ||
-                            css.includes('inset:0') || css.includes('inset: 0') ||
-                            ((css.includes('top: 0') || css.includes('top:0')) && (css.includes('bottom: 0') || css.includes('bottom:0')) &&
-                             (css.includes('left: 0') || css.includes('left:0')) && (css.includes('right: 0') || css.includes('right:0')));
-      const isTransparent = css.includes('transparent') || css.includes('opacity:0') || css.includes('opacity: 0');
-
-      if (isFixed && (hasHighZ || (isFullScreen && (isTransparent || css.includes('cursor'))))) {
-        return true;
-      }
       return false;
     }
 
@@ -180,7 +233,21 @@
         } catch(e) {}
         return newNode; // Silently drop: never attach to DOM
       }
-      return origInsertBefore.apply(this, arguments);
+      try {
+        if (referenceNode && referenceNode.parentNode !== this) {
+          // If referenceNode was removed or is not a child of this node (e.g. ad cleanup or hydration mismatch),
+          // fallback to appendChild to prevent fatal DOMException crashes
+          return origAppendChild.call(this, newNode);
+        }
+        return origInsertBefore.apply(this, arguments);
+      } catch (err) {
+        if (err && (err.name === 'NotFoundError' || err.code === 8)) {
+          try {
+            return origAppendChild.call(this, newNode);
+          } catch(e) {}
+        }
+        throw err;
+      }
     };
 
     const origAppend = Element.prototype.append;
@@ -203,23 +270,11 @@
   } catch (e) {}
 
   // Zero-Latency CSS Overlay Killer
-  if (!isYouTube) {
+  if (!isYouTube && isEnabled() && !isCurrentPageWhitelisted()) {
     try {
       const overlayKillerStyle = document.createElement('style');
       overlayKillerStyle.id = 'webshield-overlay-killer';
       overlayKillerStyle.textContent = `
-      div[style*="99999999"],
-      div[style*="2147483647"],
-      div[style*="width: 100%"][style*="height: 100%"][style*="fixed"],
-      div[style*="width:100%"][style*="height:100%"][style*="fixed"],
-      div[style*="width: 100vw"][style*="height: 100vh"][style*="fixed"],
-      div[style*="width:100vw"][style*="height:100vh"][style*="fixed"],
-      div[style*="position: fixed"][style*="top: 0"][style*="left: 0"][style*="width: 100%"][style*="height: 100%"],
-      div[style*="position:fixed"][style*="top:0"][style*="left:0"][style*="width:100%"][style*="height:100%"],
-      div[style*="position: fixed"][style*="top: 0px"][style*="left: 0px"][style*="width: 100%"][style*="height: 100%"],
-      div[style*="position:fixed"][style*="top:0px"][style*="left:0px"][style*="width:100%"][style*="height:100%"],
-      div[style*="cursor: pointer"][style*="fixed"][style*="transparent"],
-      div[style*="cursor:pointer"][style*="fixed"][style*="transparent"],
       [id^="atContainer-"], [id*="atContainer-"], [class*="atContainer-"],
       [id*="at-container"], [class*="at-container"],
       .adsbyexoclick, ins.adsbyexoclick, [data-zoneid],
@@ -241,8 +296,6 @@
       div[id*="ad-bottom-bar"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[id*="sticky-banner"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       div[class*="floating-ad"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
-      div[style*="inset: 0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
-      div[style*="inset:0"][style*="fixed"][style*="z-index"]:not([class*="player"]):not([class*="thumb"]):not([class*="movie"]),
       #catfishPcGuest, .fxMidGrid, .fxMidWrap, [id*="catfishPcGuest"], [class*="fxMidGrid"], [class*="fxMidWrap"],
       #adFloat, #ad_float, #ad-float, .adFloat, .ad-float,
       #floatAd, #float_ad, #float-ad, .floatAd, .float-ad,
@@ -258,15 +311,15 @@
       }
 
     `;
-    const targetMount = document.head || document.documentElement;
-    if (targetMount) {
-      targetMount.appendChild(overlayKillerStyle);
-    } else {
-      document.addEventListener('DOMContentLoaded', () => {
-        (document.head || document.documentElement).appendChild(overlayKillerStyle);
-      }, { once: true });
-    }
-  } catch(e) {}
+      const targetMount = document.head || document.documentElement;
+      if (targetMount) {
+        targetMount.appendChild(overlayKillerStyle);
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          (document.head || document.documentElement).appendChild(overlayKillerStyle);
+        }, { once: true });
+      }
+    } catch(e) {}
   }
 
 
@@ -678,61 +731,6 @@
     } catch (e) { }
   })();
 
-  // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
-  let initialPlayerResponse = undefined;
-  let initialData = undefined;
-  let ytplayer = undefined;
-  let extensionEnabled = true;
-  try {
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__webshield_enabled__') === 'false') {
-      extensionEnabled = false;
-    }
-  } catch (e) {}
-  try {
-    if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
-      extensionEnabled = false;
-    }
-  } catch (e) {}
-  let contentScriptReady = false;
-  const pendingReports = [];
-  let lastInteractionTime = 0;
-  let lastInteractionEvent = null;
-
-  const whitelistedDomains = [
-    'google.com', 'google.com.vn', 'accounts.google.com',
-    'facebook.com', 'fb.com', 'm.facebook.com',
-    'twitter.com', 'x.com',
-    'github.com', 'apple.com', 'microsoft.com', 'microsoftonline.com',
-    'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
-    'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
-    'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
-    'auth0.com', 'firebaseapp.com', 'okta.com'
-  ];
-
-  function isCurrentPageWhitelisted() {
-    try {
-      const host = window.location.hostname.toLowerCase();
-      if (whitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain))) {
-        return true;
-      }
-      if (typeof sessionStorage !== 'undefined') {
-        if (sessionStorage.getItem('__webshield_enabled__') === 'false') return true;
-        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
-        if (rawDisabled) {
-          const disabledList = JSON.parse(rawDisabled);
-          if (Array.isArray(disabledList) && disabledList.some(d => host === d || host.endsWith('.' + d) || d.endsWith('.' + host))) {
-            return true;
-          }
-        }
-      }
-      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
-        return true;
-      }
-    } catch (e) {
-      return false;
-    }
-    return false;
-  }
 
   const blockedReportTimes = new Map();
   const BLOCKED_REPORT_COOLDOWN = 15000;
@@ -1215,6 +1213,10 @@
       contentScriptReady = true;
       if (extensionEnabled) {
         flushPendingReports();
+      } else {
+        const killer = document.getElementById('webshield-overlay-killer');
+        if (killer) killer.remove();
+        ensureBodyPointerEvents();
       }
     }
   });
@@ -1226,6 +1228,10 @@
         contentScriptReady = true;
         if (extensionEnabled) {
           flushPendingReports();
+        } else {
+          const killer = document.getElementById('webshield-overlay-killer');
+          if (killer) killer.remove();
+          ensureBodyPointerEvents();
         }
       }
     });
@@ -1242,31 +1248,6 @@
     window.postMessage({ type: 'ANTI_POPUP_REQUEST_STATE' }, '*');
   }, 200);
 
-  function isEnabled() {
-    if (!extensionEnabled) return false;
-    try {
-      if (document.documentElement && document.documentElement.getAttribute('data-anti-popunder-enabled') === 'false') {
-        extensionEnabled = false;
-        return false;
-      }
-      if (typeof sessionStorage !== 'undefined') {
-        if (sessionStorage.getItem('__webshield_enabled__') === 'false') {
-          extensionEnabled = false;
-          return false;
-        }
-        const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
-        if (rawDisabled) {
-          const host = window.location.hostname.toLowerCase();
-          const disabledList = JSON.parse(rawDisabled);
-          if (Array.isArray(disabledList) && disabledList.some(d => host === d || host.endsWith('.' + d) || d.endsWith('.' + host))) {
-            extensionEnabled = false;
-            return false;
-          }
-        }
-      }
-    } catch (e) {}
-    return extensionEnabled;
-  }
 
   // Helper to simulate native clicks to bypass YouTube's isTrusted checks
   function simulateNativeClick(el) {

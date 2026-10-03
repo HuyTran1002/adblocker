@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WebShield - Content & Popup Filter",
   "short_name": "WebShield",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "author": "HuyTran1002",
   "description": "Công cụ hỗ trợ chặn cửa sổ bật lên tự động và quản lý quy tắc lọc mạng cục bộ.",
   "icons": {
@@ -52,7 +52,11 @@
         "*://id.atlassian.com/*",
         "*://*.auth0.com/*",
         "*://*.paypal.com/*",
-        "*://*.stripe.com/*"
+        "*://*.stripe.com/*",
+        "*://*.canva.com/*",
+        "*://canva.com/*",
+        "*://*.figma.com/*",
+        "*://*.notion.so/*"
       ],
       "js": [
         "inject.js"
@@ -87,7 +91,11 @@
         "*://id.atlassian.com/*",
         "*://*.auth0.com/*",
         "*://*.paypal.com/*",
-        "*://*.stripe.com/*"
+        "*://*.stripe.com/*",
+        "*://*.canva.com/*",
+        "*://canva.com/*",
+        "*://*.figma.com/*",
+        "*://*.notion.so/*"
       ],
       "js": [
         "content.js"

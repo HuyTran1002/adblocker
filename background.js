@@ -54,6 +54,7 @@ const SAFE_EXCLUDED = [
   'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1', 'gstatic',
   'facebook', 'fbcdn', 'instagram', 'cdninstagram', 'tiktok', 'tiktokcdn', 'byteoversea', 'ibytedtos',
   'github', 'microsoft', 'apple', 'cloudflare', 'cdnjs', 'jsdelivr', 'unpkg',
+  'canva', 'figma', 'notion',
   'vimeo', 'vimeocdn', 'twitch', 'ttvnw', 'jtvnw', 'dailymotion', 'dmcdn', 'bilibili', 'bilivideo', 'hdslb',
   'netflix', 'nflxvideo', 'nflxext', 'nflximg', 'disneyplus', 'dssott', 'spotify', 'scdn', 'soundcloud', 'sndcdn',
   'fptplay', 'vieon', 'tv360', 'vtv', 'vtvgo', 'kplus',
@@ -625,20 +626,26 @@ async function syncDnrState(enabled, disabledDomains) {
     }
 
     // 2. Dynamic rules for master bypass & whitelisted domains
-    const MASTER_BYPASS_RULE_ID = 10000;
+    const MASTER_BYPASS_FRAME_RULE_ID = 10000;
+    const MASTER_BYPASS_ALLOW_RULE_ID = 10002;
     const LEGACY_WHITELIST_RULE_ID = 10001;
     const MEDIA_CDN_BYPASS_RULE_ID = 10005;
     const MEDIA_INITIATOR_ALLOW_RULE_ID = 10006;
     const YOUTUBE_BYPASS_RULE_ID = 10007;
     const YOUTUBE_INITIATOR_ALLOW_RULE_ID = 10008;
-    const WHITELIST_INITIATOR_RULE_ID = 990001;
+    const WHITELIST_INITIATOR_FRAME_RULE_ID = 990001;
+    const WHITELIST_INITIATOR_ALLOW_RULE_ID = 990003;
     const WHITELIST_REQUEST_RULE_ID = 990002;
 
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules().catch(() => []);
     const existingIds = new Set((existingRules || []).map(r => r.id));
 
-    const rulesToRemove = [MASTER_BYPASS_RULE_ID, LEGACY_WHITELIST_RULE_ID, MEDIA_CDN_BYPASS_RULE_ID, MEDIA_INITIATOR_ALLOW_RULE_ID, YOUTUBE_BYPASS_RULE_ID, YOUTUBE_INITIATOR_ALLOW_RULE_ID, WHITELIST_INITIATOR_RULE_ID, WHITELIST_REQUEST_RULE_ID]
-      .filter(id => existingIds.has(id));
+    const rulesToRemove = [
+      MASTER_BYPASS_FRAME_RULE_ID, MASTER_BYPASS_ALLOW_RULE_ID,
+      LEGACY_WHITELIST_RULE_ID, MEDIA_CDN_BYPASS_RULE_ID, MEDIA_INITIATOR_ALLOW_RULE_ID,
+      YOUTUBE_BYPASS_RULE_ID, YOUTUBE_INITIATOR_ALLOW_RULE_ID,
+      WHITELIST_INITIATOR_FRAME_RULE_ID, WHITELIST_INITIATOR_ALLOW_RULE_ID, WHITELIST_REQUEST_RULE_ID
+    ].filter(id => existingIds.has(id));
 
     const rulesToAdd = [];
 
@@ -700,14 +707,25 @@ async function syncDnrState(enabled, disabledDomains) {
     });
 
     if (!enabled) {
-      // Protection paused: allow all requests to completely bypass DNR blocking
+      // Protection paused: allow all frames and all requests to completely bypass DNR blocking
+      // Note: allowAllRequests only supports main_frame and sub_frame in Chrome DNR
       rulesToAdd.push({
-        id: MASTER_BYPASS_RULE_ID,
+        id: MASTER_BYPASS_FRAME_RULE_ID,
         priority: 999999,
         action: { type: "allowAllRequests" },
         condition: {
           urlFilter: "*",
-          resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"]
+          resourceTypes: ["main_frame", "sub_frame"]
+        }
+      });
+      // High-priority allow rule for all resource types
+      rulesToAdd.push({
+        id: MASTER_BYPASS_ALLOW_RULE_ID,
+        priority: 999998,
+        action: { type: "allow" },
+        condition: {
+          urlFilter: "*",
+          resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
         }
       });
     } else {
@@ -718,9 +736,18 @@ async function syncDnrState(enabled, disabledDomains) {
 
       if (cleanDomains.length > 0) {
         rulesToAdd.push({
-          id: WHITELIST_INITIATOR_RULE_ID,
+          id: WHITELIST_INITIATOR_FRAME_RULE_ID,
           priority: 999990,
           action: { type: "allowAllRequests" },
+          condition: {
+            initiatorDomains: cleanDomains,
+            resourceTypes: ["main_frame", "sub_frame"]
+          }
+        });
+        rulesToAdd.push({
+          id: WHITELIST_INITIATOR_ALLOW_RULE_ID,
+          priority: 999990,
+          action: { type: "allow" },
           condition: {
             initiatorDomains: cleanDomains,
             resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
@@ -812,9 +839,31 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
     if (dnrNeedsUpdate) {
       syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
+      broadcastStateToAllTabs(inMemoryEnabled, inMemoryDisabledDomains);
     }
   }
 });
+
+function broadcastStateToAllTabs(enabled, disabledDomains) {
+  if (!chrome.tabs || !chrome.tabs.query) return;
+  try {
+    chrome.tabs.query({}, (tabs) => {
+      (tabs || []).forEach(tab => {
+        if (tab && tab.id) {
+          try {
+            chrome.tabs.sendMessage(tab.id, {
+              type: "SET_ENABLED_STATE",
+              enabled: enabled,
+              disabledDomains: disabledDomains
+            }, () => {
+              const err = chrome.runtime.lastError;
+            });
+          } catch(e) {}
+        }
+      });
+    });
+  } catch(e) {}
+}
 
 // Listen for messages from content script & popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
