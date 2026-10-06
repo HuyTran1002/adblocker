@@ -1347,25 +1347,6 @@
     }
   },
   {
-    "id": 114,
-    "priority": 1,
-    "action": {
-      "type": "block"
-    },
-    "condition": {
-      "urlFilter": "*/assets/jquery/ev-player.js*",
-      "resourceTypes": [
-        "script",
-        "sub_frame",
-        "xmlhttprequest",
-        "image",
-        "media",
-        "main_frame",
-        "other"
-      ]
-    }
-  },
-  {
     "id": 115,
     "priority": 1,
     "action": {
@@ -2267,21 +2248,6 @@
       "resourceTypes": [
         "media",
         "image",
-        "xmlhttprequest",
-        "other"
-      ]
-    }
-  },
-  {
-    "id": 328,
-    "priority": 10,
-    "action": {
-      "type": "block"
-    },
-    "condition": {
-      "urlFilter": "*player/html.php*",
-      "resourceTypes": [
-        "sub_frame",
         "xmlhttprequest",
         "other"
       ]

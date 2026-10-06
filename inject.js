@@ -70,7 +70,17 @@
   function isCurrentPageWhitelisted() {
     try {
       const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
-      if (whitelistedDomains.some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain)))) {
+      let refHost = '';
+      try {
+        if (window.self !== window.top && document.referrer) {
+          refHost = new URL(document.referrer).hostname.toLowerCase();
+        }
+      } catch (e) {}
+
+      if (whitelistedDomains.some(domain => typeof domain === 'string' && (
+        host === domain || host.endsWith('.' + domain) ||
+        (refHost && (refHost === domain || refHost.endsWith('.' + domain)))
+      ))) {
         return true;
       }
       if (typeof sessionStorage !== 'undefined') {
@@ -78,7 +88,10 @@
         const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
         if (rawDisabled) {
           const disabledList = JSON.parse(rawDisabled);
-          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d) || d.endsWith('.' + host)))) {
+          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (
+            host === d || host.endsWith('.' + d) || d.endsWith('.' + host) ||
+            (refHost && (refHost === d || refHost.endsWith('.' + d) || d.endsWith('.' + refHost)))
+          ))) {
             return true;
           }
         }
@@ -107,8 +120,18 @@
         const rawDisabled = sessionStorage.getItem('__webshield_disabled_domains__');
         if (rawDisabled) {
           const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+          let refHost = '';
+          try {
+            if (window.self !== window.top && document.referrer) {
+              refHost = new URL(document.referrer).hostname.toLowerCase();
+            }
+          } catch (e) {}
+
           const disabledList = JSON.parse(rawDisabled);
-          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d) || d.endsWith('.' + host)))) {
+          if (Array.isArray(disabledList) && disabledList.some(d => typeof d === 'string' && (
+            host === d || host.endsWith('.' + d) || d.endsWith('.' + host) ||
+            (refHost && (refHost === d || refHost.endsWith('.' + d) || d.endsWith('.' + refHost)))
+          ))) {
             extensionEnabled = false;
             return false;
           }
@@ -147,6 +170,9 @@
       get() { return safeVipConfig; },
       set(val) {
         // Silently discard attempts by page scripts to configure popup ads
+        try {
+          reportBlocked('popup-config', 'Vô hiệu hóa cấu hình cửa sổ bật lên (POPUP_CONFIG)', 1);
+        } catch (e) {}
       },
       configurable: false
     });
@@ -155,6 +181,79 @@
       get() { return function() {}; },
       set(val) {},
       configurable: false
+    });
+  } catch (e) {}
+
+  // Universal VAST & In-Player Video Ad Neutralizer (vlstream, streamvl, adxcontent, embed-vast)
+  // When ad networks (like adxcontent.com) are blocked by DNR, streaming player scripts like
+  // embed-vast.js enter an infinite loop waiting for window.funcGetvastAdx to return ads before
+  // calling jwplayer().setup(). This causes the video player to spin forever with a loading spinner.
+  // Pre-defining funcGetvastAdx to return an empty array and funcJWonReadyVAST to a no-op allows
+  // JWPlayer / HLS to initialize immediately with ZERO ads and ZERO waiting!
+  try {
+    const emptyVastSchedule = Object.freeze([]);
+    let reportedVast = false;
+    Object.defineProperty(window, 'funcGetvastAdx', {
+      get() {
+        return function () {
+          if (!reportedVast) {
+            reportedVast = true;
+            try {
+              reportBlocked('inplayer-vast-ad', 'Chặn quảng cáo video đầu phát (VAST Ads)', 2);
+            } catch (e) {}
+          }
+          return emptyVastSchedule;
+        };
+      },
+      set(val) {},
+      configurable: true
+    });
+    let reportedBanner = false;
+    Object.defineProperty(window, 'funcJWonReadyVAST', {
+      get() {
+        return function () {
+          if (!reportedBanner) {
+            reportedBanner = true;
+            try {
+              reportBlocked('inplayer-banner-ad', 'Chặn banner quảng cáo đè trên trình phát', 1);
+            } catch (e) {}
+          }
+        };
+      },
+      set(val) {},
+      configurable: true
+    });
+    let _internalSchedule = emptyVastSchedule;
+    Object.defineProperty(window, '_schedule', {
+      get() { return _internalSchedule; },
+      set(val) {
+        if (val !== null && val !== undefined) {
+          _internalSchedule = val;
+        } else {
+          _internalSchedule = emptyVastSchedule;
+        }
+      },
+      configurable: true
+    });
+    Object.defineProperty(window, 'show_adx', {
+      get() { return 0; },
+      set(val) {},
+      configurable: true
+    });
+    Object.defineProperty(window, 'COUNT_VAST', {
+      get() { return 0; },
+      set(val) {},
+      configurable: true
+    });
+    Object.defineProperty(window, 'tvcBannerClosed', {
+      get() { return true; },
+      set(val) {},
+      configurable: true
+    });
+    Object.defineProperty(window, 'bannerAdxAllowed', {
+      get() { return function () { return false; }; },
+      set(val) {},
+      configurable: true
     });
   } catch (e) {}
 
@@ -973,7 +1072,20 @@
 
       if (!e.isTrusted) return; // Standard 2: Validate isTrusted
       if (!isEnabled() || isCurrentPageWhitelisted()) return;
-      if (document.fullscreenElement || document.webkitFullscreenElement) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        // In fullscreen: allow all player controls and play/pause immediately,
+        // but STILL intercept external ad links and clickjack overlays!
+        let hasAdAnchor = false;
+        let c = e.target;
+        while (c && c !== document.body && c !== document.documentElement) {
+          if (c.tagName === 'A' && c.href && !c.href.startsWith('#') && !c.href.startsWith('javascript:')) {
+            hasAdAnchor = true;
+            break;
+          }
+          c = c.parentElement;
+        }
+        if (!hasAdAnchor && !isClickjackOverlay(e.target)) return;
+      }
       // Never block interactions when Target Picker mode is active on page
       if (document.getElementById('adblock-max-target-badge') || document.getElementById('adblock-max-target-overlay')) return;
       // In embedded player iframes, allow 100% native player controls & progress bar clicks

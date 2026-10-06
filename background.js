@@ -68,7 +68,9 @@ const SAFE_EXCLUDED = [
   'iamcdn', 'streamhub', 'vidspeed', 'streamtape', 'doodstream', 'filemoon', 'streamwish',
   'streamruby', 'hydrax', 'faststream', 'playstream', '2embed', 'superstream',
   'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
-  'centrifuge', 'websocket'
+  'centrifuge', 'websocket',
+  // Dedicated tube / streaming CDNs & in-player hosts
+  'qooglevideo', 'vlstream', 'vlplayer', 'streamvl'
 ];
 
 function isSafeAdDomain(dom) {
@@ -573,6 +575,9 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
       }
       tabDomains.set(tabId, newDomain);
       saveTabStateToStorage();
+      if (inMemoryDisabledDomains && inMemoryDisabledDomains.length > 0) {
+        syncTabSessionRules(inMemoryDisabledDomains);
+      }
     }
   });
 }
@@ -583,6 +588,9 @@ if (chrome.tabs && chrome.tabs.onRemoved) {
     tabBlockedCounts.delete(tabId);
     tabDomains.delete(tabId);
     saveTabStateToStorage();
+    if (inMemoryDisabledDomains && inMemoryDisabledDomains.length > 0) {
+      syncTabSessionRules(inMemoryDisabledDomains);
+    }
   });
 }
 
@@ -824,6 +832,9 @@ async function syncDnrState(enabled, disabledDomains) {
         addRules: rulesToAdd
       });
     }
+
+    // Sync tab-specific session rules for whitelisted tabs to completely allow embedded player iframes and third-party resources
+    await syncTabSessionRules(disabledDomains);
   } catch (err) {
     console.warn('[WebShield] syncDnrState notice:', err);
   } finally {
@@ -833,6 +844,60 @@ async function syncDnrState(enabled, disabledDomains) {
       pendingDnrUpdate = null;
       syncDnrState(next.enabled, next.disabledDomains);
     }
+  }
+}
+
+// Synchronize session rules for tabs whose top-level domain is whitelisted by user
+async function syncTabSessionRules(disabledDomains) {
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateSessionRules) return;
+  try {
+    const existingRules = await chrome.declarativeNetRequest.getSessionRules().catch(() => []);
+    const removeRuleIds = (existingRules || []).map(r => r.id);
+
+    const addRules = [];
+    const cleanList = (disabledDomains || [])
+      .map(d => (d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, ''))
+      .filter(d => d && d.includes('.'));
+
+    if (cleanList.length > 0 && chrome.tabs && chrome.tabs.query) {
+      const tabs = await new Promise(resolve => chrome.tabs.query({}, resolve)).catch(() => []);
+      for (const tab of (tabs || [])) {
+        if (!tab || !tab.id || !tab.url) continue;
+        try {
+          const tabHost = new URL(tab.url).hostname.toLowerCase().replace(/^www\./i, '');
+          const isWhitelisted = cleanList.some(d => tabHost === d || tabHost.endsWith('.' + d) || d.endsWith('.' + tabHost));
+          if (isWhitelisted) {
+            // Whitelist entire tab including all embedded player iframes and third-party media/ad resources
+            addRules.push({
+              id: 200000 + tab.id,
+              priority: 999995,
+              action: { type: "allowAllRequests" },
+              condition: {
+                tabIds: [tab.id],
+                resourceTypes: ["main_frame", "sub_frame"]
+              }
+            });
+            addRules.push({
+              id: 300000 + tab.id,
+              priority: 999994,
+              action: { type: "allow" },
+              condition: {
+                tabIds: [tab.id]
+              }
+            });
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (removeRuleIds.length > 0 || addRules.length > 0) {
+      await chrome.declarativeNetRequest.updateSessionRules({
+        removeRuleIds,
+        addRules
+      }).catch(e => console.warn('[WebShield] updateSessionRules error:', e));
+    }
+  } catch (err) {
+    console.warn('[WebShield] syncTabSessionRules notice:', err);
   }
 }
 

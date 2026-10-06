@@ -17,7 +17,16 @@ try {
     if (rawDisabled) {
       const parsed = JSON.parse(rawDisabled);
       const host = window.location.hostname.toLowerCase();
-      if (Array.isArray(parsed) && parsed.some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host))) {
+      let refHost = '';
+      try {
+        if (window.self !== window.top && document.referrer) {
+          refHost = new URL(document.referrer).hostname.toLowerCase();
+        }
+      } catch (e) {}
+      if (Array.isArray(parsed) && parsed.some(domain =>
+        host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host) ||
+        (refHost && (refHost === domain || refHost.endsWith('.' + domain) || domain.endsWith('.' + refHost)))
+      )) {
         currentEnabledState = false;
       }
     }
@@ -57,8 +66,21 @@ let customWhitelistedDomains = [];
 function isCurrentPageWhitelisted() {
   try {
     const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
-    const isHardcoded = whitelistedDomains.some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain)));
-    const isCustom = (customWhitelistedDomains || []).some(domain => typeof domain === 'string' && (host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host)));
+    let refHost = '';
+    try {
+      if (window.self !== window.top && document.referrer) {
+        refHost = new URL(document.referrer).hostname.toLowerCase();
+      }
+    } catch (e) {}
+
+    const isHardcoded = whitelistedDomains.some(domain => typeof domain === 'string' && (
+      host === domain || host.endsWith('.' + domain) ||
+      (refHost && (refHost === domain || refHost.endsWith('.' + domain)))
+    ));
+    const isCustom = (customWhitelistedDomains || []).some(domain => typeof domain === 'string' && (
+      host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host) ||
+      (refHost && (refHost === domain || refHost.endsWith('.' + domain) || domain.endsWith('.' + refHost)))
+    ));
     return isHardcoded || isCustom || !currentEnabledState;
   } catch (e) {
     return false;
@@ -939,15 +961,19 @@ if (currentEnabledState) {
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
           elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) return;
 
-      // Explicit Clickadu Mobile Spot (clb-spot / __clb-), Adsterra Social Bar, ExoClick containers
+      // Explicit Clickadu Mobile Spot, Adsterra, ExoClick, Adxcontent & generic ad containers
       if (elId.includes('clb-spot') || elId.startsWith('__clb') || elClass.includes('clb-spot') ||
           elId.startsWith('atcontainer') || elId.includes('atcontainer') || elClass.includes('atcontainer') ||
           elClass.includes('adsbyexoclick') || elId.includes('exoclick') ||
+          elId.includes('-adx') || elId.startsWith('adx') || elClass.includes('-adx') || elClass.includes('adx-') ||
+          elId.includes('ad-slot') || elClass.includes('ad-slot') || elId.includes('banner-ad') || elClass.includes('banner-ad') ||
+          elId.includes('catfish-ad') || elClass.includes('catfish-ad') || elId.includes('adfloat') || elClass.includes('adfloat') ||
           (el.getAttribute && (el.getAttribute('data-zoneid') || el.getAttribute('data-ad-id')))) {
         if (!el.hasAttribute('data-ad-blocked')) {
           el.setAttribute('data-ad-blocked', 'true');
           el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-          reportAdBlocked('ad-spot', 'Chặn container quảng cáo mạng Clickadu/Adsterra');
+          const identifier = el.id ? `#${el.id}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
+          reportAdBlocked(identifier, 'Chặn khung chứa quảng cáo');
         }
         return;
       }
@@ -1691,10 +1717,58 @@ if (currentEnabledState) {
       });
     }
 
+    const AD_SCRIPT_DOMAINS = [
+      'adxcontent', 'adxad', 'exoclick', 'realsrv', 'magsrv', 'trafficjunky',
+      'juicyads', 'adsterra', 'clickadu', 'monetag', 'propellerads', 'popcash',
+      'popads', 'doubleclick', 'googleadservices', 'adservice.google', 'clktag',
+      'onclickads', 'onclickalgo', 'pu.js', 'wpadmngr', 'wpshsdk', 'visariomedia',
+      'zlinkm', 'adtrue', 'criteo', 'adnxs', 'mgid', 'taboola', 'outbrain', 'eclick.vn', 'novanet.vn'
+    ];
+
+    let lastResourceScanTime = 0;
+    function scanAndReportBlockedAdResources() {
+      if (!currentEnabledState) return;
+      const now = Date.now();
+      if (now - lastResourceScanTime < 1500) return; // Prevent high CPU usage: max once per 1.5s
+      lastResourceScanTime = now;
+      try {
+        // 1. Scan script tags pointing to blocked ad networks
+        const scripts = document.scripts || document.querySelectorAll('script[src]');
+        for (let i = 0; i < scripts.length; i++) {
+          const s = scripts[i];
+          const src = (s.src || '').toLowerCase();
+          if (!src) continue;
+          if (s.hasAttribute('data-ws-reported')) continue;
+          if (AD_SCRIPT_DOMAINS.some(d => src.includes(d))) {
+            s.setAttribute('data-ws-reported', '1');
+            reportAdBlocked(src, 'Chặn tải mã nguồn mạng quảng cáo');
+          }
+        }
+
+        // 2. Scan ad slots and containers matching ad patterns
+        const adContainers = document.querySelectorAll(
+          '#vl-top-adx, #vl-underplayer-adx, #adx, #vl-native-adx, [id*="vl-"][id*="-adx"], ' +
+          'ins.adsbygoogle, ins[data-zoneid], [id*="clb-spot"], [class*="clb-spot"], ' +
+          '[id*="atContainer"], [class*="atContainer"], [class*="catfish-ad"], [class*="floating-ad"], ' +
+          '[id*="adFloat"], [id*="floatAd"], .adsbox, .ad-banner, .ad-slot, .ads-slot'
+        );
+        for (let i = 0; i < adContainers.length; i++) {
+          const el = adContainers[i];
+          if (isInsideVideoPlayer(el)) continue;
+          if (el.hasAttribute('data-ws-reported')) continue;
+          el.setAttribute('data-ws-reported', '1');
+          el.style.setProperty('display', 'none', 'important');
+          const identifier = el.id ? `#${el.id}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
+          reportAdBlocked(identifier, 'Chặn khung chứa quảng cáo');
+        }
+      } catch (e) {}
+    }
+
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
+      scanAndReportBlockedAdResources();
       scheduleJanitorSweep();
     }
 
@@ -1704,6 +1778,11 @@ if (currentEnabledState) {
 
     function processPendingNodes() {
       batchScheduled = false;
+      // Zero overhead during fullscreen movie playback
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        pendingNodes.clear();
+        return;
+      }
       if (pendingNodes.size === 0) return;
       const nodes = Array.from(pendingNodes);
       pendingNodes.clear();
@@ -1806,7 +1885,20 @@ if (currentEnabledState) {
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
     document.addEventListener('click', function(e) {
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) return; // Fullscreen bypass: 100% native control in fullscreen
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+        // In fullscreen: allow all player controls and play/pause immediately,
+        // but STILL block external ad links and clickjack overlays so user never suffers popunder redirects!
+        let hasAdAnchor = false;
+        let c = e.target;
+        while (c && c !== document.body && c !== document.documentElement) {
+          if (c.tagName === 'A' && c.href && !c.href.startsWith('#') && !c.href.startsWith('javascript:')) {
+            hasAdAnchor = true;
+            break;
+          }
+          c = c.parentElement;
+        }
+        if (!hasAdAnchor) return;
+      }
       if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
       if (!e.isTrusted) return; // Standard 2: Ignore untrusted/synthetic clicks
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
