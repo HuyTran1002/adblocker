@@ -255,6 +255,18 @@
       set(val) {},
       configurable: true
     });
+    // Neutralize TVC pre-roll preroll ad flag on movie sites (hotphimvn.store, mflix.store, etc.)
+    // Forces build_jwplayer to immediately call build_player_after_ads() and bypass #tvc-iframe
+    Object.defineProperty(window, 'on_tvc', {
+      get() { return 0; },
+      set(val) {},
+      configurable: true
+    });
+    if (window.location && typeof window.location.pathname === 'string' && window.location.pathname.includes('/ajax/tvc')) {
+      try {
+        window.parent.postMessage('tvc:done', '*');
+      } catch (e) {}
+    }
   } catch (e) {}
 
   // Universal Adsterra & Social Bar Engine Neutralizer
@@ -423,7 +435,7 @@
 
 
   // --- EMBEDDED PLAYER IFRAME DETECTION ---
-  // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, vlstream.net),
+  // When inject.js runs inside a cross-origin player iframe (e.g. streamvl.top, streamc.xyz, embed15.streamc.xyz),
   // API overrides (getComputedStyle, offsetHeight, getBoundingClientRect, bait stubs, CSS injection)
   // can break the player's internal click-to-pause and timeline controls.
   // Detect and flag these frames so dangerous overrides are skipped.
@@ -433,9 +445,9 @@
       const host = window.location.hostname.toLowerCase();
       const path = window.location.pathname.toLowerCase();
       // Known embedded player domains
-      if (/streamvl|vlstream|play\.|embed\.|player\.|hls\.|stream\.|media\.|cdn\.|video\./.test(host)) return true;
+      if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed/.test(host)) return true;
       // Common player URL patterns
-      if (/\/watch|\/embed\/|\/player\/|\/play\/|\/stream\/|\/hls\/|\/video\/|\/v\//.test(path)) return true;
+      if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\//.test(path)) return true;
       // Has a video element already (very likely a player frame)
       if (document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
     } catch (e) {}
@@ -445,6 +457,196 @@
   if (isEmbeddedPlayerFrame) {
     console.log('[Anti Pop-Under] Detected embedded player iframe, skipping anti-adblock overrides to protect player:', window.location.hostname);
   }
+
+  // --- STREAM GUARD & BOOTSTRAP AD / TVC INTERCEPTOR ---
+  // Neutralizes anti-adblock probe locking, DevTools detection, and TVC/VAST pre-roll ads on embedded streaming players (e.g. Streamc / Guard-7 / JWPlayer).
+  // Prevents sites from blocking dev mode, locking sessions, pausing video, or displaying anti-adblock modals.
+  function sanitizeBootstrapPayload(res) {
+    if (!res || typeof res !== 'object') return res;
+    try {
+      if (res.browserGuard && typeof res.browserGuard === 'object') {
+        res.browserGuard.block_shortcuts = false;
+        res.browserGuard.block_context_menu = false;
+        res.browserGuard.detect_devtools = false;
+        res.browserGuard.anti_adblock = false;
+      }
+      if (res.ads && typeof res.ads === 'object') {
+        res.ads.enabled = false;
+      }
+      // Neutralize TVC / VAST pre-roll ads from Streamc bootstrap
+      if (res.tvc && typeof res.tvc === 'object') {
+        res.tvc.enabled = false;
+        res.tvc.mode = 'none';
+        res.tvc.tags = [];
+      }
+      if (res.advertising && typeof res.advertising === 'object') {
+        delete res.advertising;
+      }
+      if (typeof res.on_tvc !== 'undefined') {
+        res.on_tvc = 0;
+      }
+    } catch (e) {}
+    return res;
+  }
+
+  try {
+    const origJsonParse = JSON.parse;
+    JSON.parse = function (text, reviver) {
+      const res = origJsonParse.apply(this, arguments);
+      return sanitizeBootstrapPayload(res);
+    };
+  } catch (e) {}
+
+  try {
+    const origResponseJson = Response.prototype.json;
+    Response.prototype.json = async function () {
+      const res = await origResponseJson.apply(this, arguments);
+      return sanitizeBootstrapPayload(res);
+    };
+  } catch (e) {}
+
+  try {
+    sessionStorage.removeItem('stream-guard:devtools-session-lock:v1');
+    const origSessionSetItem = sessionStorage.setItem;
+    sessionStorage.setItem = function (key, value) {
+      if (typeof key === 'string' && key.startsWith('stream-guard:devtools-session-lock')) {
+        return;
+      }
+      return origSessionSetItem.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  // --- UNIVERSAL JWPLAYER PRE-ROLL / VAST AD ELIMINATOR ---
+  (function hookJwPlayer() {
+    function sanitizeJwOptions(opts) {
+      if (!opts || typeof opts !== 'object') return opts;
+      try {
+        if (opts.advertising) delete opts.advertising;
+        if (opts.adschedule) delete opts.adschedule;
+        if (opts.arrPreroll) opts.arrPreroll = '';
+        if (opts.preroll) delete opts.preroll;
+        if (typeof opts.skip_ads !== 'undefined') opts.skip_ads = 1;
+      } catch (e) {}
+      return opts;
+    }
+
+    function wrapJwInstance(inst) {
+      if (!inst || inst.__ws_wrapped) return inst;
+      try {
+        inst.__ws_wrapped = true;
+        const origSetup = inst.setup;
+        if (typeof origSetup === 'function') {
+          inst.setup = function (options) {
+            return origSetup.call(this, sanitizeJwOptions(options));
+          };
+        }
+        if (typeof inst.on === 'function') {
+          const autoSkip = function () {
+            try {
+              if (typeof inst.skipAd === 'function') inst.skipAd();
+            } catch (e) {}
+          };
+          inst.on('adPlay', autoSkip);
+          inst.on('adStarted', autoSkip);
+          inst.on('adTime', autoSkip);
+          inst.on('adSchedule', autoSkip);
+          inst.on('adError', function () {
+            try {
+              if (typeof inst.play === 'function') inst.play();
+            } catch (e) {}
+          });
+          inst.on('adBlock', function () {
+            try {
+              if (typeof inst.play === 'function') inst.play();
+            } catch (e) {}
+          });
+        }
+      } catch (e) {}
+      return inst;
+    }
+
+    function createJwProxy(realJw) {
+      if (typeof realJw !== 'function') return realJw;
+      return new Proxy(realJw, {
+        apply(target, thisArg, args) {
+          const inst = Reflect.apply(target, thisArg, args);
+          return wrapJwInstance(inst);
+        },
+        construct(target, args, newTarget) {
+          const inst = Reflect.construct(target, args, newTarget);
+          return wrapJwInstance(inst);
+        }
+      });
+    }
+
+    let currentJw = window.jwplayer;
+    if (typeof currentJw === 'function') {
+      window.jwplayer = createJwProxy(currentJw);
+    }
+
+    try {
+      Object.defineProperty(window, 'jwplayer', {
+        configurable: true,
+        enumerable: true,
+        get() { return currentJw; },
+        set(val) {
+          currentJw = typeof val === 'function' ? createJwProxy(val) : val;
+        }
+      });
+    } catch (e) {}
+  })();
+
+  // --- UNIVERSAL VIDEO AD AUTO-SKIPPER & FAST-FORWARD ---
+  (function initUniversalVideoAdSkipper() {
+    const SKIP_SELECTORS = [
+      '.jw-skip', '.jw-skip-button', '.jw-ad-skip-button', '.jw-skip-icon', '.jw-skippable',
+      '.video-ads .ad-skip-button', '.video-ad-skip', '.skip-ad', '.ad-skip',
+      '.vjs-skip-ad-button', '.fluid_ad_skip_button', '.art-ad-skip', '.dplayer-ad-skip',
+      '[class*="skip-ad" i]', '[class*="ad-skip" i]', '[id*="skip-ad" i]', '[id*="ad-skip" i]'
+    ];
+
+    function trySkip() {
+      // 1. Instantly click native skip buttons in DOM
+      for (const sel of SKIP_SELECTORS) {
+        const btns = document.querySelectorAll(sel);
+        for (const btn of btns) {
+          try {
+            btn.style.setProperty('display', 'block', 'important');
+            btn.style.setProperty('visibility', 'visible', 'important');
+            btn.style.setProperty('pointer-events', 'auto', 'important');
+            btn.click();
+          } catch (e) {}
+        }
+      }
+
+      // 2. Fast-forward video ad elements if JWPlayer is in ad state
+      try {
+        const adPlayer = document.querySelector('.jwplayer.jw-flag-ads, .jw-media-ad');
+        if (adPlayer) {
+          const adVideo = adPlayer.querySelector('video');
+          if (adVideo && !adVideo.__ws_ff) {
+            adVideo.__ws_ff = true;
+            adVideo.muted = true;
+            if (Number.isFinite(adVideo.duration) && adVideo.duration > 0) {
+              adVideo.currentTime = adVideo.duration;
+            } else {
+              adVideo.playbackRate = 16;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (typeof MutationObserver !== 'undefined') {
+      const obs = new MutationObserver(() => trySkip());
+      obs.observe(document.documentElement || document, { childList: true, subtree: true });
+    }
+    const interval = setInterval(trySkip, 200);
+    setTimeout(() => {
+      clearInterval(interval);
+      setInterval(trySkip, 1000);
+    }, 15000);
+  })();
 
   // Anti-Anti-Adblock bypass logic for movie sites (like animevietsub)
   (function () {
@@ -517,6 +719,32 @@
         enumerable: true
       });
     } catch (e) { }
+
+    // Neutralize TVC pre-roll preroll ad flag on movie sites (hotphimvn.store, mflix.store, etc.)
+    // Setting on_tvc = 0 forces build_jwplayer to immediately call build_player_after_ads(), bypassing #tvc-iframe
+    try {
+      Object.defineProperty(window, 'on_tvc', {
+        get() { return 0; },
+        set(val) {},
+        configurable: true
+      });
+      const autoResolveTvc = () => {
+        try {
+          const tvc = document.getElementById('tvc-iframe') || document.querySelector('iframe[src*="/ajax/tvc"]');
+          if (tvc) {
+            window.postMessage('tvc:done', '*');
+          }
+        } catch (e) {}
+      };
+      if (typeof window.addEventListener === 'function') {
+        window.addEventListener('DOMContentLoaded', autoResolveTvc, { once: true });
+        window.addEventListener('load', autoResolveTvc, { once: true });
+      }
+      if (typeof MutationObserver !== 'undefined') {
+        const tvcObserver = new MutationObserver(autoResolveTvc);
+        tvcObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+      }
+    } catch (e) {}
 
     // 2. Mock Classes for Anti-AdBlock libraries (FuckAdBlock, BlockAdBlock, Sniffer)
     const createAntiAdBlockInstance = () => {

@@ -59,7 +59,7 @@ const SAFE_EXCLUDED = [
   'netflix', 'nflxvideo', 'nflxext', 'nflximg', 'disneyplus', 'dssott', 'spotify', 'scdn', 'soundcloud', 'sndcdn',
   'fptplay', 'vieon', 'tv360', 'vtv', 'vtvgo', 'kplus',
   'animevietsub', 'phim', 'embed', 'm3u8', 'tmdb', 'themoviedb', 'wsrv', 'nguonc', 'phimimg', 'ophim', 'vsmov', 'motphim', 'tramphim',
-  'mflix', 'hotp', 'playerstream', 'hotphim', 'cdn77', '91porn', 'vuighe', 'anime47', 'kkphim', 'subnhanh',
+  'mflix', 'hotp', 'playerstream', 'hotphim', 'streamc', 'cdn77', '91porn', 'vuighe', 'anime47', 'kkphim', 'subnhanh',
   'missav', 'fourhoi', 'surrit', 'recombee', 'client-rapi',
   // Video Player Engines, CDNs & Media Infrastructure
   'jwplayer', 'jwplatform', 'jwpcdn', 'jwpsrv', 'videojs', 'zencdn', 'plyr',

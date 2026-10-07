@@ -186,8 +186,8 @@ const isEmbeddedPlayerFrame = (function () {
   try {
     const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
     const path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : '';
-    if (/streamvl|vlstream|play\.|embed\.|player\.|hls\.|stream\.|media\.|cdn\.|video\./.test(host)) return true;
-    if (/\/watch|\/embed\/|\/player\/|\/play\/|\/stream\/|\/hls\/|\/video\/|\/v\//.test(path)) return true;
+    if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed/.test(host)) return true;
+    if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\//.test(path)) return true;
     if (document.querySelector && document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
   } catch (e) {}
   return false;
@@ -3515,9 +3515,22 @@ if (currentEnabledState) {
         } catch (e) {}
       }
 
+      // Auto-bypass TVC preroll ad iframe on movie sites (e.g. hotphimvn.store / mflix.store)
+      // When adblock blocks the TVC ad, the player gets stuck on a black screen without sending tvc:done.
+      // Auto-dispatch tvc:done so the page immediately loads the real movie player without delay.
+      const checkTvcIframe = () => {
+        try {
+          const tvcIframe = document.getElementById('tvc-iframe') || document.querySelector('iframe[src*="/ajax/tvc"]');
+          if (tvcIframe) {
+            window.postMessage('tvc:done', '*');
+          }
+        } catch (e) {}
+      };
+
       // MutationObserver to neutralize self-healing/resurrection popups instantly before paint
       const guardianObserver = new MutationObserver((mutations) => {
         if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
+        checkTvcIframe();
         for (const mut of mutations) {
           for (const node of mut.addedNodes) {
             if (node.nodeType === 1) {
@@ -3535,6 +3548,7 @@ if (currentEnabledState) {
 
       const initGuardian = () => {
         if (isEmbeddedPlayerFrame) return;
+        checkTvcIframe();
         if (document.body) {
           guardianObserver.observe(document.body, { childList: true, subtree: true });
           sweepFloatingAds(document);
@@ -3550,10 +3564,66 @@ if (currentEnabledState) {
       // Initial fast sweep intervals for delayed ad scripts
       let sweeps = 0;
       const interval = setInterval(() => {
+        checkTvcIframe();
         sweepFloatingAds(document);
         if (++sweeps > 20) clearInterval(interval);
       }, 300);
     })();
     // === END UNIVERSAL FLOATING AD & ANTI-ADBLOCK POPUP GUARDIAN ===
 
+    // === UNIVERSAL EMBEDDED PLAYER AD AUTO-SKIPPER ===
+    // Automatically clicks pre-roll/video ad skip buttons and fast-forwards ads in embedded players
+    (function () {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      const SKIP_SELECTORS = [
+        '.jw-skip', '.jw-skip-button', '.jw-ad-skip-button', '.jw-skip-icon', '.jw-skippable',
+        '.video-ads .ad-skip-button', '.video-ad-skip', '.skip-ad', '.ad-skip',
+        '.vjs-skip-ad-button', '.fluid_ad_skip_button', '.art-ad-skip', '.dplayer-ad-skip',
+        '[class*="skip-ad" i]', '[class*="ad-skip" i]', '[id*="skip-ad" i]', '[id*="ad-skip" i]'
+      ];
+
+      const trySkipVideoAds = () => {
+        try {
+          for (const sel of SKIP_SELECTORS) {
+            const btns = document.querySelectorAll(sel);
+            for (const btn of btns) {
+              try {
+                btn.style.setProperty('display', 'block', 'important');
+                btn.style.setProperty('visibility', 'visible', 'important');
+                btn.style.setProperty('pointer-events', 'auto', 'important');
+                btn.click();
+              } catch (e) {}
+            }
+          }
+
+          // Fast-forward video ad elements in JWPlayer
+          const adPlayer = document.querySelector('.jwplayer.jw-flag-ads, .jw-media-ad');
+          if (adPlayer) {
+            const adVideo = adPlayer.querySelector('video');
+            if (adVideo && !adVideo.__ws_ff) {
+              adVideo.__ws_ff = true;
+              adVideo.muted = true;
+              if (Number.isFinite(adVideo.duration) && adVideo.duration > 0) {
+                adVideo.currentTime = adVideo.duration;
+              } else {
+                adVideo.playbackRate = 16;
+              }
+            }
+          }
+        } catch (e) {}
+      };
+
+      if (typeof MutationObserver !== 'undefined') {
+        const adObserver = new MutationObserver(trySkipVideoAds);
+        adObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+      }
+      const adInterval = setInterval(trySkipVideoAds, 250);
+      setTimeout(() => {
+        clearInterval(adInterval);
+        setInterval(trySkipVideoAds, 1000);
+      }, 15000);
+    })();
+    // === END UNIVERSAL EMBEDDED PLAYER AD AUTO-SKIPPER ===
+
 })();
+
