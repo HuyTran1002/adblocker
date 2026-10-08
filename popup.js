@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "4.0.4" }),
+      getManifest: () => ({ version: "4.0.8" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -944,13 +944,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (reportIssueBtn && reportView) {
     reportIssueBtn.addEventListener("click", () => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const activeTab = tabs && tabs[0];
-        reportedUrl = activeTab && activeTab.url ? activeTab.url : "Không xác định";
+      getActiveTab((activeTab) => {
+        reportedUrl = activeTab && (activeTab.url || activeTab.pendingUrl) ? (activeTab.url || activeTab.pendingUrl) : "Không xác định";
         reportedDomain = "Chưa rõ";
         try {
-          if (activeTab && activeTab.url) {
-            reportedDomain = new URL(activeTab.url).hostname;
+          if (activeTab && (activeTab.url || activeTab.pendingUrl)) {
+            reportedDomain = new URL(activeTab.url || activeTab.pendingUrl).hostname;
           }
         } catch (e) { }
 
@@ -973,7 +972,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "4.0.4";
+      const version = manifest.version || "4.0.8";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
@@ -1014,18 +1013,43 @@ Trân trọng cảm ơn.`;
       reportStatusMsg.className = "report-status-msg";
     }
 
-    // 1. Mở trực tiếp giao diện Web Gmail soạn sẵn nội dung (Khuyên dùng - 100% không lỗi token)
+    // Helper to safely launch mailto via extension tabs API without DOM gesture blocks
+    function openMailto(url) {
+      try {
+        chrome.tabs.create({ url: url }, () => {
+          if (chrome.runtime.lastError) {
+            try { window.open(url, '_blank'); } catch (err) {}
+          }
+          if (isMobile) {
+            setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
+          }
+        });
+      } catch (e) {
+        try { window.open(url, '_blank'); } catch (err) {}
+      }
+    }
+
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (isMobile && reportSendBtnText) {
+      reportSendBtnText.textContent = "Gửi qua App Gmail / Mail (Khuyên dùng)";
+    }
+
+    // 1. Mở giao diện soạn mail (Tối ưu cho cả PC và điện thoại)
     if (reportSendGmailBtn) {
       reportSendGmailBtn.addEventListener("click", () => {
         const data = getReportData();
         const subjectParam = encodeURIComponent(data.subject);
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
+        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
 
-        try {
-          navigator.clipboard.writeText(data.fullText);
-        } catch (e) { }
-
-        chrome.tabs.create({ url: gmailUrl });
+        if (isMobile) {
+          // Trên di động: Web Gmail không hỗ trợ URL soạn thư trực tiếp.
+          // Mở trực tiếp App Gmail / Email của hệ điều hành thông qua mailto.
+          openMailto(mailtoUrl);
+        } else {
+          // Trên máy tính: Dùng URL Web Gmail KHÔNG có tham số &fs=1 (fs=1 là nguyên nhân gây crash/load hoài trên Gmail SPA).
+          const gmailUrl = `https://mail.google.com/mail/?view=cm&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
+          chrome.tabs.create({ url: gmailUrl });
+        }
       });
     }
 
@@ -1036,15 +1060,11 @@ Trân trọng cảm ơn.`;
         const subjectParam = encodeURIComponent(data.subject);
         const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
 
-        try {
-          navigator.clipboard.writeText(data.fullText);
-        } catch (e) { }
-
-        chrome.tabs.create({ url: mailtoUrl });
+        openMailto(mailtoUrl);
       });
     }
 
-    // 2. Mở GitHub Issue (Đã tinh gọn URL chuẩn YAML, 100% không bị lỗi OOpss khi đăng nhập)
+    // 3. Mở GitHub Issue (Đã tinh gọn URL chuẩn YAML, 100% không bị lỗi OOpss khi đăng nhập)
     if (reportSendGithubBtn) {
       reportSendGithubBtn.addEventListener("click", () => {
         const data = getReportData();
@@ -1057,23 +1077,25 @@ Trân trọng cảm ơn.`;
         // Chỉ truyền các tham số hợp lệ của template site_report.yml, KHÔNG truyền &body= khổng lồ gây quá tải HTTP header
         const githubUrl = `https://github.com/HuyTran1002/adblocker/issues/new?template=site_report.yml&title=${titleParam}&domain=${domainParam}&url=${urlParam}&version=${versionParam}&description=${descParam}`;
 
-        chrome.tabs.create({ url: githubUrl });
+        chrome.tabs.create({ url: githubUrl }, () => {
+          if (isMobile) {
+            setTimeout(() => { try { window.close(); } catch (e) {} }, 150);
+          }
+        });
       });
     }
 
-    // 3. Sao chép thông tin lỗi
+    // 4. Sao chép thông tin lỗi (sử dụng copyToClipboard có fallback hỗ trợ 100% di động)
     if (reportCopyInfoBtn) {
       reportCopyInfoBtn.addEventListener("click", () => {
         const data = getReportData();
-        try {
-          navigator.clipboard.writeText(data.fullText).then(() => {
-            if (copyBtnText) {
-              const orig = copyBtnText.textContent;
-              copyBtnText.textContent = "✓ Đã sao chép!";
-              setTimeout(() => { copyBtnText.textContent = orig; }, 2000);
-            }
-          });
-        } catch (e) { }
+        copyToClipboard(data.fullText, () => {
+          if (copyBtnText) {
+            const orig = copyBtnText.textContent;
+            copyBtnText.textContent = "✓ Đã sao chép!";
+            setTimeout(() => { copyBtnText.textContent = orig; }, 2000);
+          }
+        });
       });
     }
   }
