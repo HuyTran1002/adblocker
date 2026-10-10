@@ -20,7 +20,10 @@
     'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
     'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
     'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
+    'blogger.com', 'www.blogger.com', 'blogspot.com',
     'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
+    'microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'office365.com',
+    'msftauth.net', 'msauth.net',
     'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
     'paypal.com', 'stripe.com',
     'canva.com', 'figma.com', 'notion.so', 'trello.com'
@@ -33,6 +36,8 @@
   const isYouTube = currentHost.includes('youtube.com') ||
     currentHost.includes('youtu.be') ||
     currentHost.includes('google') ||
+    currentHost.includes('blogger') ||
+    currentHost.includes('blogspot') ||
     currentHost.includes('doubleclick');
 
   // Declare all shared state variables at the top to prevent TDZ (Temporal Dead Zone) ReferenceErrors
@@ -57,9 +62,11 @@
 
   const whitelistedDomains = [
     'google.com', 'google.com.vn', 'accounts.google.com',
+    'blogger.com', 'blogspot.com',
     'facebook.com', 'fb.com', 'm.facebook.com',
     'twitter.com', 'x.com',
     'github.com', 'apple.com', 'microsoft.com', 'microsoftonline.com',
+    'office.com', 'outlook.com', 'office365.com', 'live.com', 'msftauth.net', 'msauth.net',
     'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
     'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
     'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
@@ -411,7 +418,15 @@
       #adFloat, #ad_float, #ad-float, .adFloat, .ad-float,
       #floatAd, #float_ad, #float-ad, .floatAd, .float-ad,
       [id*="adFloat" i], [class*="adFloat" i], [id*="floatAd" i], [class*="floatAd" i],
-      [id*="float_ad" i], [class*="float_ad" i], [id*="ad_float" i], [class*="ad_float" i] {
+      [id*="float_ad" i], [class*="float_ad" i], [id*="ad_float" i], [class*="ad_float" i],
+      .spot, div.spot, [data-clocid], div[data-cl-overlay],
+      div[style*="position: fixed"][style*="bottom: 0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+      div[style*="position: fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+      div[style*="position:fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+      div[style*="bottom: 0px"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+      div[style*="bottom: 0"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+      div:has(> a[href*="acquirecarded"]), div:has(> a[href*="badlandlisp"]), div:has(> a[href*="sc88"]),
+      a[href*="acquirecardedsullen.com"], a[href*="badlandlispyippee.com"] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
@@ -430,6 +445,16 @@
           (document.head || document.documentElement).appendChild(overlayKillerStyle);
         }, { once: true });
       }
+    } catch(e) {}
+
+    // Vô hiệu hóa hàm tạo banner/popunder WebAssembly trên xnhau (snvbchm)
+    try {
+      let _snvbchm = function() {};
+      Object.defineProperty(window, 'snvbchm', {
+        get() { return _snvbchm; },
+        set(val) { /* no-op */ },
+        configurable: true
+      });
     } catch(e) {}
   }
 
@@ -2066,9 +2091,9 @@
       return originalOpen.apply(this, arguments);
     }
 
-    // Nếu thao tác phát sinh từ bên trong video player nội bộ:
-    // Video player chân chính KHÔNG BAO GIỜ cần gọi window.open() mở domain bên ngoài!
-    if (lastInteractionEvent && lastInteractionEvent.target && isInsideVideoPlayer(lastInteractionEvent.target)) {
+    // Nếu thao tác phát sinh từ bên trong video player nội bộ hoặc khi click/touch vào poster, thumbnail, video item:
+    // Video player hoặc thumbnail chân chính KHÔNG BAO GIỜ cần gọi window.open() mở domain bên ngoài!
+    if (lastInteractionEvent && lastInteractionEvent.target && (isInsideVideoPlayer(lastInteractionEvent.target) || isMovieBannerOrPoster(lastInteractionEvent.target))) {
       let isExternal = false;
       try {
         const targetHost = new URL(url, window.location.href).hostname.toLowerCase();
@@ -2078,7 +2103,7 @@
         isExternal = true;
       }
       if (isExternal && !isWhitelisted(url)) {
-        reportBlocked(url || 'blank', 'Blocked external popup/jump from video player click');
+        reportBlocked(url || 'blank', 'Blocked external popup/jump from video player or thumbnail touch');
         return createDummyWindow();
       }
     }

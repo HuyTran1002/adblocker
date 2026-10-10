@@ -40,7 +40,10 @@ const SENSITIVE_DOMAINS = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
   'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
+  'blogger.com', 'www.blogger.com', 'blogspot.com',
   'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
+  'microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'office365.com',
+  'msftauth.net', 'msauth.net',
   'github.com', 'gitlab.com', 'id.atlassian.com', 'auth0.com',
   'paypal.com', 'stripe.com',
   'canva.com', 'figma.com', 'notion.so', 'trello.com'
@@ -49,11 +52,13 @@ const SENSITIVE_DOMAINS = [
 const whitelistedDomains = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'google.com', 'google.com.vn', 'accounts.google.com', 'myaccount.google.com',
+  'blogger.com', 'blogspot.com',
   'chromewebstore.google.com', 'chrome.google.com',
   'facebook.com', 'fb.com', 'm.facebook.com',
   'twitter.com', 'x.com',
   'github.com', 'gitlab.com', 'apple.com', 'appleid.apple.com',
   'microsoft.com', 'microsoftonline.com', 'login.microsoftonline.com', 'login.live.com',
+  'office.com', 'outlook.com', 'office365.com', 'live.com', 'msftauth.net', 'msauth.net',
   'paypal.com', 'stripe.com', 'momo.vn', 'vnpay.vn', 'onepay.vn', 'payoo.vn', 'shopeepay.vn', 'zalopay.vn',
   'youtube.com', 'youtu.be', 'zalo.me', 't.me', 'telegram.org',
   'linkedin.com', 'instagram.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
@@ -62,6 +67,9 @@ const whitelistedDomains = [
 ];
 
 let customWhitelistedDomains = [];
+var isTargetPickerActive = false;
+var pickerOverlay = null;
+var pickerBadge = null;
 
 function isCurrentPageWhitelisted() {
   try {
@@ -340,6 +348,14 @@ function injectAdBlockCSS() {
   iframe[src*="tsyndicate"], iframe[src*="adxadserv"], iframe[src*="a-ads.com"],
   iframe[src*="adxcontent"],
   ins[data-zoneid], ins[class*="eas"], #adbd, .overdiv:not([class*="player"] *):not(video),
+  .spot, div.spot, [data-clocid], div[data-cl-overlay],
+  div[style*="position: fixed"][style*="bottom: 0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+  div[style*="position: fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+  div[style*="position:fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+  div[style*="bottom: 0px"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+  div[style*="bottom: 0"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
+  div:has(> a[href*="acquirecarded"]), div:has(> a[href*="badlandlisp"]), div:has(> a[href*="sc88"]),
+  a[href*="acquirecardedsullen.com"], a[href*="badlandlispyippee.com"],
   #vl-top-adx, #vl-native-adx, .banner-preload-container,
   .catfish-top-container, .catfish-bottom-container,
   a[id^="bb"][style*="opacity:0"], a[id^="bb"][style*="1px"],
@@ -937,6 +953,10 @@ if (currentEnabledState) {
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
+      // Protect internal extension UI and picker elements
+      if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
+      if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
+      if (el.closest && el.closest('#adblock-max-target-badge, #adblock-max-target-overlay')) return;
       if (isInsideVideoPlayer(el)) return;
       if (isMovieBannerOrPoster(el)) return;
 
@@ -1301,7 +1321,7 @@ if (currentEnabledState) {
     // + Nằm trực tiếp dưới <body> (direct child hoặc depth <= 3)
     // + Có z-index cực cao (> 9999) nhưng hoàn toàn KHÔNG chứa <video> hay bất kỳ player UI nào trong subtree của nó
     function detectAndCleanAdOverlays() {
-      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted() || isTargetPickerActive) return;
       if (window.location.hostname.includes('youtube.com')) return;
 
       try {
@@ -1320,6 +1340,9 @@ if (currentEnabledState) {
         );
         overlays.forEach(el => {
           if (!el || !el.isConnected) return;
+          // Protect extension elements (target picker overlay, badge, etc.)
+          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
+          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM VỚI VIDEO PLAYER & PHIM
@@ -1488,7 +1511,7 @@ if (currentEnabledState) {
     }
 
     function runOrphanOverlayAndScrollJanitor() {
-      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (isEmbeddedPlayerFrame || !currentEnabledState || isCurrentPageWhitelisted() || isTargetPickerActive) return;
       if (window.location.hostname.includes('youtube.com')) return;
 
       // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Nếu video đang toàn màn hình, không can thiệp
@@ -1510,6 +1533,9 @@ if (currentEnabledState) {
 
         backdropCandidates.forEach(el => {
           if (!el || !el.isConnected) return;
+          // Protect extension elements (target picker overlay, badge, etc.)
+          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
+          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bỏ qua video player và nội dung phim
@@ -1595,6 +1621,9 @@ if (currentEnabledState) {
 
         closeBtnCandidates.forEach(btn => {
           if (!btn || !btn.isConnected) return;
+          if (btn.id && (btn.id.startsWith('adblock-max') || btn.id.startsWith('webshield'))) return;
+          if (btn.hasAttribute && btn.hasAttribute('data-ws-internal')) return;
+          if (btn.closest && btn.closest('#adblock-max-target-badge')) return;
           if (btn.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bảo vệ video player và controls
@@ -1754,6 +1783,8 @@ if (currentEnabledState) {
         );
         for (let i = 0; i < adContainers.length; i++) {
           const el = adContainers[i];
+          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) continue;
+          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) continue;
           if (isInsideVideoPlayer(el)) continue;
           if (el.hasAttribute('data-ws-reported')) continue;
           el.setAttribute('data-ws-reported', '1');
@@ -1797,6 +1828,8 @@ if (currentEnabledState) {
 
     function queueNodeCheck(node) {
       if (!node || node.nodeType !== 1) return;
+      if (node.id && (node.id.startsWith('adblock-max') || node.id.startsWith('webshield'))) return;
+      if (node.hasAttribute && node.hasAttribute('data-ws-internal')) return;
       if (isInsideVideoPlayer(node) || isVideoPlayerOrControls(node)) return;
       pendingNodes.add(node);
       if (!batchScheduled) {
@@ -2124,10 +2157,7 @@ if (currentEnabledState) {
     let lastRightClickedElement = null;
     let lastMouseX = 0;
     let lastMouseY = 0;
-    let isTargetPickerActive = false;
     let currentHoveredTarget = null;
-    let pickerOverlay = null;
-    let pickerBadge = null;
     let pickerCleanup = null;
 
     // Track mouse coordinates & right-click target aggressively before page scripts can intercept
@@ -2212,8 +2242,9 @@ if (currentEnabledState) {
       if (!el || el === document.body || el === document.documentElement) return null;
       
       const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      // Safeguard: Never generate selector for the core media playback elements
-      if (tag === 'video' || tag === 'audio') return null;
+      // Safeguard: Never generate selector for legitimate core media playback elements
+      if (isLegitimateMainMediaPlayer(el)) return null;
+      if ((tag === 'video' || tag === 'audio') && isLegitimateMainMediaPlayer(el)) return null;
 
       // 1. Dynamic / Randomized ID detection (e.g. #__clb-spot_1981952_gzy_1, #atContainer-123456_xyz)
       if (el.id) {
@@ -2453,12 +2484,50 @@ if (currentEnabledState) {
       return `${parentPrefix}${tag}:nth-of-type(${nth})`;
     }
 
+    function isLegitimateMainMediaPlayer(el) {
+      if (!el) return false;
+      const tag = el.tagName ? el.tagName.toLowerCase() : '';
+      if (tag !== 'video' && tag !== 'audio') return false;
+
+      // 1. Kiểm tra nếu là banner quảng cáo: TUYỆT ĐỐI KHÔNG BẢO VỆ, CHO PHÉP CHẶN!
+      const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      const elId = (el.id || '').toLowerCase();
+      const src = (el.src || el.currentSrc || '').toLowerCase();
+
+      if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner|spot|sc88|bet|casino)(?:[\s_-]|$)/i.test(elClass) ||
+          /(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner|spot|sc88|bet)(?:[\s_-]|$)/i.test(elId) ||
+          /sc88|acquirecarded|badlandlisp|syndication|exosrv|traffic|adservice/i.test(src)) {
+        return false;
+      }
+
+      const adAncestor = el.closest && el.closest(
+        '.spot, [class*="spot" i], [class*="banner" i], [id*="banner" i], ' +
+        '[class*="catfish" i], [id*="catfish" i], [class*="floating" i], [id*="floating" i], ' +
+        '[class*="popup" i], [data-zoneid], [data-clocid], a[href*="http"], a[target="_blank"]'
+      );
+      if (adAncestor) return false;
+
+      // Video banner autoplay loop muted không controls
+      const isVideoBanner = el.hasAttribute('autoplay') && el.hasAttribute('loop') && el.hasAttribute('muted') && !el.controls;
+      const rect = el.getBoundingClientRect();
+      if (isVideoBanner && (rect.height < 200 || (rect.width > 0 && rect.width / rect.height > 2.5))) {
+        return false;
+      }
+
+      // 2. Chỉ bảo vệ nếu nằm trong khung player phim thực sự
+      const isMainPlayerContainer = el.closest && el.closest(
+        '.kt-player, #player, .video-player, .fp-player, .jwplayer, .dplayer, .artplayer, .video-js, ' +
+        '#main-player, .media-player, [id*="vjs-"], [id*="jwplayer"]'
+      );
+
+      return !!isMainPlayerContainer || (el.controls && rect.width > 280 && rect.height > 180);
+    }
+
     function blockElement(el) {
       if (!el) return;
 
-      const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (tag === 'video' || tag === 'audio') {
-        showToast('🛡️ Được bảo vệ: Không thể chặn luồng phát video/audio!', false);
+      if (isLegitimateMainMediaPlayer(el)) {
+        showToast('🛡️ Được bảo vệ: Đây là trình phát video/audio chính của trang!', false);
         return;
       }
 
@@ -2535,26 +2604,53 @@ if (currentEnabledState) {
       let targetHistory = [];
       let historyIndex = 0;
 
-      // Create highlight overlay
-      if (!pickerOverlay) {
-        pickerOverlay = document.createElement('div');
-        pickerOverlay.id = 'adblock-max-target-overlay';
-        pickerOverlay.style.cssText = `
-          box-sizing: border-box !important;
-          position: fixed !important;
-          pointer-events: none !important;
-          z-index: 2147483646 !important;
-          border: 3px solid #f43f5e !important;
-          background: rgba(244, 63, 94, 0.22) !important;
-          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 22px rgba(244, 63, 94, 0.5) !important;
-          border-radius: 4px !important;
-          transition: all 0.05s ease-out !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          display: none;
-        `;
-        mount.appendChild(pickerOverlay);
+      function ensurePickerOverlay() {
+        const root = document.body || document.documentElement;
+        if (!root) return null;
+        if (!pickerOverlay || !pickerOverlay.isConnected || !root.contains(pickerOverlay)) {
+          if (pickerOverlay && pickerOverlay.parentNode) {
+            try { pickerOverlay.remove(); } catch(e) {}
+          }
+          pickerOverlay = document.createElement('div');
+          pickerOverlay.id = 'adblock-max-target-overlay';
+          pickerOverlay.setAttribute('data-ws-internal', 'true');
+          pickerOverlay.style.cssText = `
+            box-sizing: border-box !important;
+            position: fixed !important;
+            pointer-events: none !important;
+            z-index: 2147483646 !important;
+            border: 3px solid #f43f5e !important;
+            background: rgba(244, 63, 94, 0.22) !important;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 22px rgba(244, 63, 94, 0.5) !important;
+            border-radius: 4px !important;
+            transition: none !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            display: none !important;
+          `;
+          root.appendChild(pickerOverlay);
+        }
+        return pickerOverlay;
       }
+
+      function ensurePickerBadge() {
+        const root = document.body || document.documentElement;
+        if (!root) return null;
+        if (!pickerBadge || !pickerBadge.isConnected || !root.contains(pickerBadge)) {
+          if (pickerBadge && pickerBadge.parentNode) {
+            try { pickerBadge.remove(); } catch(e) {}
+          }
+          pickerBadge = document.createElement('div');
+          pickerBadge.id = 'adblock-max-target-badge';
+          pickerBadge.setAttribute('data-ws-internal', 'true');
+          root.appendChild(pickerBadge);
+        }
+        return pickerBadge;
+      }
+
+      // Initial creation
+      ensurePickerOverlay();
+      ensurePickerBadge();
 
       // Inject dedicated target picker styles (Desktop + Mobile Responsive)
       let pickerStyle = document.getElementById('adblock-max-picker-style');
@@ -2707,12 +2803,8 @@ if (currentEnabledState) {
         mount.appendChild(pickerStyle);
       }
 
-      // Create control badge
-      if (!pickerBadge) {
-        pickerBadge = document.createElement('div');
-        pickerBadge.id = 'adblock-max-target-badge';
-        mount.appendChild(pickerBadge);
-      }
+      // Ensure control badge is mounted
+      ensurePickerBadge();
 
       // Add target cursor style
       let cursorStyle = document.getElementById('adblock-max-cursor-override');
@@ -2734,8 +2826,9 @@ if (currentEnabledState) {
       } catch (err) { }
 
       function renderInstructionBadge() {
-        if (!pickerBadge) return;
-        pickerBadge.innerHTML = `
+        const badge = ensurePickerBadge();
+        if (!badge) return;
+        badge.innerHTML = `
           <div class="abm-badge-row abm-badge-row-header" style="justify-content: space-between; width: 100%;">
             <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
               <span style="font-size: 13px;">🎯</span>
@@ -2748,30 +2841,46 @@ if (currentEnabledState) {
         if (cncBtn) cncBtn.onclick = (e) => { e.stopPropagation(); stopTargetPicker(); };
       }
 
-      function updateOverlay(el) {
-        if (!el || el === document.body || el === document.documentElement || el === pickerOverlay || el === pickerBadge || (pickerBadge && pickerBadge.contains(el))) {
-          if (pickerOverlay) pickerOverlay.style.display = 'none';
+      function updateOverlay(el, forceUpdate = false) {
+        if (!isTargetPickerActive) return;
+        const overlay = ensurePickerOverlay();
+        const badge = ensurePickerBadge();
+
+        if (!el || el === document.body || el === document.documentElement || el === overlay || el === badge || (badge && badge.contains(el))) {
+          if (overlay) overlay.style.setProperty('display', 'none', 'important');
           if (!isLocked) renderInstructionBadge();
           return;
         }
-        currentHoveredTarget = el;
+
         const rect = el.getBoundingClientRect();
-        if (pickerOverlay) {
-          pickerOverlay.style.top = Math.max(0, rect.top) + 'px';
-          pickerOverlay.style.left = Math.max(0, rect.left) + 'px';
-          pickerOverlay.style.width = Math.max(16, rect.width) + 'px';
-          pickerOverlay.style.height = Math.max(16, rect.height) + 'px';
-          pickerOverlay.style.display = 'block';
+        if (rect.width <= 0 && rect.height <= 0) {
+          if (overlay) overlay.style.setProperty('display', 'none', 'important');
+          return;
         }
+
+        if (overlay) {
+          overlay.style.setProperty('top', Math.max(0, rect.top) + 'px', 'important');
+          overlay.style.setProperty('left', Math.max(0, rect.left) + 'px', 'important');
+          overlay.style.setProperty('width', Math.max(16, rect.width) + 'px', 'important');
+          overlay.style.setProperty('height', Math.max(16, rect.height) + 'px', 'important');
+          overlay.style.setProperty('display', 'block', 'important');
+          overlay.style.setProperty('visibility', 'visible', 'important');
+          overlay.style.setProperty('opacity', '1', 'important');
+          overlay.style.setProperty('pointer-events', 'none', 'important');
+        }
+
+        // Prevent redundant badge rebuilding if hovering the exact same element
+        if (!forceUpdate && el === currentHoveredTarget) return;
+        currentHoveredTarget = el;
 
         const selector = getRobustSelector(el);
         const selDisplay = selector ? (selector.length > 25 ? selector.substring(0, 25) + '...' : selector) : 'phần tử';
 
-        if (!pickerBadge) return;
+        if (!badge) return;
 
         // When NOT locked (hovering over element): Show element selector + instant Block button + Escape
         if (!isLocked) {
-          pickerBadge.innerHTML = `
+          badge.innerHTML = `
             <div class="abm-badge-row abm-badge-row-header">
               <span style="font-size: 13px;">🎯</span>
               <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
@@ -2811,7 +2920,7 @@ if (currentEnabledState) {
 
         // When LOCKED (user has selected/locked element):
         const canShrink = historyIndex > 0;
-        pickerBadge.innerHTML = `
+        badge.innerHTML = `
           <div class="abm-badge-row abm-badge-row-header">
             <span style="font-size: 13px;">🎯</span>
             <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
@@ -2837,7 +2946,7 @@ if (currentEnabledState) {
               targetHistory[historyIndex] = parent;
               targetHistory = targetHistory.slice(0, historyIndex + 1);
               isLocked = true;
-              updateOverlay(parent);
+              updateOverlay(parent, true);
             }
           };
         }
@@ -2852,7 +2961,7 @@ if (currentEnabledState) {
               const prev = targetHistory[historyIndex];
               if (prev) {
                 isLocked = true;
-                updateOverlay(prev);
+                updateOverlay(prev, true);
               }
             }
           };
@@ -2866,7 +2975,8 @@ if (currentEnabledState) {
             isLocked = false;
             targetHistory = [];
             historyIndex = 0;
-            if (pickerOverlay) pickerOverlay.style.display = 'none';
+            const ov = ensurePickerOverlay();
+            if (ov) ov.style.setProperty('display', 'none', 'important');
             renderInstructionBadge();
           };
         }
@@ -2896,12 +3006,12 @@ if (currentEnabledState) {
       function onMouseMove(e) {
         if (!isTargetPickerActive || isLocked) return;
         let target = e.target;
-        if (!target || target === pickerOverlay) {
-          if (pickerOverlay) pickerOverlay.style.display = 'none';
+        if (!target || target === pickerOverlay || (pickerBadge && pickerBadge.contains(target))) {
+          if (pickerBadge && pickerBadge.contains(target)) return;
+          if (pickerOverlay) pickerOverlay.style.setProperty('display', 'none', 'important');
           target = document.elementFromPoint(e.clientX, e.clientY);
-          if (pickerOverlay) pickerOverlay.style.display = 'block';
         }
-        if (target && pickerBadge && !pickerBadge.contains(target) && target !== pickerOverlay) {
+        if (target && target !== pickerOverlay && (!pickerBadge || !pickerBadge.contains(target))) {
           updateOverlay(target);
         }
       }
@@ -2910,11 +3020,20 @@ if (currentEnabledState) {
         if (!target || target === pickerOverlay || target === pickerBadge || (pickerBadge && pickerBadge.contains(target))) return;
         if (target === document.body || target === document.documentElement) return;
 
-        targetHistory = [target];
+        // Nếu người dùng chạm vào phần tử con của một banner quảng cáo nổi (.spot, fixed/sticky banner đáy, floating banner)
+        // tự động chọn container cha của banner để người dùng chặn nguyên khối banner sạch sẽ!
+        const bannerContainer = target.closest && target.closest(
+          '.spot, [class*="spot" i], [class*="catfish" i], [class*="floating-ad" i], [id*="floating" i], ' +
+          '[data-zoneid], [data-clocid], div[style*="position: fixed"][style*="bottom"], div[style*="position:fixed"][style*="bottom"], ' +
+          'div[style*="position: fixed"][style*="top"], div[style*="position:fixed"][style*="top"]'
+        );
+        const effectiveTarget = bannerContainer || target;
+
+        targetHistory = [effectiveTarget];
         historyIndex = 0;
         isLocked = true;
-        currentHoveredTarget = target;
-        updateOverlay(target);
+        currentHoveredTarget = effectiveTarget;
+        updateOverlay(effectiveTarget, true);
       }
 
       function onClick(e) {
@@ -2927,9 +3046,9 @@ if (currentEnabledState) {
 
         let target = e.target;
         if (!target || target === pickerOverlay || target === document.body || target === document.documentElement) {
-          if (pickerOverlay) pickerOverlay.style.display = 'none';
+          if (pickerOverlay) pickerOverlay.style.setProperty('display', 'none', 'important');
           target = document.elementFromPoint(e.clientX, e.clientY);
-          if (pickerOverlay) pickerOverlay.style.display = 'block';
+          if (pickerOverlay) pickerOverlay.style.setProperty('display', 'block', 'important');
         }
 
         if (target) {
@@ -2944,9 +3063,9 @@ if (currentEnabledState) {
           const t = e.touches[0];
           let target = e.target;
           if (!target || target === pickerOverlay || target === document.body || target === document.documentElement) {
-            if (pickerOverlay) pickerOverlay.style.display = 'none';
+            if (pickerOverlay) pickerOverlay.style.setProperty('display', 'none', 'important');
             target = document.elementFromPoint(t.clientX, t.clientY);
-            if (pickerOverlay) pickerOverlay.style.display = 'block';
+            if (pickerOverlay) pickerOverlay.style.setProperty('display', 'block', 'important');
           }
           if (target) {
             e.preventDefault();
@@ -2980,9 +3099,8 @@ if (currentEnabledState) {
       }
 
       function confirmAndBlockElement(el) {
-        const tag = el && el.tagName ? el.tagName.toLowerCase() : '';
-        if (tag === 'video' || tag === 'audio') {
-          showToast('🛡️ Được bảo vệ: Không thể chặn luồng phát video/audio!', false);
+        if (isLegitimateMainMediaPlayer(el)) {
+          showToast('🛡️ Được bảo vệ: Đây là trình phát video/audio chính của trang!', false);
           stopTargetPicker();
           return;
         }
@@ -2998,6 +3116,14 @@ if (currentEnabledState) {
         showToast(`Đã chặn thành công: ${selector.length > 25 ? selector.substring(0, 25) + '...' : selector}`, true);
       }
 
+      function onScrollPicker() {
+        if (!isTargetPickerActive) return;
+        const current = targetHistory[historyIndex] || currentHoveredTarget;
+        if (current && current.isConnected) {
+          updateOverlay(current, true);
+        }
+      }
+
       window.addEventListener('mousemove', onMouseMove, true);
       window.addEventListener('click', onClick, true);
       window.addEventListener('touchstart', onTouchStartPicker, { capture: true, passive: false });
@@ -3005,6 +3131,7 @@ if (currentEnabledState) {
       document.addEventListener('keydown', onKeyDown, true);
       window.addEventListener('keyup', onKeyDown, true);
       document.addEventListener('keyup', onKeyDown, true);
+      window.addEventListener('scroll', onScrollPicker, { capture: true, passive: true });
 
       pickerCleanup = () => {
         window.removeEventListener('mousemove', onMouseMove, true);
@@ -3014,6 +3141,7 @@ if (currentEnabledState) {
         document.removeEventListener('keydown', onKeyDown, true);
         window.removeEventListener('keyup', onKeyDown, true);
         document.removeEventListener('keyup', onKeyDown, true);
+        window.removeEventListener('scroll', onScrollPicker, true);
         const cStyle = document.getElementById('adblock-max-cursor-override');
         if (cStyle && cStyle.parentNode) cStyle.remove();
         const pStyle = document.getElementById('adblock-max-picker-style');
@@ -3092,6 +3220,21 @@ if (currentEnabledState) {
         if (msg.type === 'STOP_TARGET_PICKER') {
           stopTargetPicker();
           if (sendResponse) sendResponse({ success: true });
+          return true;
+        }
+
+        if (msg.type === 'TRIGGER_MAILTO' && msg.url) {
+          try {
+            const a = document.createElement('a');
+            a.href = msg.url;
+            a.style.display = 'none';
+            (document.body || document.documentElement).appendChild(a);
+            a.click();
+            setTimeout(() => { try { a.remove(); } catch (e) {} }, 500);
+            if (sendResponse) sendResponse({ success: true });
+          } catch(err) {
+            if (sendResponse) sendResponse({ success: false, error: err.message });
+          }
           return true;
         }
       });

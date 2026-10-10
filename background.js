@@ -51,7 +51,7 @@ const FILTER_SOURCES = {
 };
 
 const SAFE_EXCLUDED = [
-  'google', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1', 'gstatic',
+  'google', 'blogger', 'blogspot', 'youtube', 'googlevideo', 'ytimg', 'ggpht', 'gvt1', 'gstatic',
   'facebook', 'fbcdn', 'instagram', 'cdninstagram', 'tiktok', 'tiktokcdn', 'byteoversea', 'ibytedtos',
   'github', 'microsoft', 'apple', 'cloudflare', 'cdnjs', 'jsdelivr', 'unpkg',
   'canva', 'figma', 'notion',

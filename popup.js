@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "4.0.8" }),
+      getManifest: () => ({ version: "4.1.0" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -972,7 +972,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "4.0.8";
+      const version = manifest.version || "4.1.0";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
@@ -1013,43 +1013,98 @@ Trân trọng cảm ơn.`;
       reportStatusMsg.className = "report-status-msg";
     }
 
-    // Helper to safely launch mailto via extension tabs API without DOM gesture blocks
-    function openMailto(url) {
+    // Helper to safely launch mailto via the active web tab (or fallback to Gmail/mailto)
+    function openMailtoApp(mailtoUrl, gmailFallbackUrl) {
+      // 1. Luôn tự động sao chép toàn bộ thông tin báo cáo vào Clipboard
       try {
-        chrome.tabs.create({ url: url }, () => {
-          if (chrome.runtime.lastError) {
-            try { window.open(url, '_blank'); } catch (err) {}
-          }
-          if (isMobile) {
-            setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
-          }
-        });
-      } catch (e) {
-        try { window.open(url, '_blank'); } catch (err) {}
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          const data = getReportData();
+          navigator.clipboard.writeText(data.fullText);
+        }
+      } catch (e) {}
+
+      showReportStatus("Đang mở ứng dụng Email trên thiết bị...", "success");
+
+      // 2. Kích hoạt thông qua tab web đang mở để Android OS kích hoạt Intent Mail app trực tiếp
+      getActiveTab((tab) => {
+        const canInject = tab && tab.id && tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://"));
+
+        if (canInject) {
+          // Gửi message tới content.js trước
+          chrome.tabs.sendMessage(tab.id, { type: "TRIGGER_MAILTO", url: mailtoUrl }, (res) => {
+            if (chrome.runtime.lastError || !res || !res.success) {
+              // Nếu content.js chưa chạy trong tab đó, dùng chrome.scripting.executeScript
+              if (chrome.scripting && chrome.scripting.executeScript) {
+                chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: (targetUrl) => {
+                    const a = document.createElement("a");
+                    a.href = targetUrl;
+                    a.style.display = "none";
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { try { a.remove(); } catch(e) {} }, 500);
+                  },
+                  args: [mailtoUrl]
+                }, () => {
+                  if (chrome.runtime.lastError) {
+                    fallbackLaunch();
+                  } else if (isMobile) {
+                    setTimeout(() => { try { window.close(); } catch(e) {} }, 400);
+                  }
+                });
+              } else {
+                fallbackLaunch();
+              }
+            } else if (isMobile) {
+              setTimeout(() => { try { window.close(); } catch(e) {} }, 400);
+            }
+          });
+        } else {
+          fallbackLaunch();
+        }
+      });
+
+      function fallbackLaunch() {
+        if (isMobile) {
+          // Trên di động, nếu không mở được app mail, mở Gmail Web để người dùng luôn gửi được báo cáo
+          chrome.tabs.create({ url: gmailFallbackUrl }, () => {
+            setTimeout(() => { try { window.close(); } catch(e) {} }, 300);
+          });
+        } else {
+          // Trên PC: mở mailto trực tiếp
+          chrome.tabs.create({ url: mailtoUrl });
+        }
       }
     }
 
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     if (isMobile && reportSendBtnText) {
-      reportSendBtnText.textContent = "Gửi qua App Gmail / Mail (Khuyên dùng)";
+      reportSendBtnText.textContent = "Gửi qua Gmail (Khuyên dùng)";
     }
 
-    // 1. Mở giao diện soạn mail (Tối ưu cho cả PC và điện thoại)
+    // 1. Mở giao diện soạn mail Gmail (Web Gmail - hoạt động 100% trên cả PC và điện thoại)
     if (reportSendGmailBtn) {
       reportSendGmailBtn.addEventListener("click", () => {
         const data = getReportData();
         const subjectParam = encodeURIComponent(data.subject);
-        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
+        const bodyParam = encodeURIComponent(data.fullText);
 
-        if (isMobile) {
-          // Trên di động: Web Gmail không hỗ trợ URL soạn thư trực tiếp.
-          // Mở trực tiếp App Gmail / Email của hệ điều hành thông qua mailto.
-          openMailto(mailtoUrl);
-        } else {
-          // Trên máy tính: Dùng URL Web Gmail KHÔNG có tham số &fs=1 (fs=1 là nguyên nhân gây crash/load hoài trên Gmail SPA).
-          const gmailUrl = `https://mail.google.com/mail/?view=cm&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
-          chrome.tabs.create({ url: gmailUrl });
-        }
+        // Tự động sao chép nội dung báo cáo vào clipboard dự phòng
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(data.fullText);
+          }
+        } catch(e) {}
+
+        showReportStatus("Đang mở trang soạn thư Gmail...", "success");
+
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${bodyParam}`;
+        chrome.tabs.create({ url: gmailUrl }, () => {
+          if (isMobile) {
+            setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
+          }
+        });
       });
     }
 
@@ -1058,9 +1113,11 @@ Trân trọng cảm ơn.`;
       reportSendEmailBtn.addEventListener("click", () => {
         const data = getReportData();
         const subjectParam = encodeURIComponent(data.subject);
-        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${encodeURIComponent(data.fullText)}`;
+        const bodyParam = encodeURIComponent(data.fullText);
+        const mailtoUrl = `mailto:huytran1002.dev@gmail.com?subject=${subjectParam}&body=${bodyParam}`;
+        const gmailFallbackUrl = `https://mail.google.com/mail/?view=cm&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${bodyParam}`;
 
-        openMailto(mailtoUrl);
+        openMailtoApp(mailtoUrl, gmailFallbackUrl);
       });
     }
 
