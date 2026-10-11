@@ -153,6 +153,19 @@
     return;
   }
 
+  // Safe ID accessor that avoids DOM clobbering (e.g. form elements with <input name="id">) & SVGAnimatedString
+  function getSafeId(el) {
+    if (!el || el.nodeType !== 1) return '';
+    if (typeof el.id === 'string') return el.id;
+    try {
+      if (typeof el.getAttribute === 'function') {
+        const attr = el.getAttribute('id');
+        if (typeof attr === 'string') return attr;
+      }
+    } catch (e) {}
+    return '';
+  }
+
   // 91porn / 91porna Landing Modal Suppressor
   // Pre-seed localStorage key '__landing_modal_at__' with today's date (YYYY-MM-DD)
   // so the website's own common.js script skips showing #tip_modal and .modal-backdrop
@@ -306,7 +319,7 @@
       if (!node || node.nodeType !== 1) return false;
       if (isYouTube || !isEnabled() || isCurrentPageWhitelisted()) return false;
       const tag = (node.tagName || '').toLowerCase();
-      const id = (node.id || '').toLowerCase();
+      const id = getSafeId(node).toLowerCase();
       const className = (typeof node.className === 'string') ? node.className.toLowerCase() : '';
 
       // 1. Intercept Adsterra Social Bar containers, ExoClick splash ads, Clickadu Mobile Spot & floating ad boxes immediately
@@ -636,9 +649,12 @@
         const btns = document.querySelectorAll(sel);
         for (const btn of btns) {
           try {
-            btn.style.setProperty('display', 'block', 'important');
-            btn.style.setProperty('visibility', 'visible', 'important');
-            btn.style.setProperty('pointer-events', 'auto', 'important');
+            if (btn.__ws_clicked) continue;
+            const style = window.getComputedStyle ? window.getComputedStyle(btn) : null;
+            if (style && (style.display === 'none' || style.visibility === 'hidden') && !btn.classList.contains('jw-skip')) {
+              continue;
+            }
+            btn.__ws_clicked = true;
             btn.click();
           } catch (e) {}
         }
@@ -1165,7 +1181,7 @@
           return true;
         }
         const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
-        const pId = (p.id || '').toLowerCase();
+        const pId = getSafeId(p).toLowerCase();
         if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pClass) ||
             /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pId)) {
           return true;
@@ -1192,7 +1208,7 @@
       }
 
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      const elId = (el.id || '').toLowerCase();
+      const elId = getSafeId(el).toLowerCase();
       // NEVER treat elements with explicit ad markers as movie banners!
       if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner|floater)(?:[\s_-]|$)/i.test(elClass) ||
           /(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner)(?:[\s_-]|$)/i.test(elId)) {
@@ -1709,7 +1725,7 @@
       }
 
       // Protect movie site episode buttons, server buttons, and elements with episode/server keywords in class/id
-      const elId = (el.id || '').toLowerCase();
+      const elId = getSafeId(el).toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('halim') || elId.includes('film') || elId.includes('movie') || elId.includes('control') || elId.includes('thumb') ||
         elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie') || elClass.includes('control') || elClass.includes('thumb')) {
@@ -2334,7 +2350,7 @@
 
             if (anchor && anchor.href) {
               const isTargetBlank = (anchor.getAttribute('target') || '').toLowerCase() === '_blank';
-              const anchorId = (anchor.id || '').toLowerCase();
+              const anchorId = getSafeId(anchor).toLowerCase();
               const style = anchor.getAttribute('style') || '';
               const isDummyTrap = anchorId.startsWith('bb') ||
                                   style.includes('opacity:0') || style.includes('opacity: 0') ||

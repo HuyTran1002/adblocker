@@ -39,7 +39,7 @@ try {
 const SENSITIVE_DOMAINS = [
   'accounts.firefox.com', 'addons.mozilla.org', 'mozilla.org',
   'accounts.google.com', 'myaccount.google.com', 'chromewebstore.google.com', 'chrome.google.com',
-  'mail.google.com', 'drive.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
+  'mail.google.com', 'drive.google.com', 'drive.usercontent.google.com', 'usercontent.google.com', 'docs.google.com', 'calendar.google.com', 'meet.google.com', 'chat.google.com',
   'blogger.com', 'www.blogger.com', 'blogspot.com',
   'login.microsoftonline.com', 'login.live.com', 'appleid.apple.com',
   'microsoft.com', 'microsoftonline.com', 'cloud.microsoft', 'live.com', 'office.com', 'outlook.com', 'office365.com',
@@ -105,6 +105,28 @@ if (SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (currentHost === d || c
   } catch (e) {}
   // Completely inactive on sensitive/productivity domains
   return;
+}
+
+// Safe ID accessor that avoids DOM clobbering (e.g. form elements with <input name="id">) & SVGAnimatedString
+function getSafeId(el) {
+  if (!el || el.nodeType !== 1) return '';
+  if (typeof el.id === 'string') return el.id;
+  try {
+    if (typeof el.getAttribute === 'function') {
+      const attr = el.getAttribute('id');
+      if (typeof attr === 'string') return attr;
+    }
+  } catch (e) {}
+  return '';
+}
+
+// Protect internal extension UI (target picker, badge, toasts, style tags)
+function isExtensionElement(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const id = getSafeId(el);
+  if (id && (id.startsWith('adblock-max') || id.startsWith('webshield'))) return true;
+  if (typeof el.hasAttribute === 'function' && el.hasAttribute('data-ws-internal')) return true;
+  return false;
 }
 
 // Fallback Main World Injector for Mobile Browsers (Kiwi, Lemur, Firefox Android)
@@ -345,7 +367,7 @@ function injectAdBlockCSS() {
   iframe[src*="linkroyal"], iframe[src*="abroadad"],
   iframe[src*="getjuicy"], iframe[src*="magsrv"],
   iframe[src*="mnaspm"], iframe[src*="mayzaent"], iframe[src*="prplad"], iframe[src*="smartpop"],
-  iframe[src*="vast"], iframe[src*="vpaid"], iframe[src*="adformat"], iframe[src*="trafficjunky"],
+  iframe[src*="adformat"], iframe[src*="trafficjunky"],
   iframe[src*="tsyndicate"], iframe[src*="adxadserv"], iframe[src*="a-ads.com"],
   iframe[src*="adxcontent"],
   ins[data-zoneid], ins[class*="eas"], #adbd, .overdiv:not([class*="player"] *):not(video),
@@ -784,7 +806,7 @@ if (currentEnabledState) {
             return _cachePlayer(el, true);
           }
           const pClass = (typeof p.className === 'string') ? p.className.toLowerCase() : '';
-          const pId = (p.id || '').toLowerCase();
+          const pId = getSafeId(p).toLowerCase();
           if (/player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pClass) ||
               /player|video|jwplayer|vjs|plyr|artplayer|dplayer|xgplayer|fluid_player|media|playleft|macplayer/i.test(pId)) {
             return _cachePlayer(el, true);
@@ -819,7 +841,7 @@ if (currentEnabledState) {
           }
         }
 
-        const elId = (el.id || '').toLowerCase();
+        const elId = getSafeId(el).toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         
         const keywords = [
@@ -854,7 +876,7 @@ if (currentEnabledState) {
           return false;
         }
 
-        const elId = (el.id || '').toLowerCase();
+        const elId = getSafeId(el).toLowerCase();
         const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
         // NEVER treat elements with explicit ad markers as movie banners!
         if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner-ad|ad-banner|floater)(?:[\s_-]|$)/i.test(elClass) ||
@@ -955,8 +977,7 @@ if (currentEnabledState) {
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
       // Protect internal extension UI and picker elements
-      if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
-      if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
+      if (isExtensionElement(el)) return;
       if (el.closest && el.closest('#adblock-max-target-badge, #adblock-max-target-overlay')) return;
       if (isInsideVideoPlayer(el)) return;
       if (isMovieBannerOrPoster(el)) return;
@@ -977,7 +998,7 @@ if (currentEnabledState) {
       if (['button', 'input', 'select', 'textarea', 'form'].includes(tagName)) return;
       if (el.getAttribute && el.getAttribute('role') === 'button') return;
 
-      const elId = (el.id || '').toLowerCase();
+      const elId = getSafeId(el).toLowerCase();
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
       if (elId.includes('no-link') || elId.includes('episode') || elId.includes('server') || elId.includes('tap') || elId.includes('film') || elId.includes('movie') ||
           elClass.includes('episode') || elClass.includes('server') || elClass.includes('halim') || elClass.includes('list-ep') || elClass.includes('tap') || elClass.includes('film') || elClass.includes('movie')) return;
@@ -993,7 +1014,8 @@ if (currentEnabledState) {
         if (!el.hasAttribute('data-ad-blocked')) {
           el.setAttribute('data-ad-blocked', 'true');
           el.setAttribute('style', 'display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important;');
-          const identifier = el.id ? `#${el.id}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
+          const safeId = getSafeId(el);
+          const identifier = safeId ? `#${safeId}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
           reportAdBlocked(identifier, 'Chặn khung chứa quảng cáo');
         }
         return;
@@ -1018,7 +1040,7 @@ if (currentEnabledState) {
           if (!isExternal) return;
 
           // Check if anchor is a dummy click trap (e.g. #bb0, #bb1 with 1px / opacity 0)
-          const anchorId = (anchor.id || '').toLowerCase();
+          const anchorId = getSafeId(anchor).toLowerCase();
           const anchorStyle = anchor.getAttribute('style') || '';
           if (anchorId.startsWith('bb') || anchorStyle.includes('opacity:0') || anchorStyle.includes('opacity: 0') || (anchorStyle.includes('1px') && anchorStyle.includes('height'))) {
             try { anchor.remove(); } catch (e) {}
@@ -1068,7 +1090,7 @@ if (currentEnabledState) {
             if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
               if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
                 const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
-                const pId = (parent.id || '').toLowerCase();
+                const pId = getSafeId(parent).toLowerCase();
                 if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
                   elementToHide = parent;
                 }
@@ -1119,7 +1141,7 @@ if (currentEnabledState) {
             if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
               if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
                 const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
-                const pId = (parent.id || '').toLowerCase();
+                const pId = getSafeId(parent).toLowerCase();
                 if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
                   elementToHide = parent;
                 }
@@ -1187,7 +1209,7 @@ if (currentEnabledState) {
             if (parent && parent !== document.body && parent !== document.documentElement && parent.childElementCount <= 2) {
               if (!isVideoPlayerOrControls(parent) && !isMovieBannerOrPoster(parent)) {
                 const pClass = (typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
-                const pId = (parent.id || '').toLowerCase();
+                const pId = getSafeId(parent).toLowerCase();
                 if (pClass === 'adsbox' || pClass === 'ad-banner' || pClass === 'catfish-ad' || pId === 'adsbox') {
                   elementToHide = parent;
                 }
@@ -1342,8 +1364,7 @@ if (currentEnabledState) {
         overlays.forEach(el => {
           if (!el || !el.isConnected) return;
           // Protect extension elements (target picker overlay, badge, etc.)
-          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
-          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
+          if (isExtensionElement(el)) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM VỚI VIDEO PLAYER & PHIM
@@ -1374,7 +1395,7 @@ if (currentEnabledState) {
 
           const zIndex = parseInt(style.zIndex, 10);
           const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-          const elId = (el.id || '').toLowerCase();
+          const elId = getSafeId(el).toLowerCase();
 
           const isKnownBackdropClass = elClass.includes('ad-overlay') || elClass.includes('overlay-ad') || elClass.includes('ad-backdrop') || elClass.includes('popup-backdrop') || elClass.includes('modal-backdrop') || elClass.includes('catfish') || elId.includes('ad-overlay') || elId.includes('overlay-ad') || elId.includes('ad-backdrop');
 
@@ -1535,8 +1556,7 @@ if (currentEnabledState) {
         backdropCandidates.forEach(el => {
           if (!el || !el.isConnected) return;
           // Protect extension elements (target picker overlay, badge, etc.)
-          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) return;
-          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) return;
+          if (isExtensionElement(el)) return;
           if (el.hasAttribute('data-ad-blocked')) return;
 
           // Bắt buộc bỏ qua video player và nội dung phim
@@ -1622,8 +1642,7 @@ if (currentEnabledState) {
 
         closeBtnCandidates.forEach(btn => {
           if (!btn || !btn.isConnected) return;
-          if (btn.id && (btn.id.startsWith('adblock-max') || btn.id.startsWith('webshield'))) return;
-          if (btn.hasAttribute && btn.hasAttribute('data-ws-internal')) return;
+          if (isExtensionElement(btn)) return;
           if (btn.closest && btn.closest('#adblock-max-target-badge')) return;
           if (btn.hasAttribute('data-ad-blocked')) return;
 
@@ -1784,13 +1803,13 @@ if (currentEnabledState) {
         );
         for (let i = 0; i < adContainers.length; i++) {
           const el = adContainers[i];
-          if (el.id && (el.id.startsWith('adblock-max') || el.id.startsWith('webshield'))) continue;
-          if (el.hasAttribute && el.hasAttribute('data-ws-internal')) continue;
+          if (isExtensionElement(el)) continue;
           if (isInsideVideoPlayer(el)) continue;
           if (el.hasAttribute('data-ws-reported')) continue;
           el.setAttribute('data-ws-reported', '1');
           el.style.setProperty('display', 'none', 'important');
-          const identifier = el.id ? `#${el.id}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
+          const safeId = getSafeId(el);
+          const identifier = safeId ? `#${safeId}` : (el.className ? `.${el.className.split(' ')[0]}` : 'ad-container');
           reportAdBlocked(identifier, 'Chặn khung chứa quảng cáo');
         }
       } catch (e) {}
@@ -1829,8 +1848,7 @@ if (currentEnabledState) {
 
     function queueNodeCheck(node) {
       if (!node || node.nodeType !== 1) return;
-      if (node.id && (node.id.startsWith('adblock-max') || node.id.startsWith('webshield'))) return;
-      if (node.hasAttribute && node.hasAttribute('data-ws-internal')) return;
+      if (isExtensionElement(node)) return;
       if (isInsideVideoPlayer(node) || isVideoPlayerOrControls(node)) return;
       pendingNodes.add(node);
       if (!batchScheduled) {
@@ -1845,7 +1863,7 @@ if (currentEnabledState) {
     try {
       const observer = new MutationObserver((mutations) => {
         const isEnabled = currentEnabledState;
-        if (!isEnabled) return;
+        if (!isEnabled || isCurrentPageWhitelisted()) return;
 
         // Skip dynamic ad checks on YouTube to prevent hiding core UI elements
         if (window.location.hostname.includes('youtube.com')) return;
@@ -2248,8 +2266,9 @@ if (currentEnabledState) {
       if ((tag === 'video' || tag === 'audio') && isLegitimateMainMediaPlayer(el)) return null;
 
       // 1. Dynamic / Randomized ID detection (e.g. #__clb-spot_1981952_gzy_1, #atContainer-123456_xyz)
-      if (el.id) {
-        const idLower = el.id.toLowerCase();
+      const elId = getSafeId(el);
+      if (elId) {
+        const idLower = elId.toLowerCase();
         // Specifically detect Clickadu / Adsterra / AdSpot dynamic IDs with randomized suffixes
         if (idLower.includes('clb-spot') || idLower.startsWith('__clb')) {
           return '[id*="clb-spot"], [id^="__clb"]';
@@ -2259,14 +2278,14 @@ if (currentEnabledState) {
         }
 
         // Generic detection of randomized suffix (e.g. prefix_12345_abc_1 or prefix-1234_xyz)
-        const randomSuffixMatch = el.id.match(/^([a-zA-Z0-9_\-]+?)[_-](?:[a-zA-Z0-9]{3,8}_\d+|[a-zA-Z0-9]{6,12})$/);
+        const randomSuffixMatch = elId.match(/^([a-zA-Z0-9_\-]+?)[_-](?:[a-zA-Z0-9]{3,8}_\d+|[a-zA-Z0-9]{6,12})$/);
         if (randomSuffixMatch && randomSuffixMatch[1] && randomSuffixMatch[1].length >= 4) {
           return `[id^="${CSS.escape(randomSuffixMatch[1])}"]`;
         }
 
         // Clean readable static ID
-        if (!/^\d/.test(el.id) && el.id.length < 35 && !/[0-9a-f]{8,}/i.test(el.id)) {
-          return '#' + CSS.escape(el.id);
+        if (!/^\d/.test(elId) && elId.length < 35 && !/[0-9a-f]{8,}/i.test(elId)) {
+          return '#' + CSS.escape(elId);
         }
       }
 
@@ -2436,8 +2455,9 @@ if (currentEnabledState) {
       if (el.parentElement && el.parentElement !== document.body && el.parentElement !== document.documentElement) {
         const parent = el.parentElement;
         let parentSel = '';
-        if (parent.id && !/^\d/.test(parent.id) && parent.id.length < 28) {
-          parentSel = '#' + CSS.escape(parent.id);
+        const parentId = getSafeId(parent);
+        if (parentId && !/^\d/.test(parentId) && parentId.length < 28) {
+          parentSel = '#' + CSS.escape(parentId);
         } else {
           const parentCls = getCleanClassName(parent);
           if (parentCls) {
@@ -2470,10 +2490,11 @@ if (currentEnabledState) {
 
       let parentPrefix = '';
       if (el.parentElement) {
+        const pId = getSafeId(el.parentElement);
         if (el.parentElement === document.body) {
           parentPrefix = 'body > ';
-        } else if (el.parentElement.id && !/^\d/.test(el.parentElement.id)) {
-          parentPrefix = '#' + CSS.escape(el.parentElement.id) + ' > ';
+        } else if (pId && !/^\d/.test(pId)) {
+          parentPrefix = '#' + CSS.escape(pId) + ' > ';
         } else {
           const pCls = getCleanClassName(el.parentElement);
           if (pCls) {
@@ -2492,7 +2513,7 @@ if (currentEnabledState) {
 
       // 1. Kiểm tra nếu là banner quảng cáo: TUYỆT ĐỐI KHÔNG BẢO VỆ, CHO PHÉP CHẶN!
       const elClass = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
-      const elId = (el.id || '').toLowerCase();
+      const elId = getSafeId(el).toLowerCase();
       const src = (el.src || el.currentSrc || '').toLowerCase();
 
       if (/(?:^|[\s_-])(?:ad|ads|qc|popup|catfish|banner|spot|sc88|bet|casino)(?:[\s_-]|$)/i.test(elClass) ||
@@ -3522,11 +3543,11 @@ if (currentEnabledState) {
         if (isInsideVideoPlayer(el) || isVideoPlayerOrControls(el)) return false;
         if (el === document.body || el === document.documentElement) return false;
         // Never touch target picker UI
-        if (el.id && el.id.startsWith('adblock-max-')) return false;
+        if (isExtensionElement(el)) return false;
 
         try {
           const tag = el.tagName.toLowerCase();
-          const id = (el.id || '').toLowerCase();
+          const id = getSafeId(el).toLowerCase();
           const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
 
           // 0. Explicit Adsterra Social Bar container, ExoClick ad block, Clickadu Mobile Spot or splash
@@ -3603,7 +3624,7 @@ if (currentEnabledState) {
                                     text.includes('quảng cáo');
               const elClassStr = (typeof el.className === 'string') ? el.className : (el.getAttribute && el.getAttribute('class')) || '';
               const hasAdClass = /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(typeof elClassStr === 'string' ? elClassStr : '') ||
-                                 /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(el.id || '');
+                                 /(?:popup|banner|overlay|floater|catfish|ad-|ads-|_ad|adfloat|floatad|floating)/i.test(getSafeId(el));
               if (hasFake18OrAd && (hasAdClass || zIndex >= 9000 || el.querySelector('video, iframe, button'))) {
                 return true;
               }
@@ -3732,9 +3753,12 @@ if (currentEnabledState) {
             const btns = document.querySelectorAll(sel);
             for (const btn of btns) {
               try {
-                btn.style.setProperty('display', 'block', 'important');
-                btn.style.setProperty('visibility', 'visible', 'important');
-                btn.style.setProperty('pointer-events', 'auto', 'important');
+                if (btn.__ws_clicked) continue;
+                const style = window.getComputedStyle ? window.getComputedStyle(btn) : null;
+                if (style && (style.display === 'none' || style.visibility === 'hidden') && !btn.classList.contains('jw-skip')) {
+                  continue;
+                }
+                btn.__ws_clicked = true;
                 btn.click();
               } catch (e) {}
             }
