@@ -34,6 +34,16 @@ if (typeof chrome === "undefined" || !chrome.storage) {
   };
 }
 
+function escapeHTML(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // Sync manifest version string
   try {
@@ -197,8 +207,8 @@ document.addEventListener("DOMContentLoaded", () => {
           : '';
         itemEl.innerHTML = `
           <div class="history-details">
-            <span class="history-domain">${item.domain || "Web"}${countBadge}</span>
-            <span class="history-url" title="Bấm để sao chép: ${item.url || displayUrl}">${displayUrl}</span>
+            <span class="history-domain">${escapeHTML(item.domain || "Web")}${countBadge}</span>
+            <span class="history-url" title="Bấm để sao chép: ${escapeHTML(item.url || displayUrl)}">${escapeHTML(displayUrl)}</span>
           </div>
           <span class="history-time">${formatRelativeTime(item.timestamp)}</span>
         `;
@@ -282,8 +292,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const tag = document.createElement("div");
         tag.className = "rule-tag";
         tag.innerHTML = `
-          <span>${domain}</span>
-          <button class="tag-remove-btn" title="Xóa khỏi whitelist" data-domain="${domain}">&times;</button>
+          <span>${escapeHTML(domain)}</span>
+          <button class="tag-remove-btn" title="Xóa khỏi whitelist" data-domain="${escapeHTML(domain)}">&times;</button>
         `;
         tag.querySelector(".tag-remove-btn").addEventListener("click", (e) => {
           const domToRemove = e.currentTarget.getAttribute("data-domain");
@@ -327,9 +337,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const displayCode = selector.length > 28 ? selector.substring(0, 26) + '...' : selector;
 
         item.innerHTML = `
-          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${selector.replace(/"/g, '&quot;')}">
-            <span class="custom-rule-code">${displayCode}</span>
-            <span class="custom-rule-domain">${currentDomain || "Trang hiện tại"}</span>
+          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${escapeHTML(selector)}">
+            <span class="custom-rule-code">${escapeHTML(displayCode)}</span>
+            <span class="custom-rule-domain">${escapeHTML(currentDomain || "Trang hiện tại")}</span>
           </div>
           <div class="custom-rule-actions">
             <button class="custom-rule-copy-btn" title="Sao chép toàn bộ thuộc tính selector này">📋 Chép</button>
@@ -381,8 +391,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const displayCode = rule.length > 28 ? rule.substring(0, 26) + '...' : rule;
 
         item.innerHTML = `
-          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${rule.replace(/"/g, '&quot;')}">
-            <span class="custom-rule-code">${displayCode}</span>
+          <div class="custom-rule-info" title="Bấm để sao chép đầy đủ: ${escapeHTML(rule)}">
+            <span class="custom-rule-code">${escapeHTML(displayCode)}</span>
             <span class="custom-rule-domain">Toàn cục (Mọi trang)</span>
           </div>
           <div class="custom-rule-actions">

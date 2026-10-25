@@ -686,7 +686,7 @@ if (currentEnabledState) {
         return;
       }
 
-      if (!event.data) return;
+      if (event.source !== window || !event.data) return;
 
       // Handle handshake request
       if (event.data.type === 'ANTI_POPUP_REQUEST_STATE') {
@@ -2264,6 +2264,16 @@ if (currentEnabledState) {
       lastRightClickedElement = e.target;
     }, { capture: true });
 
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // Show floating toast notification on web page
     function showToast(message, isSuccess = true) {
       const mount = document.body || document.documentElement;
@@ -2297,7 +2307,9 @@ if (currentEnabledState) {
         `;
         mount.appendChild(toast);
       }
-      toast.innerHTML = `<span style="font-size: 16px;">${isSuccess ? '✅' : 'ℹ️'}</span> <span>${message}</span>`;
+      toast.innerHTML = `<span style="font-size: 16px;">${isSuccess ? '✅' : 'ℹ️'}</span> <span class="abm-toast-text"></span>`;
+      const textSpan = toast.querySelector('.abm-toast-text');
+      if (textSpan) textSpan.textContent = message;
       requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(-50%) translateY(0)';
@@ -2970,7 +2982,7 @@ if (currentEnabledState) {
           badge.innerHTML = `
             <div class="abm-badge-row abm-badge-row-header">
               <span style="font-size: 13px;">🎯</span>
-              <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+              <code class="abm-selector-tag" title="${escapeHTML(selector || '')}">${escapeHTML(selDisplay)}</code>
             </div>
             <div class="abm-badge-row abm-badge-row-actions">
               <button id="abm-lock-btn" class="abm-btn abm-btn-reselect" title="Bấm vào để khóa và tinh chỉnh phần tử này">🔒 Chọn</button>
@@ -3010,7 +3022,7 @@ if (currentEnabledState) {
         badge.innerHTML = `
           <div class="abm-badge-row abm-badge-row-header">
             <span style="font-size: 13px;">🎯</span>
-            <code class="abm-selector-tag" title="${(selector || '').replace(/"/g, '&quot;')}">${selDisplay}</code>
+            <code class="abm-selector-tag" title="${escapeHTML(selector || '')}">${escapeHTML(selDisplay)}</code>
           </div>
           <div class="abm-badge-row abm-badge-row-actions">
             <button id="abm-expand-btn" class="abm-btn" title="Mở rộng vùng chọn ra thẻ cha">🔼</button>
