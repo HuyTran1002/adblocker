@@ -299,22 +299,35 @@ async function updateOnlineFilters() {
       appliedDnrRules = Math.ceil(appliedAdDomains / 50);
     }
 
-    const appliedCosmetics = topCosmetics.length > 0 ? topCosmetics.length : 2000;
+    const appliedCosmetics = topCosmetics.length > 0 ? topCosmetics.length : 225;
     const appliedRegionalRules = domainCosmeticsCount + (counts.abpvn || 1076);
 
     const stats = {
-      staticDnrRules: 102,
+      staticDnrRules: 117,
       appliedAdDomains: appliedAdDomains,
       appliedDnrRules: appliedDnrRules,
       appliedCosmetics: appliedCosmetics,
       appliedRegionalRules: appliedRegionalRules,
-      totalAppliedRules: 102 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
+      totalAppliedRules: 117 + appliedAdDomains + appliedCosmetics + appliedRegionalRules,
       lastUpdated: Date.now()
     };
 
-    // Keep dynamicDomainCosmetics reasonable in storage (max 1000 domains)
+    // Intelligent VN & High-Value Domain Prioritizer for Storage
+    // Keep dynamicDomainCosmetics reasonable in storage (max 1200 domains)
     const trimmedDomainCosmetics = {};
-    const domainKeys = Object.keys(allDomainCosmetics).slice(0, 1000);
+    const vnKeywords = ['.vn', 'phim', 'truyen', 'anime', 'kenh', 'viet', 'sub', 'xoilac', 'bongda', 'motphim', 'xem'];
+    const allKeys = Object.keys(allDomainCosmetics);
+    
+    // Sort keys: VN domains and ABPVN first, followed by others
+    allKeys.sort((a, b) => {
+      const aIsVn = vnKeywords.some(kw => a.includes(kw));
+      const bIsVn = vnKeywords.some(kw => b.includes(kw));
+      if (aIsVn && !bIsVn) return -1;
+      if (!aIsVn && bIsVn) return 1;
+      return 0;
+    });
+
+    const domainKeys = allKeys.slice(0, 1200);
     for (const dk of domainKeys) {
       trimmedDomainCosmetics[dk] = allDomainCosmetics[dk].slice(0, 20);
     }
@@ -403,12 +416,12 @@ chrome.runtime.onInstalled.addListener(() => {
     if (res.onlineFilterStats === undefined) {
       chrome.storage.local.set({
         onlineFilterStats: {
-          staticDnrRules: 91,
-          appliedAdDomains: 25420,
-          appliedDnrRules: 508,
-          appliedCosmetics: 2000,
-          appliedRegionalRules: 1076,
-          totalAppliedRules: 28587,
+          staticDnrRules: 117,
+          appliedAdDomains: 50046,
+          appliedDnrRules: 1007,
+          appliedCosmetics: 225,
+          appliedRegionalRules: 23907,
+          totalAppliedRules: 74295,
           lastUpdated: Date.now()
         }
       });

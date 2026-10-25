@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "4.1.2" }),
+      getManifest: () => ({ version: "4.1.4" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -13,12 +13,12 @@ if (typeof chrome === "undefined" || !chrome.storage) {
             blockedCount: 142,
             lastFiltersUpdateTimestamp: Date.now() - 300000,
             onlineFilterStats: {
-              staticDnrRules: 91,
-              appliedAdDomains: 25420,
-              appliedDnrRules: 508,
-              appliedCosmetics: 2000,
-              appliedRegionalRules: 1076,
-              totalAppliedRules: 28587
+              staticDnrRules: 117,
+              appliedAdDomains: 50046,
+              appliedDnrRules: 1007,
+              appliedCosmetics: 225,
+              appliedRegionalRules: 23907,
+              totalAppliedRules: 74295
             }
           });
         },
@@ -539,29 +539,30 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Static Core Rules (rules.json)
     const staticCountEl = document.getElementById("rules-static-count");
     if (staticCountEl) {
-      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 102;
+      const staticCount = (stats && stats.staticDnrRules) ? stats.staticDnrRules : 117;
       staticCountEl.textContent = `${staticCount.toLocaleString()} quy tắc cốt lõi`;
     }
 
     // 2. Dynamic Ad Domains DNR
     const dynCountEl = document.getElementById("rules-dynamic-count");
     if (dynCountEl) {
-      const domCount = (stats && (stats.appliedAdDomains || stats.totalDomains)) ? (stats.appliedAdDomains || stats.totalDomains) : 25420;
-      dynCountEl.textContent = `${domCount.toLocaleString()} máy chủ chặn`;
+      const domCount = (stats && (stats.appliedAdDomains || stats.totalDomains)) ? (stats.appliedAdDomains || stats.totalDomains) : 50046;
+      const dnrRuleCount = (stats && stats.appliedDnrRules) ? ` (${stats.appliedDnrRules} quy tắc DNR)` : '';
+      dynCountEl.textContent = `${domCount.toLocaleString()} máy chủ${dnrRuleCount}`;
     }
 
     // 3. Cosmetic CSS DOM Selectors
     const cosCountEl = document.getElementById("rules-cosmetic-count");
     if (cosCountEl) {
-      const cosCount = (stats && stats.appliedCosmetics) ? stats.appliedCosmetics : 2000;
-      cosCountEl.textContent = `${cosCount.toLocaleString()} bộ chọn phần tử`;
+      const cosCount = (stats && stats.appliedCosmetics) ? stats.appliedCosmetics : 225;
+      cosCountEl.textContent = `${cosCount.toLocaleString()} bộ chọn CSS tinh tuyển`;
     }
 
     // 4. Regional & Anti-Popunder Rules
     const regCountEl = document.getElementById("rules-regional-count");
     if (regCountEl) {
-      const regCount = (stats && stats.appliedRegionalRules) ? stats.appliedRegionalRules : 1076;
-      regCountEl.textContent = `${regCount.toLocaleString()} quy tắc khu vực`;
+      const regCount = (stats && stats.appliedRegionalRules) ? stats.appliedRegionalRules : 23907;
+      regCountEl.textContent = `${regCount.toLocaleString()} quy tắc (1.200+ web VN)`;
     }
 
     // Direct live query to Chrome DNR engine if available to confirm exact applied rules

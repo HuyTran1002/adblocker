@@ -175,6 +175,123 @@
       const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       localStorage.setItem('__landing_modal_at__', todayStr);
     }
+    if (currentHost.includes('xnhau')) {
+      // Disarm webGate popunder timers
+      localStorage.setItem('lastPopunderTime', String(Date.now() + 365 * 86400000));
+      localStorage.setItem('xnPopSeen', '9999');
+    }
+  } catch (e) {}
+
+  // Universal KVS / Flowplayer / xnPlayer Ad & Popunder Sanitizer
+  // Kernel Video Sharing (KVS) is the core engine behind thousands of adult & streaming tube sites.
+  // Sites configure player ads via xnConf, kt_player, xnPlayer, flowplayer with parameters like:
+  // adv_start_html, adv_pause_html, popunder_url, vast_url.
+  // Preemptively sanitizing these configs guarantees no ad iframe or is-ad-visible state is ever spawned!
+  try {
+    function sanitizeKvsConfig(conf) {
+      if (!conf || typeof conf !== 'object') return conf;
+      try {
+        conf.adv_start_html = '';
+        conf.adv_start_html_adaptive = '';
+        conf.adv_pause_html = '';
+        conf.adv_pause_html_adaptive = '';
+        conf.adv_pre = '';
+        conf.adv_post = '';
+        conf.adv_midroll = '';
+        conf.popunder_url = '';
+        conf.popunder_times = '0';
+        conf.popunder_duration = '0';
+        conf.popunder_start_after = '999999';
+        conf.vast_url = '';
+        conf.vast_preroll = '';
+        conf.vast_midroll = '';
+      } catch (e) {}
+      return conf;
+    }
+
+    function wrapGlobalConfigObject(objName) {
+      let _val = undefined;
+      try {
+        Object.defineProperty(window, objName, {
+          get() { return _val; },
+          set(val) {
+            _val = sanitizeKvsConfig(val);
+          },
+          configurable: true
+        });
+      } catch (e) {}
+    }
+    wrapGlobalConfigObject('xnConf');
+    wrapGlobalConfigObject('flashvars');
+    wrapGlobalConfigObject('player_conf');
+    wrapGlobalConfigObject('video_player_config');
+
+    function wrapKvsPlayerInit(fnName) {
+      let _orig = window[fnName];
+      Object.defineProperty(window, fnName, {
+        get() { return _orig; },
+        set(fn) {
+          if (typeof fn === 'function') {
+            _orig = function (id, swf, w, h, conf, ...args) {
+              if (conf) sanitizeKvsConfig(conf);
+              return fn.call(this, id, swf, w, h, conf, ...args);
+            };
+            try { Object.assign(_orig, fn); } catch (e) {}
+          } else {
+            _orig = fn;
+          }
+        },
+        configurable: true
+      });
+    }
+    wrapKvsPlayerInit('xnPlayer');
+    wrapKvsPlayerInit('kt_player');
+    wrapKvsPlayerInit('kvsPlayer');
+
+    let _origFlowplayer = window.flowplayer;
+    Object.defineProperty(window, 'flowplayer', {
+      get() { return _origFlowplayer; },
+      set(fn) {
+        if (typeof fn === 'function') {
+          _origFlowplayer = function (...args) {
+            args.forEach(arg => {
+              if (arg && typeof arg === 'object') sanitizeKvsConfig(arg);
+            });
+            return fn.apply(this, args);
+          };
+          try { Object.assign(_origFlowplayer, fn); } catch (e) {}
+        } else {
+          _origFlowplayer = fn;
+        }
+      },
+      configurable: true
+    });
+  } catch (e) {}
+
+  // Universal Clickjacking & Malicious Window-Capture Interceptor
+  // Sites like xnhau.pub register window.addEventListener('click'/'mousedown', webGate, true)
+  // which hijacks trusted user clicks on the play button, invokes stopImmediatePropagation(),
+  // triggers window.open(), and dispatches an untrusted synthetic MouseEvent cancelled with preventDefault().
+  // We inspect capture listeners attached to window/document for known ad-hijacking patterns and neutralize them.
+  try {
+    const origAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, listener, options) {
+      if ((type === 'click' || type === 'mousedown' || type === 'pointerdown') && listener && typeof listener === 'function') {
+        const isCapture = options === true || (typeof options === 'object' && options !== null && !!options.capture);
+        if (isCapture && (this === window || this === document || this === document.documentElement || this === document.body)) {
+          let fnStr = '';
+          try { fnStr = Function.prototype.toString.call(listener); } catch(e) {}
+          if (fnStr && (
+            /lastPopunder|openUntil|playTap|adLink|__PPU_|TAG_ZONE|TAG_SRC|snvbchm|acquirecarded|badlandlisp/i.test(fnStr) ||
+            (/stopAll\.call|stopImmediatePropagation/i.test(fnStr) && /MouseEvent/i.test(fnStr) && /is-ad-visible/i.test(fnStr))
+          )) {
+            console.log('[Anti Pop-Under] Blocked malicious capture click-hijacker listener:', type, listener.name || 'anonymous');
+            return; // Drop the malicious listener completely!
+          }
+        }
+      }
+      return origAddEventListener.apply(this, arguments);
+    };
   } catch (e) {}
 
   // Universal Popunder Config Neutralizer (pu.js / POPUP_CONFIG)
@@ -326,14 +443,15 @@
       if (id.startsWith('atcontainer') || id.includes('atcontainer') || className.includes('atcontainer') ||
           className.includes('adsbyexoclick') || id.includes('exoclick') || id.includes('splash') ||
           id.includes('clb-spot') || id.startsWith('__clb') || className.includes('clb-spot') ||
-          (node.getAttribute && (node.getAttribute('data-zoneid') || node.getAttribute('data-ad-id')))) {
+          className.includes('fxpane') || id.includes('fxstartpane') || className.includes('fxfallback') ||
+          (node.getAttribute && (node.getAttribute('data-zoneid') || node.getAttribute('data-ad-id') || node.getAttribute('data-cl-spot') || node.getAttribute('data-clocid')))) {
         return true;
       }
 
-      // 2. Intercept ad iframes from known splash/ad networks
+      // 2. Intercept ad iframes from known splash/ad networks and KVS in-player ad iframes
       if (tag === 'iframe') {
         const src = (node.src || node.getAttribute('data-src') || '').toLowerCase();
-        if (/splash\.php|syndication\.|exosrv|realsrv|adxadserv|onclickmax|eyebrowscrambledlater|visariomedia|zlinkm/.test(src)) {
+        if (/splash\.php|syndication\.|exosrv|realsrv|adxadserv|onclickmax|eyebrowscrambledlater|visariomedia|zlinkm|html\.php\?aid=|start_html|pause_html/.test(src)) {
           return true;
         }
       }
@@ -432,7 +550,12 @@
       #floatAd, #float_ad, #float-ad, .floatAd, .float-ad,
       [id*="adFloat" i], [class*="adFloat" i], [id*="floatAd" i], [class*="floatAd" i],
       [id*="float_ad" i], [class*="float_ad" i], [id*="ad_float" i], [class*="ad_float" i],
-      .spot, div.spot, [data-clocid], div[data-cl-overlay],
+      .spot, div.spot, [data-clocid], div[data-cl-overlay], [data-cl-spot],
+      .kt-player .fxPane, #fxStartPane, .fxPane, .fxPaneBody, .fxPaneClose, .fxFallback,
+      .kt-player iframe[src*="html.php"], .player-holder iframe[src*="html.php"],
+      iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"],
+      div:has(> iframe[src*="html.php"]), div:has(> .fxPane),
+      .video-ad-overlay, .jw-ad-ui, .vjs-ad-loading, .art-ad-container, .ads-overlay-wrapper,
       div[style*="position: fixed"][style*="bottom: 0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
       div[style*="position: fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
       div[style*="position:fixed"][style*="bottom:0"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
@@ -449,6 +572,15 @@
         z-index: -999999 !important;
       }
 
+      .kt-player.is-ad-visible .fp-ui,
+      .kt-player .fp-ui,
+      .kt-player .fp-play,
+      .kt-player video {
+        display: block !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
     `;
       const targetMount = document.head || document.documentElement;
       if (targetMount) {
@@ -1133,6 +1265,10 @@
         '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
         '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
         '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
+        '.fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay, ' +
         'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
       )) {
         return false;
@@ -1145,6 +1281,7 @@
       // 2. Bản thân là <iframe> chứa player (youtube, drive, stream, embed, v.v.)
       if (tag === 'iframe') {
         const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
+        if (/html\.php|start_html|pause_html|aid=|adv_/.test(src)) return false;
         if (/youtube|youtu\.be|youtube-nocookie|drive\.google|player|embed|stream|video|watch|film|movie|vids|hls|m3u8|mp4|halim|hotp|2embed|vidsrc|superembed|play|media/i.test(src)) {
           return true;
         }
@@ -1202,6 +1339,10 @@
         '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
         '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
         '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
+        '.fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay, ' +
         'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
       )) {
         return false;
@@ -1362,6 +1503,39 @@
       const target = e.target;
       if (!target) return;
 
+      // 0. XỬ LÝ ĐẦU TIÊN: TIÊU DIỆT LỚP PHỦ QUẢNG CÁO NẰM ĐÈ TRÊN HOẶC TRONG PLAYER
+      // (KVS fxPane, html.php iframes, VAST clickthrough, ad overlays, [data-cl-spot], v.v.)
+      const inPlayerAdOverlay = target.closest && target.closest(
+        '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, ' +
+        '#catfish-banner, .popup-banner, .fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay'
+      );
+      if (inPlayerAdOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          inPlayerAdOverlay.style.pointerEvents = 'none';
+          inPlayerAdOverlay.style.display = 'none';
+          inPlayerAdOverlay.remove();
+        } catch (err) {}
+        console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay on click:', inPlayerAdOverlay);
+        // Self-Healing Recovery: Phục hồi điều khiển và tự động chạy video nếu đang pause
+        try {
+          const playerCont = target.closest('.kt-player, [class*="player" i], .video-holder, .player-holder');
+          if (playerCont) {
+            playerCont.classList.remove('is-ad-visible');
+            const vid = playerCont.querySelector('video');
+            if (vid && vid.paused) {
+              const p = vid.play();
+              if (p && p.catch) p.catch(() => {});
+            }
+          }
+        } catch (err) {}
+        return;
+      }
+
       // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: NÉ TRÌNH PHÁT VIDEO RA 100%
       // Mọi thao tác click, tua, dừng, điều khiển âm lượng phát sinh từ bên trong Video Player:
       // RETURN NGAY LẬP TỨC để trình phát nhận 100% tương tác tự nhiên, tuyệt đối không can thiệp!
@@ -1407,16 +1581,6 @@
             underlying.click();
           }
         } catch (err) {}
-        return;
-      }
-
-      // Xử lý nếu click trúng lớp phủ quảng cáo trong player (VAST clickthrough layer, ad banners, v.v.):
-      const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, #catfish-banner, .popup-banner');
-      if (adOverlay) {
-        e.preventDefault();
-        e.stopPropagation();
-        try { adOverlay.remove(); } catch (err) {}
-        console.log('[Anti Pop-Under] Intercepted and removed ad overlay:', adOverlay);
         return;
       }
 
@@ -1508,6 +1672,37 @@
       const target = e.target;
       if (!target) return;
 
+      // 0. XỬ LÝ ĐẦU TIÊN: TIÊU DIỆT LỚP PHỦ QUẢNG CÁO NẰM ĐÈ TRÊN HOẶC TRONG PLAYER
+      const inPlayerAdOverlay = target.closest && target.closest(
+        '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, ' +
+        '#catfish-banner, .popup-banner, .fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay'
+      );
+      if (inPlayerAdOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          inPlayerAdOverlay.style.pointerEvents = 'none';
+          inPlayerAdOverlay.style.display = 'none';
+          inPlayerAdOverlay.remove();
+        } catch (err) {}
+        console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay on touch:', inPlayerAdOverlay);
+        try {
+          const playerCont = target.closest('.kt-player, [class*="player" i], .video-holder, .player-holder');
+          if (playerCont) {
+            playerCont.classList.remove('is-ad-visible');
+            const vid = playerCont.querySelector('video');
+            if (vid && vid.paused) {
+              const p = vid.play();
+              if (p && p.catch) p.catch(() => {});
+            }
+          }
+        } catch (err) {}
+        return;
+      }
+
       // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: NÉ TRÌNH PHÁT VIDEO VÀ THUMBNAIL/POSTER RA 100%
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag === 'video' || tag === 'audio') return;
@@ -1551,19 +1746,6 @@
           }
         } catch (err) {}
         return;
-      }
-
-      // 3. Chặn lớp phủ quảng cáo popup/catfish trên di động
-      const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, #catfish-banner, .popup-banner');
-      if (adOverlay) {
-        let inMedia = isInsideVideoPlayer(adOverlay) || isMovieBannerOrPoster(adOverlay);
-        if (!inMedia) {
-          e.preventDefault();
-          e.stopPropagation();
-          try { adOverlay.remove(); } catch (err) {}
-          console.log('[Anti Pop-Under] Intercepted and removed mobile ad overlay:', adOverlay);
-          return;
-        }
       }
     }, false);
 

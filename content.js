@@ -329,7 +329,17 @@ const adSelectors = [
   'iframe[src*="splash.php"]', 'iframe[src*="syndication.exosrv"]',
   'iframe[src*="realsrv."]', 'iframe[src*="adxadserv."]',
   'iframe[src*="onclickmax."]', 'iframe[src*="eyebrowscrambledlater."]',
-  '#cboxOverlay', '#colorbox:has(iframe)'
+  '#cboxOverlay', '#colorbox:has(iframe)',
+  // KVS, Flowplayer & Tube in-player ad iframes & fallback panes
+  '.fxPane', '#fxStartPane', '.fxPaneClose', '.fxPaneBody', '.fxFallback',
+  'iframe[src*="html.php"]', 'iframe[src*="start_html"]', 'iframe[src*="pause_html"]',
+  '.kt-player iframe[src*="html.php"]', '.player-holder iframe[src*="html.php"]',
+  'div:has(> iframe[src*="html.php"])', 'div:has(> .fxPane)',
+  '[data-cl-spot]', '[data-cl-overlay]', '[data-clocid]',
+  // JWPlayer, VideoJS, ArtPlayer & HTML5 In-Player Ad Overlays
+  '.jw-ad-container', '.jw-ad-controls', '.jw-flag-ads',
+  '.vjs-ima3-html5', '.vjs-ads-label',
+  '.dplayer-ads', '.art-ad'
 ];
 
 function injectAdBlockCSS() {
@@ -500,6 +510,17 @@ function injectAdBlockCSS() {
   /* Đảm bảo html & body luôn nhận tương tác chuột bình thường */
   html, body {
     pointer-events: auto !important;
+  }
+
+  /* Phục hồi điều khiển và trình phát video bị che chắn */
+  .kt-player.is-ad-visible .fp-ui,
+  .kt-player .fp-ui,
+  .kt-player .fp-play,
+  .kt-player video {
+    display: block !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 `;
   (document.head || document.documentElement).appendChild(style);
@@ -760,6 +781,10 @@ if (currentEnabledState) {
           '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
           '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
           '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
+          '.fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+          'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+          'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+          '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay, ' +
           'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
         )) return _cachePlayer(el, false);
 
@@ -770,6 +795,7 @@ if (currentEnabledState) {
         // 2. Bản thân là <iframe> chứa player (youtube, drive, stream, embed, v.v.)
         if (tag === 'iframe') {
           const src = (el.src || el.getAttribute('data-src') || '').toLowerCase();
+          if (/html\.php|start_html|pause_html|aid=|adv_/.test(src)) return _cachePlayer(el, false);
           if (/youtube|youtu\.be|youtube-nocookie|drive\.google|player|embed|stream|video|watch|film|movie|vids|hls|m3u8|mp4|halim|hotp|2embed|vidsrc|superembed|play|media/i.test(src)) {
             return _cachePlayer(el, true);
           }
@@ -822,7 +848,7 @@ if (currentEnabledState) {
     function isVideoPlayerOrControls(el) {
       if (!el || el === document || el === document.body || el === document.documentElement) return false;
       try {
-        if (el.closest && el.closest('#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot')) return false;
+        if (el.closest && el.closest('#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, .fxPane, #fxStartPane, iframe[src*="html.php"], [data-cl-spot], [data-cl-overlay], [data-clocid]')) return false;
       } catch (e) {}
       if (isInsideVideoPlayer(el)) return true;
       try {
@@ -871,6 +897,10 @@ if (currentEnabledState) {
           '#nuevoa, #anuevo, #aclose, .nva-center, .nva-midroll, .nva-preroll, .nva-banner, ' +
           '.vast_clickthrough_layer, .midroll_back, .fluid_vpaid_slot, ' +
           '.vjs-preroll, .vjs-ad-container, .vjs-ad-overlay, ' +
+          '.fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+          'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+          'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+          '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay, ' +
           'div[id*="player_one_ad"], div[id*="player_one"][class*="ad"]'
         )) {
           return false;
@@ -1815,10 +1845,44 @@ if (currentEnabledState) {
       } catch (e) {}
     }
 
+    // Specialized cleaner for in-player ad iframes, overlays, and is-ad-visible class
+    function cleanInPlayerAdsAndOverlays() {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      try {
+        // 1. Remove is-ad-visible class from player containers to reveal native controls
+        document.querySelectorAll('.kt-player.is-ad-visible, [class*="player"].is-ad-visible').forEach(pl => {
+          pl.classList.remove('is-ad-visible');
+        });
+
+        // 2. Remove in-player ad iframes and fallback panes
+        const inPlayerAdEls = document.querySelectorAll(
+          '.fxPane, #fxStartPane, .fxFallback, ' +
+          'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+          '.kt-player iframe[src*="html.php"], .player-holder iframe[src*="html.php"], ' +
+          'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+          'div[data-cl-spot], div[data-cl-overlay], [data-clocid]'
+        );
+        inPlayerAdEls.forEach(el => {
+          if (!el || !el.isConnected) return;
+          try {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.remove();
+          } catch(e) {}
+        });
+
+        // 3. Ensure player controls and video are unblocked
+        document.querySelectorAll('.kt-player video, .kt-player .fp-ui, .kt-player .fp-play').forEach(el => {
+          el.style.setProperty('pointer-events', 'auto', 'important');
+        });
+      } catch (e) {}
+    }
+
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
+      cleanInPlayerAdsAndOverlays();
       scanAndReportBlockedAdResources();
       scheduleJanitorSweep();
     }
@@ -1843,6 +1907,7 @@ if (currentEnabledState) {
         }
       }
       detectAndCleanAdOverlays();
+      cleanInPlayerAdsAndOverlays();
       scheduleJanitorSweep();
     }
 
