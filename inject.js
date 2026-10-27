@@ -1,19 +1,24 @@
 (function () {
+  const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+  const isYouTubeHost = currentHost.includes('youtube.com') || currentHost.includes('youtu.be');
+
   // Prevent duplicate execution if injected via multiple paths (world: "MAIN" or fallback script tag)
   if (window.__WEBSHIELD_MAIN_INJECTED__) return;
   window.__WEBSHIELD_MAIN_INJECTED__ = true;
-  try {
-    if (document.documentElement) {
-      document.documentElement.setAttribute('data-webshield-main', '1');
-    } else {
-      document.addEventListener('DOMContentLoaded', () => {
-        try { if (document.documentElement) document.documentElement.setAttribute('data-webshield-main', '1'); } catch (e) {}
-      }, { once: true });
-    }
-  } catch (e) {}
+  if (!isYouTubeHost) {
+    try {
+      if (document.documentElement) {
+        document.documentElement.setAttribute('data-webshield-main', '1');
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          try { if (document.documentElement) document.documentElement.setAttribute('data-webshield-main', '1'); } catch (e) {}
+        }, { once: true });
+      }
+    } catch (e) {}
 
-  // Developed by HuyTran1002
-  console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
+    // Developed by HuyTran1002
+    console.log('[Anti Pop-Under] Injected Script (Main World) loaded successfully! (Developed by HuyTran1002)');
+  }
 
   // Skip sensitive authentication, identity provider, developer portal, and extension store domains
   const SENSITIVE_DOMAINS = [
@@ -28,7 +33,6 @@
     'paypal.com', 'stripe.com',
     'canva.com', 'figma.com', 'notion.so', 'trello.com'
   ];
-  const currentHost = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
   if (SENSITIVE_DOMAINS.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
     return; // Completely inactive on sensitive/auth/productivity domains
   }
@@ -1812,6 +1816,7 @@
   }, 200);
 
 
+
   // Helper to simulate native clicks to bypass YouTube's isTrusted checks
   function simulateNativeClick(el) {
     if (!el) return;
@@ -1827,7 +1832,7 @@
       new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y })
     ];
     clickEvents.forEach(e => el.dispatchEvent(e));
-    el.click(); // Fallback
+    try { el.click(); } catch (e) {}
   }
 
   // Send message to content script (which forwards to background)
@@ -1844,15 +1849,17 @@
       }, '*');
     } catch (e) {}
 
-    if (!contentScriptReady) {
-      if (pendingReports.length < 50) {
-        pendingReports.push({ url: url, reason: reason, count: count });
+    if (!isYouTubeHost) {
+      if (!contentScriptReady) {
+        if (pendingReports.length < 50) {
+          pendingReports.push({ url: url, reason: reason, count: count });
+        }
+        console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
+        return;
       }
-      console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
-      return;
-    }
 
-    console.log(`[Anti Pop-Under] Blocked popup to "${url}". Reason: ${reason}`);
+      console.log(`[Anti Pop-Under] Blocked popup to "${url}". Reason: ${reason}`);
+    }
   }
 
   function flushPendingReports() {
@@ -2592,16 +2599,34 @@
     if (!window.location.hostname.includes('youtube.com')) return;
     if (!isEnabled()) return;
 
-    // NEVER run video ad purge engine inside the YouTube Live Chat iframe!
-    // Live chat frames contain NO video ads and modifying ytInitialData or ytcfg breaks real-time chat!
-    if (window.location.pathname.startsWith('/live_chat')) {
-      console.log('[WebShield] Inside YouTube Live Chat iframe - preserving native real-time chat pipeline.');
-      return;
+    // NEVER run inside the YouTube Live Chat iframe!
+    if (window.location.pathname.startsWith('/live_chat')) return;
+
+    // 1. Stealth Nativeness Preserver (No own-property toString, zero Botguard detection)
+    const nativeFns = new WeakMap();
+    const origFnToString = Function.prototype.toString;
+    try {
+      Function.prototype.toString = function () {
+        if (nativeFns.has(this)) {
+          return origFnToString.call(nativeFns.get(this));
+        }
+        return origFnToString.call(this);
+      };
+      nativeFns.set(Function.prototype.toString, origFnToString);
+    } catch (e) {}
+
+    function protectNative(hookedFn, originalFn, name) {
+      try {
+        if (name || originalFn.name) {
+          Object.defineProperty(hookedFn, 'name', { value: name || originalFn.name, configurable: true });
+        }
+        Object.defineProperty(hookedFn, 'length', { value: originalFn.length, configurable: true });
+      } catch (e) {}
+      nativeFns.set(hookedFn, originalFn);
+      return hookedFn;
     }
 
-    console.log('[WebShield] AdGuard Native YouTube Engine Active (Zero-Ad Architecture & Anti-Detection)');
-
-    // Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
+    // 2. Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
 
     function getCurrentVideoId() {
@@ -2611,7 +2636,7 @@
         if (v && v.length >= 3) return v;
         const match = window.location.pathname.match(/\/(shorts|watch|live)\/([a-zA-Z0-9_-]{3,})/);
         if (match) return match[2];
-      } catch (e) { }
+      } catch (e) {}
       return '';
     }
 
@@ -2642,17 +2667,17 @@
             reportBlocked(`https://www.youtube.com/watch?v=${videoId} (Quảng cáo Video)`, `Đã chặn ${adCount} quảng cáo video YouTube`, adCount);
           }
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    // uBlock Origin / AdGuard standard JSON pruning: neutralizes adPlacements, playerAds, adSlots
+    // 3. uBlock Origin / AdGuard standard JSON pruning: neutralizes adPlacements, playerAds, adSlots
     function pruneAdData(obj) {
       if (!obj || typeof obj !== 'object') return obj;
       try {
-        // 1. MUST check and report video ads BEFORE clearing array structures
+        // MUST check and report video ads BEFORE clearing array structures
         checkAndReportVideoAds(obj);
 
-        // 2. Auto-heal player error / detection warning in playerResponse
+        // Auto-heal player error / detection warning in playerResponse
         if (obj.playabilityStatus && typeof obj.playabilityStatus === 'object') {
           const status = obj.playabilityStatus.status;
           if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
@@ -2665,7 +2690,7 @@
           }
         }
 
-        // 3. Clear all ad-related payloads (preserve playbackTracking to avoid player validation errors)
+        // Clear all ad-related payloads (preserve playbackTracking to avoid player validation errors)
         if (Array.isArray(obj.adPlacements)) obj.adPlacements = [];
         if (Array.isArray(obj.playerAds)) obj.playerAds = [];
         if (Array.isArray(obj.adSlots)) obj.adSlots = [];
@@ -2689,14 +2714,14 @@
               const parsed = JSON.parse(obj.playerResponse);
               pruneAdData(parsed);
               obj.playerResponse = JSON.stringify(parsed);
-            } catch (e) { }
+            } catch (e) {}
           }
         }
-      } catch (e) { }
+      } catch (e) {}
       return obj;
     }
 
-    // 1. Intercept window.ytInitialPlayerResponse
+    // 4. Intercept window.ytInitialPlayerResponse
     let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
     if (_ytInitialPlayerResponse) {
       pruneAdData(_ytInitialPlayerResponse);
@@ -2712,9 +2737,9 @@
         configurable: true,
         enumerable: true
       });
-    } catch (e) { }
+    } catch (e) {}
 
-    // 2. Intercept window.ytInitialData
+    // 5. Intercept window.ytInitialData
     let _ytInitialData = window.ytInitialData;
     if (_ytInitialData) {
       pruneAdData(_ytInitialData);
@@ -2730,30 +2755,37 @@
         configurable: true,
         enumerable: true
       });
-    } catch (e) { }
+    } catch (e) {}
 
-    // 3. Intercept ytcfg (YouTube Configuration - disable Server-Stitched DAI & instant 1ms ad timeout)
+    // 6. Intercept ytcfg (YouTube Configuration - disable Server-Stitched DAI, ad placement, & prevent interruption stalls)
     function sanitizeYtcfg(cfg) {
       if (!cfg || typeof cfg !== 'object') return;
       try {
         if (cfg.EXPERIMENT_FLAGS && typeof cfg.EXPERIMENT_FLAGS === 'object') {
           const exp = cfg.EXPERIMENT_FLAGS;
+          // Anti-adblock and interruption suppression flags (uBlock Origin / AdGuard Standard)
           exp.web_enable_ab_enforcement = false;
           exp.web_enable_ab_enforcement_v2 = false;
+          exp.web_enable_ab_rsp_cl = false;
+          exp.ab_pl_man = false;
+          exp.suppress_error_204_flag = true;
+          exp.web_player_enable_ad_break_free_cue_ranges = true;
           exp.enable_ad_placement_service = false;
           exp.enable_server_stitched_dai = false;
           exp.html5_ss_ad_enabled = false;
           exp.html5_enable_ss_overlay = false;
           exp.html5_ss_ad_format = false;
           exp.html5_server_stitched_dai_group = '';
-          exp.html5_ad_timeout_ms = 1;
-          exp.html5_ad_preroll_timeout_ms = 1;
-          exp.html5_ad_midroll_timeout_ms = 1;
-          exp.html5_ad_postroll_timeout_ms = 1;
           exp.web_disable_defer_ad = true;
           exp.disable_child_node_auto_log = true;
+          exp.service_worker_enabled = false;
+          // Remove harmful 1ms ad timeout hacks that trigger YouTube's interruption handler
+          delete exp.html5_ad_timeout_ms;
+          delete exp.html5_ad_preroll_timeout_ms;
+          delete exp.html5_ad_midroll_timeout_ms;
+          delete exp.html5_ad_postroll_timeout_ms;
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     function hookYtcfg(ytcfgObj) {
@@ -2770,6 +2802,7 @@
             }
             return origSet.apply(this, args);
           };
+          protectNative(ytcfgObj.set, origSet, 'set');
         }
         const origGet = ytcfgObj.get;
         if (typeof origGet === 'function') {
@@ -2780,12 +2813,13 @@
             }
             return val;
           };
+          protectNative(ytcfgObj.get, origGet, 'get');
         }
         if (typeof ytcfgObj.get === 'function') {
           const currentExp = ytcfgObj.get('EXPERIMENT_FLAGS');
           if (currentExp) sanitizeYtcfg({ EXPERIMENT_FLAGS: currentExp });
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     if (window.ytcfg) {
@@ -2804,44 +2838,88 @@
         configurable: true,
         enumerable: true
       });
-    } catch (e) { }
+    } catch (e) {}
 
-    // 4. Intercept window.fetch for Ad Tracking pings (Return 200 OK so player never triggers adblock 403 penalty)
+    // 7. Intercept window.fetch for Ad Tracking pings (Return 200 OK so player never triggers adblock penalty)
     try {
       const originalFetch = window.fetch;
-      window.fetch = async function (...args) {
+      const hookedFetch = async function (...args) {
         const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || '')) : '';
         if (typeof url === 'string') {
           if (url.includes('/api/stats/ads') ||
               url.includes('/api/stats/atr') ||
+              url.includes('/api/stats/qoe') ||
               url.includes('/pagead/') ||
               url.includes('doubleclick.net') ||
               url.includes('/ptracking') ||
-              (url.includes('/api/stats/qoe') && url.includes('adformat'))) {
-            return new Response('', { status: 200, statusText: 'OK' });
+              url.includes('/youtubei/v1/att/get')) {
+            return new Response(JSON.stringify({ status: 'ok' }), {
+              status: 200,
+              statusText: 'OK',
+              headers: { 'Content-Type': 'application/json' }
+            });
           }
         }
-        return originalFetch.apply(this, args);
+        try {
+          return await originalFetch.apply(this, args);
+        } catch (fetchErr) {
+          // If browser/client-level blocker (e.g. Cốc Cốc built-in adblocker) aborted a stats ping,
+          // return 200 OK so YouTube's player never triggers interruption error 204 or interruption banner
+          if (typeof url === 'string' && (url.includes('/api/stats/') || url.includes('/stats/') || url.includes('doubleclick'))) {
+            return new Response(JSON.stringify({ status: 'ok' }), {
+              status: 200,
+              statusText: 'OK',
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          throw fetchErr;
+        }
       };
-    } catch (e) { }
+      protectNative(hookedFetch, originalFetch, 'fetch');
+      window.fetch = hookedFetch;
+    } catch (e) {}
 
-    // 5. Hook Response.prototype.json (uBlock Origin / AdGuard Standard)
+    // Hook navigator.sendBeacon for silent telemetry consumption
+    try {
+      const originalSendBeacon = navigator.sendBeacon;
+      if (typeof originalSendBeacon === 'function') {
+        const hookedSendBeacon = function (url, data) {
+          if (typeof url === 'string') {
+            if (url.includes('/api/stats/ads') ||
+                url.includes('/api/stats/atr') ||
+                url.includes('/api/stats/qoe') ||
+                url.includes('/pagead/') ||
+                url.includes('doubleclick.net') ||
+                url.includes('/ptracking')) {
+              return true; // Successfully consumed
+            }
+          }
+          return originalSendBeacon.apply(this, arguments);
+        };
+        protectNative(hookedSendBeacon, originalSendBeacon, 'sendBeacon');
+        navigator.sendBeacon = hookedSendBeacon;
+      }
+    } catch (e) {}
+
+    // 8. Hook Response.prototype.json (uBlock Origin / AdGuard Standard)
     // Sanitizes parsed player responses without wrapping or altering media streaming bodies
     try {
       const originalResponseJson = Response.prototype.json;
-      Response.prototype.json = async function () {
+      const hookedResponseJson = async function () {
         const result = await originalResponseJson.apply(this, arguments);
         if (result && typeof result === 'object') {
           pruneAdData(result);
         }
         return result;
       };
-    } catch (e) { }
+      protectNative(hookedResponseJson, originalResponseJson, 'json');
+      Response.prototype.json = hookedResponseJson;
+    } catch (e) {}
 
-    // 6. Hook JSON.parse (uBlock Origin Standard json-prune)
+    // 9. Hook JSON.parse (uBlock Origin Standard json-prune)
     try {
       const originalJSONParse = JSON.parse;
-      JSON.parse = function (text, reviver) {
+      const hookedJSONParse = function (text, reviver) {
         const result = originalJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
           if (result.adPlacements || result.adSlots || result.playerAds || result.playerResponse || result.playabilityStatus) {
@@ -2850,25 +2928,65 @@
         }
         return result;
       };
-    } catch (e) { }
+      protectNative(hookedJSONParse, originalJSONParse, 'parse');
+      JSON.parse = hookedJSONParse;
+    } catch (e) {}
 
-    // 7. Inject YouTube Zero-Ad Shield CSS (Hide enforcement modals, banners, and interruption toasts)
+    // 10. Inject YouTube Zero-Ad Shield CSS (Hide enforcement modals, banners, and interruption toasts)
     try {
       if (!document.getElementById('webshield-yt-engine-css')) {
         const style = document.createElement('style');
         style.id = 'webshield-yt-engine-css';
         style.textContent = `
+          #masthead-ad,
+          ytd-ad-slot-renderer,
+          ytd-in-feed-ad-layout-renderer,
+          ytd-banner-promo-renderer,
+          ytd-statement-banner-renderer,
+          ytd-mealbar-promo-renderer,
+          .ytd-carousel-ad-renderer,
+          #player-ads,
+          .ytp-ad-module,
+          .ytp-ad-overlay-container,
+          .ytp-ad-overlay-slot,
+          .ytp-ad-image-overlay,
+          .ytp-ad-text-overlay,
+          tp-yt-paper-dialog:has(ytd-companion-ad-renderer),
+          ytd-action-companion-ad-renderer,
+          ytd-display-ad-renderer,
+          ytd-promoted-sparkles-web-renderer,
+          ytd-promoted-video-renderer,
+          ytd-search-pyv-renderer,
+          #inline-survey,
+          .ytd-player-legacy-desktop-watch-ads-renderer,
+          .ytp-suggested-action-badge[data-ad-preview="true"],
+          [layout*="display-ad-"],
+          [class*="ytd-ad-"],
+          [class*="ytp-ad-"],
+          [id*="ad-slot"],
+          [id*="player-ads"],
+          .ytp-ad-progress-list,
+          .ytp-ad-player-overlay,
           ytd-enforcement-message-view-model,
           ytd-enforcement-message-renderer,
-          #error-screen.ytd-watch-flexy,
-          ytd-mealbar-promo-renderer,
           tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
           tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
           tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
-          tp-yt-paper-toast:has(a[href*="answer"]),
-          tp-yt-paper-toast:has(a[href*="support.google.com"]),
-          ytd-notification-action-renderer:has(a[href*="answer"]),
-          ytd-notification-action-renderer:has(a[href*="support.google.com"]),
+          ytd-popup-container:has(ytd-enforcement-message-view-model),
+          ytd-popup-container:has(ytd-enforcement-message-renderer),
+          #error-screen.ytd-watch-flexy,
+          tp-yt-iron-overlay-backdrop,
+          #toast,
+          #toast:has(yt-formatted-string),
+          #toast:has(#text-container),
+          tp-yt-paper-toast,
+          tp-yt-paper-toast[opened],
+          tp-yt-paper-toast.paper-toast-open,
+          .paper-toast-open,
+          .ytSnackbarContainerOpened,
+          ytd-notification-action-renderer,
+          yt-notification-action-renderer,
+          .toast-button.style-scope.yt-notification-action-renderer,
           .ytp-error-content {
             display: none !important;
             visibility: hidden !important;
@@ -2879,9 +2997,9 @@
         `;
         (document.head || document.documentElement).appendChild(style);
       }
-    } catch (e) { }
+    } catch (e) {}
 
-    // 8. Neutralize Anti-Adblock Warning Modals & Native Ad Skip Fallback (Pure Native Trigger, No 16x/Mute/Seek)
+    // 11. Neutralize Anti-Adblock Warning Modals & Native Ad Skip Fallback
     let clearScheduled = false;
     function scheduleClear() {
       if (clearScheduled) return;
@@ -2900,7 +3018,7 @@
         let removedEnforcement = false;
 
         targets.forEach(el => {
-          const dialog = el.closest('tp-yt-paper-dialog') || el;
+          const dialog = el.closest('tp-yt-paper-dialog, ytd-popup-container') || el;
           try {
             dialog.style.setProperty('display', 'none', 'important');
             dialog.style.setProperty('visibility', 'hidden', 'important');
@@ -2910,7 +3028,7 @@
         });
 
         // Clean DOM Skip Fallback: If an ad was queued in HTML5 player before scripts ran,
-        // trigger native skip button (NO video.playbackRate = 16, NO video.muted = true, NO video.currentTime = duration)
+        // trigger native skip button (with real trusted mouse events, NO playbackRate = 16)
         const ytPlayer = document.querySelector('.html5-video-player');
         if (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) {
           const moviePlayer = document.getElementById('movie_player');
@@ -2919,33 +3037,48 @@
           }
           const skipBtn = ytPlayer.querySelector(
             '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
-            '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button'
+            '.ytp-ad-skip-button-container, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button, ' +
+            '.ytp-ad-overlay-close-button, .ytp-ad-overlay-close-container'
           );
           if (skipBtn) {
             simulateNativeClick(skipBtn);
             try { skipBtn.click(); } catch (e) {}
           }
+          // If ad video is currently rendering, safely seek to duration
+          const adVideo = ytPlayer.querySelector('video.html5-main-video');
+          if (adVideo && isFinite(adVideo.duration) && adVideo.duration > 0 && ytPlayer.classList.contains('ad-showing')) {
+            try {
+              adVideo.currentTime = adVideo.duration;
+            } catch (e) {}
+          }
+          ytPlayer.classList.remove('ad-showing', 'ad-interrupting');
         }
 
-        // Suppress "Experiencing interruptions?" toasts
-        const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer');
+        // Suppress "Experiencing interruptions?" (Bạn đang gặp sự cố gây gián đoạn?) toasts
+        const toasts = document.querySelectorAll('tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer, #toast, .ytSnackbarContainerOpened');
+        let hadInterruptionToast = false;
         toasts.forEach(toast => {
           if (toast.closest('ytd-live-chat-frame, #chat, #chatframe, yt-live-chat-renderer')) return;
           const text = (toast.textContent || '').toLowerCase();
-          if (
-            text.includes('sự cố') ||
-            text.includes('interruption') ||
-            text.includes('tìm hiểu lý do') ||
-            text.includes('find out why') ||
-            text.includes('chặn quảng cáo') ||
-            text.includes('ad blocker') ||
-            toast.querySelector('a[href*="answer"]') ||
-            toast.querySelector('a[href*="support.google.com"]')
-          ) {
+          const isInterruption = text.includes('sự cố') ||
+                                 text.includes('gián đoạn') ||
+                                 text.includes('interruption') ||
+                                 text.includes('tìm hiểu lý do') ||
+                                 text.includes('find out why') ||
+                                 text.includes('chặn quảng cáo') ||
+                                 text.includes('ad blocker') ||
+                                 toast.hasAttribute('opened') ||
+                                 toast.classList.contains('paper-toast-open') ||
+                                 toast.querySelector('a[href*="answer"], a[href*="support.google.com"]');
+          if (isInterruption) {
+            hadInterruptionToast = true;
             try {
+              toast.setAttribute('aria-hidden', 'true');
+              toast.removeAttribute('opened');
               toast.style.setProperty('display', 'none', 'important');
               toast.style.setProperty('visibility', 'hidden', 'important');
               toast.style.setProperty('pointer-events', 'none', 'important');
+              toast.remove();
             } catch (e) {}
           }
         });
@@ -2957,8 +3090,21 @@
           removedEnforcement = true;
         }
 
-        // Only restore body pointer-events/overflow if an enforcement dialog was actually hidden
-        // NEVER call video.play() here — it breaks user's ability to pause & seek!
+        // If YouTube stalled or paused the player due to an interruption dialog / enforcement, automatically resume!
+        if (hadInterruptionToast || removedEnforcement) {
+          const moviePlayer = document.getElementById('movie_player') || ytPlayer;
+          const video = ytPlayer ? ytPlayer.querySelector('video.html5-main-video') : document.querySelector('video');
+          if (video && video.paused && !video.ended) {
+            try {
+              if (moviePlayer && typeof moviePlayer.playVideo === 'function') {
+                moviePlayer.playVideo();
+              } else {
+                video.play();
+              }
+            } catch (e) {}
+          }
+        }
+
         if (removedEnforcement) {
           const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
           backdrops.forEach(b => {
@@ -2978,7 +3124,7 @@
             document.documentElement.style.setProperty('pointer-events', 'auto', 'important');
           }
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     try {
@@ -2989,7 +3135,7 @@
         attributes: true,
         attributeFilter: ['class', 'id', 'style']
       });
-    } catch (e) { }
+    } catch (e) {}
 
     // Periodic fast check (every 300ms) to dismiss ads & dialogs with zero lag
     setInterval(scheduleClear, 300);

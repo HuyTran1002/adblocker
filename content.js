@@ -1,6 +1,10 @@
 // Developed by HuyTran1002
 // @ts-nocheck
-console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
+const isYtDomain = (typeof window !== 'undefined' && window.location && window.location.hostname) ?
+  (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) : false;
+if (!isYtDomain) {
+  console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
+}
 
 (function() {
   'use strict';
@@ -135,7 +139,8 @@ function ensureMainWorldLoaded() {
   try {
     const host = currentHost || ((window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '');
     const isYt = host.includes('youtube.com') || host.includes('youtu.be');
-    if (!isYt && (isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d))))) return;
+    // YouTube strictly forbids chrome-extension:// script tags via CSP. inject.js is ALREADY running via manifest.json (world: "MAIN").
+    if (isYt || isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
     if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
       return; // Already injected and running in MAIN world!
     }
@@ -149,7 +154,12 @@ function ensureMainWorldLoaded() {
     const s = document.createElement('script');
     s.src = chrome.runtime.getURL('inject.js');
     s.async = false;
-    root.appendChild(s);
+    try {
+      root.appendChild(s);
+    } catch (e) {
+      try { s.remove(); } catch (err) {}
+      return;
+    }
     s.onload = () => { try { s.remove(); } catch (e) { } };
     s.onerror = () => { try { s.remove(); } catch (e) { } };
   } catch (e) { }
@@ -526,26 +536,41 @@ function injectAdBlockCSS() {
   (document.head || document.documentElement).appendChild(style);
 }
 
+let ytStyleElement = null;
+
 function injectYouTubeAdBlockCSS() {
   // Never inject on the live chat iframe itself
   if (window.location.pathname.startsWith('/live_chat')) return;
-  if (document.getElementById('anti-popunder-youtube-css')) return;
-  const style = document.createElement('style');
-  style.id = 'anti-popunder-youtube-css';
-  style.textContent = `
+  if (ytStyleElement && document.contains(ytStyleElement)) return;
+  ytStyleElement = document.createElement('style');
+  ytStyleElement.setAttribute('type', 'text/css');
+  ytStyleElement.textContent = `
     /* 1. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts */
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
     tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
     tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
     tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
+    ytd-popup-container:has(ytd-enforcement-message-view-model),
+    ytd-popup-container:has(ytd-enforcement-message-renderer),
     #error-screen.ytd-watch-flexy,
     ytd-mealbar-promo-renderer,
-    tp-yt-paper-toast:has(a[href*="answer"]),
-    tp-yt-paper-toast:has(a[href*="support.google.com"]),
-    ytd-notification-action-renderer:has(a[href*="answer"]),
-    ytd-notification-action-renderer:has(a[href*="support.google.com"]) {
+    #toast,
+    #toast:has(yt-formatted-string),
+    #toast:has(#text-container),
+    tp-yt-paper-toast,
+    tp-yt-paper-toast[opened],
+    tp-yt-paper-toast.paper-toast-open,
+    .paper-toast-open,
+    .ytSnackbarContainerOpened,
+    ytd-notification-action-renderer,
+    yt-notification-action-renderer,
+    .toast-button.style-scope.yt-notification-action-renderer {
       display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      height: 0 !important;
     }
 
     /* 2. AdGuard-grade YouTube Banner, Masthead, In-feed, Grid, and Overlay Ad Hiding */
@@ -563,10 +588,14 @@ function injectYouTubeAdBlockCSS() {
     ytd-rich-section-renderer:has(ytd-statement-banner-renderer),
     ytd-rich-section-renderer:has(ytd-brand-video-singleton-renderer),
     ytd-reel-video-renderer:has(ytd-ad-slot-renderer),
+    .ytp-ad-module,
     .ytp-ad-overlay-container,
+    .ytp-ad-overlay-slot,
     .ytp-ad-message-container,
     .ytp-ad-image-overlay,
     .ytp-ad-text-overlay,
+    .ytp-ad-progress-list,
+    .ytp-ad-player-overlay,
     #player-ads,
     ytd-promoted-sparkles-web-renderer,
     ytd-display-ad-renderer,
@@ -581,7 +610,7 @@ function injectYouTubeAdBlockCSS() {
       pointer-events: none !important;
     }
   `;
-  (document.head || document.documentElement).appendChild(style);
+  (document.head || document.documentElement).appendChild(ytStyleElement);
 }
 
 function restoreBlockedElements() {
@@ -600,6 +629,7 @@ function restoreBlockedElements() {
 // Set attribute on <html> element so inject.js can read it and handle CSS injection
 function updateEnabledState(enabled, disabledDomains) {
   const host = window.location.hostname.toLowerCase();
+  const isYt = host.includes('youtube.com') || host.includes('youtu.be');
   customWhitelistedDomains = disabledDomains || [];
   const isWhitelisted = customWhitelistedDomains.some(domain => host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host));
   const newState = (enabled !== false) && !isWhitelisted;
@@ -611,7 +641,7 @@ function updateEnabledState(enabled, disabledDomains) {
       sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(customWhitelistedDomains));
     }
   } catch (e) {}
-  if (document.documentElement) {
+  if (!isYt && document.documentElement) {
     document.documentElement.setAttribute('data-anti-popunder-enabled', newState ? 'true' : 'false');
   }
   
@@ -622,11 +652,10 @@ function updateEnabledState(enabled, disabledDomains) {
   } catch (e) {}
   
   const styleTag = document.getElementById('anti-popunder-adblock-css');
-  const ytStyleTag = document.getElementById('anti-popunder-youtube-css');
   
   if (newState) {
-    if (window.location.hostname.includes('youtube.com')) {
-      if (!ytStyleTag) {
+    if (isYt) {
+      if (!ytStyleElement || !document.contains(ytStyleElement)) {
         injectYouTubeAdBlockCSS();
       }
     } else if (!isCurrentPageWhitelisted()) {
@@ -637,7 +666,10 @@ function updateEnabledState(enabled, disabledDomains) {
     }
   } else {
     if (styleTag) styleTag.remove();
-    if (ytStyleTag) ytStyleTag.remove();
+    if (ytStyleElement) {
+      try { ytStyleElement.remove(); } catch (e) {}
+      ytStyleElement = null;
+    }
     const dynTag = document.getElementById('adblock-max-dynamic-cosmetics');
     if (dynTag) dynTag.remove();
     restoreBlockedElements();
