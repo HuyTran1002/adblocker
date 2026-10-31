@@ -2157,7 +2157,6 @@ if (currentEnabledState) {
         }
       }, false);
     }
-    }
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
     document.addEventListener('click', function(e) {
