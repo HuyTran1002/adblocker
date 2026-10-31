@@ -10,12 +10,18 @@
         "youtube.com",
         "www.youtube.com",
         "m.youtube.com",
+        "studio.youtube.com",
         "youtu.be",
         "googlevideo.com",
         "ytimg.com",
         "ggpht.com",
         "gstatic.com",
-        "www.gstatic.com"
+        "www.gstatic.com",
+        "accounts.google.com",
+        "myaccount.google.com",
+        "apis.google.com",
+        "ogs.google.com",
+        "clients6.google.com"
       ],
       "resourceTypes": [
         "main_frame",
@@ -44,18 +50,30 @@
         "youtube.com",
         "www.youtube.com",
         "m.youtube.com",
-        "youtu.be"
+        "studio.youtube.com",
+        "youtu.be",
+        "accounts.google.com"
       ],
       "requestDomains": [
         "youtube.com",
         "www.youtube.com",
         "m.youtube.com",
+        "studio.youtube.com",
         "youtu.be",
         "googlevideo.com",
         "ytimg.com",
         "ggpht.com",
         "gstatic.com",
-        "www.gstatic.com"
+        "www.gstatic.com",
+        "google.com",
+        "www.google.com",
+        "accounts.google.com",
+        "myaccount.google.com",
+        "apis.google.com",
+        "ogs.google.com",
+        "clients6.google.com",
+        "googleapis.com",
+        "play.google.com"
       ],
       "resourceTypes": [
         "main_frame",
@@ -161,9 +179,12 @@
         "playstream.xyz",
         "superstream.tv",
         "2embed.to",
-        "2embed.cc"
+        "2embed.cc",
+        "dooplayer.com",
+        "www.dooplayer.com"
       ],
       "resourceTypes": [
+        "stylesheet",
         "script",
         "sub_frame",
         "xmlhttprequest",
@@ -2271,6 +2292,113 @@
     }
   },
   {
+    "id": 330,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "wpadmngr.com",
+        "wpshsdk.com",
+        "wpushsdk.com",
+        "nawpush.com",
+        "ntvpwpush.com",
+        "ntvpforever.com",
+        "tubecup.net",
+        "metricswpsh.com",
+        "capndr.com",
+        "korlumo.com",
+        "zog.link",
+        "nereserv.com",
+        "vidvas3.com",
+        "amazingcontent.site",
+        "multstorage.com",
+        "gstcpx.site",
+        "uuidksinc.net",
+        "infrapu.sh",
+        "realsrv.com",
+        "exosrv.com",
+        "astronautlividlyreformer.com",
+        "magsrv.com",
+        "visariomedia.com",
+        "hilltopads.net",
+        "d13k7prax1yi04.cloudfront.net"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 331,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*src/jpm.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 332,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*src/jph.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 333,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*/get/*?id=*&dr=49&cuaa=*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 334,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*/solid.gif?z=*",
+      "resourceTypes": [
+        "image",
+        "ping",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
     "id": 9999,
     "priority": 100,
     "action": {
@@ -2292,6 +2420,36 @@
       "urlFilter": "||formsubmit.co",
       "resourceTypes": [
         "xmlhttprequest"
+      ]
+    }
+  },
+  {
+    "id": 335,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*video-slider.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 336,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*ad-provider.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
       ]
     }
   }

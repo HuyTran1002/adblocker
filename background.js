@@ -70,7 +70,7 @@ const SAFE_EXCLUDED = [
   'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
   'centrifuge', 'websocket',
   // Dedicated tube / streaming CDNs & in-player hosts
-  'qooglevideo', 'vlstream', 'vlplayer', 'streamvl'
+  'qooglevideo', 'vlstream', 'vlplayer', 'streamvl', 'dooplayer', 'javmost'
 ];
 
 function isSafeAdDomain(dom) {
@@ -752,15 +752,16 @@ async function syncDnrState(enabled, disabledDomains) {
       }
     });
 
-    // Always ensure YouTube and YouTube Live Chat (requests and initiators) are 100% allowed
+    // Always ensure YouTube, YouTube Studio, Account Switcher and YouTube Live Chat (requests and initiators) are 100% allowed
     rulesToAdd.push({
       id: YOUTUBE_BYPASS_RULE_ID,
       priority: 999900,
       action: { type: "allow" },
       condition: {
         requestDomains: [
-          "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
-          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com"
+          "youtube.com", "www.youtube.com", "m.youtube.com", "studio.youtube.com", "youtu.be",
+          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com",
+          "accounts.google.com", "myaccount.google.com", "apis.google.com", "ogs.google.com", "clients6.google.com"
         ],
         resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
       }
@@ -771,10 +772,14 @@ async function syncDnrState(enabled, disabledDomains) {
       priority: 999900,
       action: { type: "allow" },
       condition: {
-        initiatorDomains: ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"],
+        initiatorDomains: ["youtube.com", "www.youtube.com", "m.youtube.com", "studio.youtube.com", "youtu.be", "accounts.google.com", "tpc.googlesyndication.com"],
         requestDomains: [
-          "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
-          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com"
+          "youtube.com", "www.youtube.com", "m.youtube.com", "studio.youtube.com", "youtu.be",
+          "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com", "www.gstatic.com",
+          "doubleclick.net", "googleads.g.doubleclick.net", "static.doubleclick.net",
+          "googlesyndication.com", "googleadservices.com", "google.com", "www.google.com",
+          "accounts.google.com", "myaccount.google.com", "apis.google.com", "ogs.google.com", "clients6.google.com",
+          "googleapis.com", "play.google.com"
         ],
         resourceTypes: ["main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "ping", "media", "websocket", "other"]
       }

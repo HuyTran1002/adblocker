@@ -2,12 +2,33 @@
 // @ts-nocheck
 const isYtDomain = (typeof window !== 'undefined' && window.location && window.location.hostname) ?
   (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) : false;
-if (!isYtDomain) {
+
+const isYtSubFrame = (function() {
+  try {
+    if (typeof window === 'undefined' || window.self === window.top) return false;
+    if (isYtDomain) return true;
+    const ref = (typeof document !== 'undefined' && document.referrer) ? document.referrer.toLowerCase() : '';
+    if (ref.includes('youtube.com') || ref.includes('youtu.be')) return true;
+    if (window.location && window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
+      for (let i = 0; i < window.location.ancestorOrigins.length; i++) {
+        const orig = String(window.location.ancestorOrigins[i] || '').toLowerCase();
+        if (orig.includes('youtube.com') || orig.includes('youtu.be')) return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+})();
+
+if (!isYtDomain && !isYtSubFrame) {
   console.log('[Anti Pop-Under] Content Script (Isolated World) loaded successfully! (Developed by HuyTran1002)');
 }
 
 (function() {
   'use strict';
+
+  if (isYtSubFrame || (isYtDomain && window.location.pathname && window.location.pathname.startsWith('/live_chat'))) {
+    return;
+  }
 
 
 // Skip sensitive authentication, identity provider, developer portal, and extension store domains
@@ -137,8 +158,10 @@ function isExtensionElement(el) {
 // Ensures inject.js runs in the page's Main World even if browser ignores 'world: "MAIN"' in manifest.json
 function ensureMainWorldLoaded() {
   try {
+    if (!chrome || !chrome.runtime || !chrome.runtime.id) return;
+    if (window.self !== window.top) return; // NEVER run in iframes!
     const host = currentHost || ((window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '');
-    const isYt = host.includes('youtube.com') || host.includes('youtu.be');
+    const isYt = isYtDomain || host.includes('youtube.com') || host.includes('youtu.be');
     // YouTube strictly forbids chrome-extension:// script tags via CSP. inject.js is ALREADY running via manifest.json (world: "MAIN").
     if (isYt || isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
     if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
@@ -356,8 +379,34 @@ function injectAdBlockCSS() {
   // Prevent duplicate insertion
   if (document.getElementById('anti-popunder-adblock-css')) return;
   
-  // Do not inject generic ad blocking CSS on YouTube, whitelisted pages, or embedded player iframes
-  if (isEmbeddedPlayerFrame || window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+  // Do not inject generic ad blocking CSS on YouTube or whitelisted pages
+  if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
+
+  // In embedded player iframes (e.g. dooplayer.com), inject only targeted in-player ad overlay killer CSS
+  if (isEmbeddedPlayerFrame) {
+    const playerStyle = document.createElement('style');
+    playerStyle.id = 'anti-popunder-adblock-css';
+    playerStyle.textContent = `
+      div[data-cl-overlay], [data-cl-spot], [data-clocid],
+      .vast_clickthrough_layer, .fxPane, #fxStartPane, .fxFallback,
+      ins.adsbyexoclick, ins[data-zoneid], [id^="atContainer-"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
+        z-index: -999999 !important;
+      }
+      html.devtools-on .plyr, html.devtools-on #player, html.devtools-on .play-btn {
+        display: block !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(playerStyle);
+    return;
+  }
   
   const style = document.createElement('style');
   style.id = 'anti-popunder-adblock-css';
@@ -371,6 +420,24 @@ function injectAdBlockCSS() {
     opacity: 0 !important;
   }
   
+  /* Javmost Video Player & Play Button Guardian */
+  #show_player, #show_player center, #show_player picture, #show_player img, #show_player button, #show_player .play-btn {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    position: relative !important;
+    z-index: 999999 !important;
+  }
+  div[data-admpid],
+  div[id^="ad_"],
+  .exo-native-widget,
+  .video-slider,
+  body > div[style*="z-index: 2147483647"],
+  body > div[style*="z-index: 999999"] {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+
   /* === PRE-BLOCK: Hide ad elements by domain BEFORE they render (zero flash) === */
   
   /* Ad network iframes - block at CSS level before JS can scan */
@@ -545,27 +612,26 @@ function injectYouTubeAdBlockCSS() {
   ytStyleElement = document.createElement('style');
   ytStyleElement.setAttribute('type', 'text/css');
   ytStyleElement.textContent = `
-    /* 1. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts */
+    /* 1. Hide anti-adblock enforcement dialogs & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!) */
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
-    tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
-    tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
-    tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
-    ytd-popup-container:has(ytd-enforcement-message-view-model),
-    ytd-popup-container:has(ytd-enforcement-message-renderer),
-    #error-screen.ytd-watch-flexy,
+    snackbar-view-model,
+    .snackbarViewModelEngagementBarWrapper,
+    tp-yt-paper-toast#toast:has(a[href*="3037019"]),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-view-model),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-renderer),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(#feedback.ytd-enforcement-message-view-model),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-mealbar-promo-renderer),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(yt-mealbar-promo-renderer),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(yt-upsell-dialog-renderer),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-upsell-dialog-renderer),
+    tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-single-option-survey-renderer),
     ytd-mealbar-promo-renderer,
-    #toast,
-    #toast:has(yt-formatted-string),
-    #toast:has(#text-container),
-    tp-yt-paper-toast,
-    tp-yt-paper-toast[opened],
-    tp-yt-paper-toast.paper-toast-open,
-    .paper-toast-open,
-    .ytSnackbarContainerOpened,
-    ytd-notification-action-renderer,
-    yt-notification-action-renderer,
-    .toast-button.style-scope.yt-notification-action-renderer {
+    yt-mealbar-promo-renderer,
+    tp-yt-paper-toast:has(a[href*="answer"]),
+    tp-yt-paper-toast:has(a[href*="support.google.com"]),
+    ytd-notification-action-renderer:has(a[href*="answer"]),
+    ytd-notification-action-renderer:has(a[href*="support.google.com"]) {
       display: none !important;
       visibility: hidden !important;
       opacity: 0 !important;
@@ -574,6 +640,9 @@ function injectYouTubeAdBlockCSS() {
     }
 
     /* 2. AdGuard-grade YouTube Banner, Masthead, In-feed, Grid, and Overlay Ad Hiding */
+    /* NOTE: NEVER apply display:none to .ytp-ad-module or .ytp-ad-player-overlay!
+       YouTube's player checks getComputedStyle(.ytp-ad-module).display === 'none' as an
+       anti-adblock bait check, and hiding .ytp-ad-player-overlay gives the skip button 0x0 dimensions. */
     #masthead-ad,
     ytd-ad-slot-renderer,
     ytd-in-feed-ad-layout-renderer,
@@ -588,14 +657,17 @@ function injectYouTubeAdBlockCSS() {
     ytd-rich-section-renderer:has(ytd-statement-banner-renderer),
     ytd-rich-section-renderer:has(ytd-brand-video-singleton-renderer),
     ytd-reel-video-renderer:has(ytd-ad-slot-renderer),
-    .ytp-ad-module,
     .ytp-ad-overlay-container,
     .ytp-ad-overlay-slot,
-    .ytp-ad-message-container,
     .ytp-ad-image-overlay,
     .ytp-ad-text-overlay,
-    .ytp-ad-progress-list,
-    .ytp-ad-player-overlay,
+    .ytp-ad-action-interstitial,
+    .ytp-ad-action-interstitial-background,
+    .ytp-ad-action-interstitial-slot,
+    .ytp-ad-player-overlay-flyout-cta,
+    .ytp-ad-endscreen-element,
+    .ytp-ad-companion-slot,
+    .ytp-ad-message-container,
     #player-ads,
     ytd-promoted-sparkles-web-renderer,
     ytd-display-ad-renderer,
@@ -771,7 +843,12 @@ if (currentEnabledState) {
       'acquirecardedsullen.com', 'acquirecarded', 'xx4999.com',
       'agileskincareunrented.com', 'agileskincareunrented', 'marvelous-respond.com', 'marvelous-respond',
       'badlandlispyippee.com', 'badlandlispyippee',
-      'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim'
+      'adqc.net', '6789x.site', 'musicskinsheader', 'musicskinscom', 'cm8806.com/motphim',
+      'wpadmngr', 'wpshsdk', 'wpushsdk', 'nawpush', 'ntvpwpush', 'ntvpforever', 'tubecup\.net', 'metricswpsh',
+      'capndr\.com', 'korlumo\.com', 'zog\.link', 'nereserv\.com', 'vidvas3\.com', 'amazingcontent\.site',
+      'multstorage\.com', 'gstcpx\.site', 'uuidksinc\.net', 'infrapu\.sh', 'realsrv\.com', 'exosrv\.com',
+      'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\d+\?id=\d+',
+      'visariomedia', 'xbetween', 'd13k7prax1yi04', 'magnific-popup', 'video-slider', 'ad-provider', 'magsrv\.com'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -1957,34 +2034,36 @@ if (currentEnabledState) {
       }
     }
 
-    try {
-      const observer = new MutationObserver((mutations) => {
-        const isEnabled = currentEnabledState;
-        if (!isEnabled || isCurrentPageWhitelisted()) return;
+    if (!isYtDomain) {
+      try {
+        const observer = new MutationObserver((mutations) => {
+          const isEnabled = currentEnabledState;
+          if (!isEnabled || isCurrentPageWhitelisted()) return;
 
-        // Skip dynamic ad checks on YouTube to prevent hiding core UI elements
-        if (window.location.hostname.includes('youtube.com')) return;
+          // Skip dynamic ad checks on YouTube to prevent hiding core UI elements
+          if (window.location.hostname.includes('youtube.com')) return;
 
-        for (let i = 0; i < mutations.length; i++) {
-          const mutation = mutations[i];
-          if (isInsideVideoPlayer(mutation.target)) continue;
-          const added = mutation.addedNodes;
-          for (let j = 0; j < added.length; j++) {
-            const node = added[j];
-            if (node.nodeType === 1 && !isInsideVideoPlayer(node)) {
-              queueNodeCheck(node);
+          for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            if (isInsideVideoPlayer(mutation.target)) continue;
+            const added = mutation.addedNodes;
+            for (let j = 0; j < added.length; j++) {
+              const node = added[j];
+              if (node.nodeType === 1 && !isInsideVideoPlayer(node)) {
+                queueNodeCheck(node);
+              }
             }
           }
-        }
-      });
+        });
 
-      // Observe early document parsing
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
-    } catch (e) {
-      console.error('[Anti Pop-Under] MutationObserver setup failed:', e);
+        // Observe early document parsing
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+      } catch (e) {
+        console.error('[Anti Pop-Under] MutationObserver setup failed:', e);
+      }
     }
 
     // Event-driven initial and load sweeps (no periodic setInterval)
@@ -2030,6 +2109,17 @@ if (currentEnabledState) {
           }
         }
       } catch (e) {}
+    }
+
+    // Javmost Video Player Click Forwarder (Isolated World backup)
+    if (window.location.hostname.includes('javmost')) {
+      document.addEventListener('click', (e) => {
+        const sp = e.target && e.target.closest ? e.target.closest('#show_player') : null;
+        if (sp && !sp.querySelector('iframe')) {
+          const btn = sp.querySelector('button[onclick*="init_start_select"]');
+          if (btn) btn.click();
+        }
+      }, true);
     }
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
@@ -2255,7 +2345,7 @@ if (currentEnabledState) {
     }, false);
 
     // Vô hiệu hóa cổng kích hoạt Popunder của xnhau.soy (class xn-hta trên <html>)
-    try {
+    if (!isYtDomain) try {
       if (document.documentElement && document.documentElement.classList.contains('xn-hta')) {
         document.documentElement.classList.remove('xn-hta');
       }
@@ -3389,7 +3479,42 @@ if (currentEnabledState) {
     }, { passive: true });
   
     function applyManualFilters(domainSelectors, globalSelectors) {
-      const selectors = (domainSelectors || []).concat(globalSelectors || []);
+      let selectors = (domainSelectors || []).concat(globalSelectors || []);
+      if (isYtDomain) {
+        // Protect YouTube player, Miniplayer, Account Switcher popup container, and layout from accidental user Target Picker rules
+        selectors = selectors.filter(s => {
+          if (!s || typeof s !== 'string') return false;
+          const lower = s.toLowerCase();
+          if (
+            lower.includes('movie_player') ||
+            lower.includes('html5-video-player') ||
+            lower.includes('html5-main-video') ||
+            lower.includes('ytd-player') ||
+            lower.includes('ytd-watch-flexy') ||
+            lower.includes('miniplayer') ||
+            lower.includes('popup-container') ||
+            lower.includes('iron-dropdown') ||
+            lower.includes('paper-dialog') ||
+            lower.includes('masthead') ||
+            lower.includes('topbar') ||
+            lower.includes('avatar') ||
+            lower.includes('account') ||
+            lower.includes('multi-page-menu') ||
+            lower.includes('ytd-app') ||
+            lower.includes('page-manager') ||
+            lower.includes('#player') ||
+            lower.includes('#content') ||
+            lower.includes('ytp-') ||
+            lower === 'video' ||
+            lower === 'body' ||
+            lower === 'html' ||
+            lower === 'div'
+          ) {
+            return false;
+          }
+          return true;
+        });
+      }
       let styleEl = document.getElementById('adblock-max-manual-filters');
       if (!styleEl) {
         styleEl = document.createElement('style');
@@ -3431,7 +3556,7 @@ if (currentEnabledState) {
     }
 
     function refreshDynamicCosmetics() {
-      if (isEmbeddedPlayerFrame || !isContextValid() || isCurrentPageWhitelisted()) return;
+      if (isYtDomain || isEmbeddedPlayerFrame || !isContextValid() || isCurrentPageWhitelisted()) return;
       try {
         chrome.storage.local.get(['dynamicDomainCosmetics'], (res) => {
           if (!res) return;
@@ -3848,7 +3973,7 @@ if (currentEnabledState) {
     // === UNIVERSAL EMBEDDED PLAYER AD AUTO-SKIPPER ===
     // Automatically clicks pre-roll/video ad skip buttons and fast-forwards ads in embedded players
     (function () {
-      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (!currentEnabledState || isCurrentPageWhitelisted() || isYtDomain) return;
       const SKIP_SELECTORS = [
         '.jw-skip', '.jw-skip-button', '.jw-ad-skip-button', '.jw-skip-icon', '.jw-skippable',
         '.video-ads .ad-skip-button', '.video-ad-skip', '.skip-ad', '.ad-skip',
