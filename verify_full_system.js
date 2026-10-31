@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.0.0', manifest.version === '5.0.0');
+check('Version is 5.0.1', manifest.version === '5.0.1');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -69,8 +69,8 @@ check('Universal XMLHttpRequest (open, response, responseText) interception acti
   injectJs.includes('XMLHttpRequest.prototype.open') &&
   injectJs.includes("Object.defineProperty(XMLHttpRequest.prototype, 'response'") &&
   injectJs.includes("Object.defineProperty(XMLHttpRequest.prototype, 'responseText'"));
-check('Targeted Fetch Interceptor constructs genuine clean Response for player endpoints',
-  injectJs.includes('new Response(cleanText, {'));
+check('Targeted Fetch Interceptor safely intercepts player responses without stream or compression corruption',
+  injectJs.includes('response.json = async function') && injectJs.includes('recursiveDeepPrune(data);'));
 check('ytcfg.EXPERIMENT_FLAGS left 100% native (no signature mismatch or 403 Forbidden)',
   !injectJs.includes('exp.ssapPrerollEnabled = false') && !injectJs.includes('exp.enable_server_stitched_dai = false'));
 check('Cosmetic CSS hides interruption toast and ad overlays',
@@ -99,16 +99,16 @@ check('Overlaid play button kickstarter runs on bubbling phase without stopPropa
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.0.0 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.0.0</span>'));
+check('popup.html displays version v5.0.1 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.0.1</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.0.0-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.0.0-firefox.zip');
-check('webshield-v5.0.0-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.0.1-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.0.1-firefox.zip');
+check('webshield-v5.0.1-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.0.0-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.0.1-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 console.log('\n======================================================================');

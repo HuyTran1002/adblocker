@@ -223,11 +223,14 @@ function reportAdBlocked(url, reason, count) {
   // Only skip if extension is entirely disabled — never skip due to cosmetic whitelist.
   // isCurrentPageWhitelisted() guards CSS injection only; ad block reports must always be forwarded.
   if (!currentEnabledState) return;
-  const key = `${url || ''}|${reason || ''}`;
-  const now = Date.now();
-  const lastSeen = recentReportedUrls.get(key);
-  if (lastSeen && (now - lastSeen) < REPORT_TTL_MS) return;
-  recentReportedUrls.set(key, now);
+  const isYt = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
+  if (!isYt) {
+    const key = `${url || ''}|${reason || ''}`;
+    const now = Date.now();
+    const lastSeen = recentReportedUrls.get(key);
+    if (lastSeen && (now - lastSeen) < REPORT_TTL_MS) return;
+    recentReportedUrls.set(key, now);
+  }
   // Prune stale entries to keep Map bounded
   if (recentReportedUrls.size > 100) {
     for (const [k, ts] of recentReportedUrls) {
@@ -421,11 +424,38 @@ function injectAdBlockCSS() {
   }
   
   /* Javmost Video Player & Play Button Guardian */
-  #show_player, #show_player center, #show_player picture, #show_player img, #show_player button, #show_player .play-btn {
+  #show_player {
+    position: relative !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+  }
+  #show_player center {
+    pointer-events: auto !important;
+  }
+  #show_player button {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    border: none !important;
+    background: none !important;
+  }
+  #show_player .play-btn {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+  #show_player iframe {
     position: relative !important;
-    z-index: 999999 !important;
+    z-index: 10 !important;
+    pointer-events: auto !important;
   }
   div[data-admpid],
   div[id^="ad_"],
@@ -2117,9 +2147,16 @@ if (currentEnabledState) {
         const sp = e.target && e.target.closest ? e.target.closest('#show_player') : null;
         if (sp && !sp.querySelector('iframe')) {
           const btn = sp.querySelector('button[onclick*="init_start_select"]');
-          if (btn) btn.click();
+          if (btn) {
+            if (typeof btn.onclick === 'function') {
+              try { btn.onclick(); } catch (err) {}
+            } else {
+              try { btn.click(); } catch (err) {}
+            }
+          }
         }
-      }, true);
+      }, false);
+    }
     }
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---

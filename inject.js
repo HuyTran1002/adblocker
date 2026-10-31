@@ -1301,7 +1301,10 @@
           addEventListener: function () { }
         };
       }
+      DummyExoVideoSlider.init = function () { };
+      DummyExoVideoSlider.repeat = function () { };
       DummyExoVideoSlider.prototype.init = function () { };
+      DummyExoVideoSlider.prototype.repeat = function () { };
       DummyExoVideoSlider.prototype.show = function () { };
       DummyExoVideoSlider.prototype.hide = function () { };
       DummyExoVideoSlider.prototype.destroy = function () { };
@@ -2050,15 +2053,17 @@
       }, '*');
     } catch (e) {}
 
-    if (!isYouTubeHost) {
-      if (!contentScriptReady) {
-        if (pendingReports.length < 50) {
-          pendingReports.push({ url: url, reason: reason, count: count });
-        }
-        console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
-        return;
+    if (!contentScriptReady) {
+      if (pendingReports.length < 50) {
+        pendingReports.push({ url: url, reason: reason, count: count });
       }
+      if (!isYouTubeHost) {
+        console.log(`[Anti Pop-Under] Blocked & queued report to "${url}". Reason: ${reason}`);
+      }
+      return;
+    }
 
+    if (!isYouTubeHost) {
       console.log(`[Anti Pop-Under] Blocked popup to "${url}". Reason: ${reason}`);
     }
   }
@@ -2891,8 +2896,6 @@
     }
 
     // 2. GhostEngine Pure Native Ad Suppressor (No Prototype Pollution)
-    // Prototype pollution of Object.prototype with ad properties breaks 'adPlacements in obj' checks
-    // and causes runtime TypeError crashes when YouTube inspects properties.
     try {
       if (window.yt && window.yt.ads) {
         window.yt.ads = undefined;
@@ -2933,10 +2936,10 @@
       } catch (e) {}
     }
 
-    // 4. GhostEngine Core: Recursive Deep-Prune (AdGuard $..[adPlacements, adSlots, playerAds] Standard)
-    // Deletes ad structures anywhere in the JSON tree at any depth, handling objects, arrays, and stringified JSON.
+    // 4. GhostEngine Core: Recursive Deep-Prune (AdGuard / uBlock Origin Standard)
+    // Deletes ad structures anywhere in the JSON tree at any depth (up to 16), handling objects, arrays, and stringified JSON.
     function recursiveDeepPrune(val, depth = 0) {
-      if (!val || typeof val !== 'object' || depth > 8) return val;
+      if (!val || typeof val !== 'object' || depth > 16) return val;
 
       if (Array.isArray(val)) {
         for (let i = 0; i < val.length; i++) {
@@ -2962,30 +2965,40 @@
         }
       }
 
-      // Strip ad placements, player ads, ad slots, and server-side ad configurations
-      if (Object.prototype.hasOwnProperty.call(val, 'adPlacements')) {
+      // Strip ad placements, player ads, ad slots, and server-side dynamic ad configurations
+      if ('adPlacements' in val) {
         if (Array.isArray(val.adPlacements) && val.adPlacements.length > 0) adsRemoved += val.adPlacements.length;
         else adsRemoved += 1;
         delete val.adPlacements;
       }
-      if (Object.prototype.hasOwnProperty.call(val, 'playerAds')) {
+      if ('playerAds' in val) {
         if (Array.isArray(val.playerAds) && val.playerAds.length > 0) adsRemoved += val.playerAds.length;
         else adsRemoved += 1;
         delete val.playerAds;
       }
-      if (Object.prototype.hasOwnProperty.call(val, 'adSlots')) {
+      if ('adSlots' in val) {
         if (Array.isArray(val.adSlots) && val.adSlots.length > 0) adsRemoved += val.adSlots.length;
         else adsRemoved += 1;
         delete val.adSlots;
       }
-      if (Object.prototype.hasOwnProperty.call(val, 'no_ads')) { delete val.no_ads; adsRemoved++; }
-      if (Object.prototype.hasOwnProperty.call(val, 'adBreakHeartbeatParams')) delete val.adBreakHeartbeatParams;
-      if (Object.prototype.hasOwnProperty.call(val, 'adPlacementConfig')) delete val.adPlacementConfig;
-      if (Object.prototype.hasOwnProperty.call(val, 'ssapConfig')) delete val.ssapConfig;
+      if ('no_ads' in val) { delete val.no_ads; adsRemoved++; }
+      if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
+      if ('adPlacementConfig' in val) delete val.adPlacementConfig;
+      if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
+      if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+      if ('interstitial' in val) { delete val.interstitial; adsRemoved++; }
+      if ('instream' in val) { delete val.instream; adsRemoved++; }
 
       if (val.playerConfig && typeof val.playerConfig === 'object') {
+        if (val.playerConfig.daiConfig) { delete val.playerConfig.daiConfig; adsRemoved++; }
         if (val.playerConfig.ssapConfig) { delete val.playerConfig.ssapConfig; adsRemoved++; }
         if (val.playerConfig.adConfig) { delete val.playerConfig.adConfig; adsRemoved++; }
+      }
+
+      if (val.playbackTracking && typeof val.playbackTracking === 'object') {
+        if (val.playbackTracking.ptrackingUrl) delete val.playbackTracking.ptrackingUrl;
+        if (val.playbackTracking.youtubeRemarketingUrl) delete val.playbackTracking.youtubeRemarketingUrl;
+        if (val.playbackTracking.googleRemarketingUrl) delete val.playbackTracking.googleRemarketingUrl;
       }
 
       // Clean anti-adblock enforcement dialogs & interruption prompts from payload
@@ -3059,7 +3072,7 @@
       });
     } catch (e) {}
 
-    // 5B. Universal JSON.parse & Response.json Hook (uBlock Origin json-prune Standard)
+    // 5B. Universal JSON.parse & Response.prototype Hook (uBlock Origin json-prune Standard)
     // Ensures adPlacements, playerAds, adSlots are stripped regardless of whether YouTube fetches via
     // XHR, Fetch, inline <script> var ytInitialPlayerResponse = JSON.parse(...), or Service Worker cache!
     try {
@@ -3076,17 +3089,38 @@
     } catch (e) {}
 
     try {
-      if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
-        const origResponseJson = Response.prototype.json;
-        const hookedResponseJson = async function () {
-          const result = await origResponseJson.apply(this, arguments);
-          if (result && typeof result === 'object') {
-            recursiveDeepPrune(result);
-          }
-          return result;
-        };
-        protectNative(hookedResponseJson, origResponseJson, 'json');
-        Response.prototype.json = hookedResponseJson;
+      if (typeof Response !== 'undefined' && Response.prototype) {
+        if (Response.prototype.json) {
+          const origResponseJson = Response.prototype.json;
+          const hookedResponseJson = async function () {
+            const result = await origResponseJson.apply(this, arguments);
+            if (result && typeof result === 'object') {
+              recursiveDeepPrune(result);
+            }
+            return result;
+          };
+          protectNative(hookedResponseJson, origResponseJson, 'json');
+          Response.prototype.json = hookedResponseJson;
+        }
+
+        if (Response.prototype.text) {
+          const origResponseText = Response.prototype.text;
+          const hookedResponseText = async function () {
+            const text = await origResponseText.apply(this, arguments);
+            if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
+              try {
+                const parsed = JSON.parse(text);
+                recursiveDeepPrune(parsed);
+                return JSON.stringify(parsed);
+              } catch (e) {
+                return text;
+              }
+            }
+            return text;
+          };
+          protectNative(hookedResponseText, origResponseText, 'text');
+          Response.prototype.text = hookedResponseText;
+        }
       }
     } catch (e) {}
 
@@ -3105,7 +3139,8 @@
           return xhr._webshieldUrl && (
             xhr._webshieldUrl.includes('/youtubei/v1/player') ||
             xhr._webshieldUrl.includes('/youtubei/v1/next') ||
-            xhr._webshieldUrl.includes('/youtubei/v1/browse')
+            xhr._webshieldUrl.includes('/youtubei/v1/browse') ||
+            xhr._webshieldUrl.includes('/youtubei/v1/reel/')
           );
         };
 
@@ -3186,11 +3221,31 @@
       });
     } catch (e) {}
 
+    // 5D. Direct In-Player (#movie_player) Protection & Sanitizer
+    function hookMoviePlayer(player) {
+      if (!player || player._webshield_hooked) return;
+      player._webshield_hooked = true;
+      try {
+        if (typeof player.getPlayerResponse === 'function') {
+          const origGetPR = player.getPlayerResponse.bind(player);
+          player.getPlayerResponse = function () {
+            const res = origGetPR();
+            if (res && typeof res === 'object') {
+              recursiveDeepPrune(res);
+            }
+            return res;
+          };
+          protectNative(player.getPlayerResponse, origGetPR, 'getPlayerResponse');
+        }
+      } catch (e) {}
+    }
+
+    const existingPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+    if (existingPlayer) hookMoviePlayer(existingPlayer);
+
     // 6. Native Ytcfg Preserver (Zero tampering with EXPERIMENT_FLAGS to prevent BotGuard checksum mismatch)
     function sanitizeYtcfg(cfg) {
       // Intentionally leave EXPERIMENT_FLAGS 100% native.
-      // Modifying ssapPrerollEnabled, enable_server_stitched_dai, html5_ss_ad_enabled causes BotGuard
-      // signature mismatch with base.js, which yields HTTP 403 Forbidden and the "Experiencing interruptions" toast!
     }
 
     function hookYtcfg(ytcfgObj) {
@@ -3246,8 +3301,6 @@
     } catch (e) {}
 
     // 7. Targeted Fetch Interceptor for SPA video player data & Pure Ad Telemetry Spoofing
-    // NOTE: NEVER spoof /youtubei/v1/att/get, /api/stats/qoe, or /api/stats/atr, as those are required for
-    // DASH/SABR streaming negotiation and BotGuard playback attestation. Spoofing them causes HTTP 403 on videoplayback!
     try {
       const originalFetch = window.fetch;
       const hookedFetch = async function (...args) {
@@ -3267,26 +3320,35 @@
           });
         }
 
-        // B. Intercept SPA video player & navigation data (/youtubei/v1/player, /youtubei/v1/next, /youtubei/v1/browse)
-        // Uses genuine Response object to eliminate compression header mismatches, stream cloning errors, or body reuse failures.
-        if (urlStr.includes('/youtubei/v1/player') || urlStr.includes('/youtubei/v1/next') || urlStr.includes('/youtubei/v1/browse')) {
+        // B. Intercept SPA video player & navigation data (/youtubei/v1/player, /youtubei/v1/next, /youtubei/v1/browse, /youtubei/v1/reel/)
+        // Safely wrap response methods on the native Response instance to preserve HTTP compression (gzip/br) and stream integrity!
+        if (urlStr.includes('/youtubei/v1/player') || urlStr.includes('/youtubei/v1/next') || urlStr.includes('/youtubei/v1/browse') || urlStr.includes('/youtubei/v1/reel/')) {
           const response = await originalFetch.apply(this, args);
           try {
-            const rawText = await response.text();
-            let cleanText = rawText;
-            try {
-              const parsed = JSON.parse(rawText);
-              recursiveDeepPrune(parsed);
-              cleanText = JSON.stringify(parsed);
-            } catch (e) {}
-            return new Response(cleanText, {
-              status: response.status,
-              statusText: response.statusText,
-              headers: response.headers
-            });
-          } catch (e) {
-            return response;
-          }
+            const origJson = response.json.bind(response);
+            response.json = async function () {
+              const data = await origJson();
+              if (data && typeof data === 'object') {
+                recursiveDeepPrune(data);
+              }
+              return data;
+            };
+            const origText = response.text.bind(response);
+            response.text = async function () {
+              const text = await origText();
+              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
+                try {
+                  const data = JSON.parse(text);
+                  recursiveDeepPrune(data);
+                  return JSON.stringify(data);
+                } catch (e) {
+                  return text;
+                }
+              }
+              return text;
+            };
+          } catch (e) {}
+          return response;
         }
 
         try {
@@ -3392,6 +3454,8 @@
       if (!isEnabled()) return;
       try {
         const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        if (ytPlayer) hookMoviePlayer(ytPlayer);
+
         const isAdShowing = document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null ||
           (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting')));
 
@@ -3400,16 +3464,16 @@
           reportAdDetected(1);
 
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          // Silently mute ad
+          // Silently mute ad while it is displayed
           if (video && !video.muted) {
             try { video.muted = true; } catch (e) {}
           }
 
-          // Target genuine in-player skip buttons across desktop and mobile layouts
-          const skipBtn = document.querySelector(
-            '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-container button, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button-text, .ytp-ad-text.ytp-ad-skip-button-text, [class*="ytp-ad-skip-button"], [class*="ytp-skip-ad-button"], button[class*="skip" i], [aria-label*="Skip" i], [aria-label*="Bỏ qua" i]'
+          // Target genuine in-player skip buttons across all layout variations
+          const skipBtns = document.querySelectorAll(
+            '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-skip-ad-button__text, .ytp-ad-skip-button-container button, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button-text, .ytp-ad-text.ytp-ad-skip-button-text, [class*="ytp-ad-skip-button"], [class*="ytp-skip-ad-button"], button[class*="skip" i], [aria-label*="Skip" i], [aria-label*="Bỏ qua" i]'
           );
-          if (skipBtn) {
+          skipBtns.forEach(skipBtn => {
             try {
               skipBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
               skipBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
@@ -3417,12 +3481,13 @@
               skipBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
               skipBtn.click();
             } catch (e) {}
-          }
+          });
+
           if (ytPlayer && typeof ytPlayer.skipAd === 'function') {
             try { ytPlayer.skipAd(); } catch (e) {}
           }
 
-          // Recovery for ads that reach completion or stall at end (e.g. 0:22 / 0:22 black screen)
+          // Safe conclusion if ad reaches end or is stuck at end
           if (video && video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) {
             try {
               if (video.paused) video.play().catch(() => {});
@@ -3642,22 +3707,42 @@
     // 2. Javmost Specific Player Handler
     function triggerJavmostPlayer() {
       const sp = document.getElementById('show_player');
-      if (sp && !sp.querySelector('iframe')) {
-        if (typeof window.init_start_select === 'function') {
+      if (!sp || sp.querySelector('iframe')) return;
+
+      // Priority A: Call native window.init_start_select()
+      if (typeof window.init_start_select === 'function') {
+        try {
+          window.init_start_select();
+          console.log('[WebShield] Triggered javmost init_start_select');
+          return;
+        } catch (e) {}
+      }
+
+      // Priority B: Trigger button.onclick handler or click
+      const btn = sp.querySelector('button[onclick*="init_start_select"]');
+      if (btn) {
+        if (typeof btn.onclick === 'function') {
           try {
-            window.init_start_select();
-            console.log('[WebShield] Triggered javmost init_start_select');
+            btn.onclick();
+            return;
           } catch (e) {}
-        } else {
-          const btn = sp.querySelector('button[onclick*="init_start_select"]');
-          if (btn) {
-            try { btn.click(); } catch (e) {}
-          }
         }
+        try { btn.click(); return; } catch (e) {}
+      }
+
+      // Priority C: Direct fallback to window.select_part()
+      if (typeof window.select_part === 'function') {
+        try {
+          const g = window.YWRzMg || '62';
+          const c1 = window.YWRzNA || '';
+          const c2 = window.YWRzNQ || '';
+          const c3 = window.YWRzNg || '';
+          window.select_part('1', g, '', 'no', c1, c2, c3);
+        } catch (e) {}
       }
     }
 
-    // Auto-load retry for javmost
+    // Auto-load retry for javmost: Wait until page functions are initialized
     if (window.location.hostname.includes('javmost')) {
       let attempts = 0;
       const interval = setInterval(() => {
@@ -3667,24 +3752,25 @@
           clearInterval(interval);
           return;
         }
-        if (typeof window.init_start_select === 'function' || (sp && sp.querySelector('button[onclick*="init_start_select"]'))) {
+        if (typeof window.init_start_select === 'function' || typeof window.select_part === 'function') {
           triggerJavmostPlayer();
           clearInterval(interval);
-        } else if (attempts > 20) {
+        } else if (attempts > 30) {
           clearInterval(interval);
         }
       }, 200);
     }
 
     // 3. Javmost Thumbnail Click Handler (Only runs on javmost before player iframe is loaded)
+    // NOTE: Runs in BUBBLING phase (capture: false) and NEVER calls e.stopPropagation(),
+    // ensuring native button onclick fires cleanly and unimpeded!
     if (window.location.hostname.includes('javmost')) {
       document.addEventListener('click', function (e) {
         const sp = e.target && e.target.closest ? e.target.closest('#show_player') : null;
         if (sp && !sp.querySelector('iframe')) {
-          e.stopPropagation(); // Stop ad scripts from hijacking the initial thumbnail click!
           triggerJavmostPlayer();
         }
-      }, true);
+      }, false);
     }
 
     // 4. In embedded player iframes (e.g. dooplayer.com): Neutralize ad capture-phase click hijackers
@@ -3694,16 +3780,28 @@
         const origDocAEL = document.addEventListener;
 
         function isAdClickCapture(type, useCapture) {
-          if (type !== 'click' && type !== 'mousedown') return false;
+          if (type !== 'click' && type !== 'mousedown' && type !== 'pointerdown') return false;
           return (typeof useCapture === 'boolean' && useCapture) ||
                  (useCapture && typeof useCapture === 'object' && useCapture.capture);
+        }
+
+        function isAdScriptFunction(fn) {
+          try {
+            if (typeof fn !== 'function') return false;
+            const str = Function.prototype.toString.call(fn);
+            return str.includes('open') || str.includes('location') || str.includes('proxy') || str.includes('cl_') || str.includes('onclopen');
+          } catch (e) {
+            return false;
+          }
         }
 
         window.addEventListener = function (type, listener, options) {
           if (isAdClickCapture(type, options) && typeof listener === 'function') {
             const wrapped = function (e) {
-              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control')) {
-                return; // Disarm ad listener on legitimate player interactions!
+              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control, .plyr__control--overlaid')) {
+                if (isAdScriptFunction(listener)) {
+                  return; // Disarm ad listener!
+                }
               }
               return listener.apply(this, arguments);
             };
@@ -3715,10 +3813,12 @@
         document.addEventListener = function (type, listener, options) {
           if (isAdClickCapture(type, options) && typeof listener === 'function') {
             const wrapped = function (e) {
-              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control')) {
-                return; // Disarm ad listener on legitimate player interactions!
+              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control, .plyr__control--overlaid')) {
+                if (isAdScriptFunction(listener)) {
+                  return; // Disarm ad listener!
+                }
               }
-              return listener.apply(this, arguments);
+              return origDocAEL.call(this, type, wrapped, options);
             };
             return origDocAEL.call(this, type, wrapped, options);
           }
@@ -3729,11 +3829,12 @@
 
     // 5. Overlaid Initial Play Button Kick-starter (Zero interference with controls!)
     // When the user clicks the big overlaid play button before playback starts, ensure video starts playing.
-    // NOTE: Runs in bubbling phase (capture: false) and NEVER calls e.stopPropagation(),
-    // so pause, volume, seek, and fullscreen controls work 100% natively!
     document.addEventListener('click', function (e) {
-      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn');
+      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn, button[data-plyr="play"]');
       if (overlaidPlay) {
+        if (window.plyr && typeof window.plyr.play === 'function') {
+          try { window.plyr.play(); } catch (err) {}
+        }
         const vid = document.querySelector('video');
         if (vid && vid.paused) {
           setTimeout(() => {
