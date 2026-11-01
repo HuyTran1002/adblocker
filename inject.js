@@ -2895,31 +2895,45 @@
       return hookedFn;
     }
 
-    // 1B. Neutralize onAbnormalityDetected in Promise Chains (uBlock Origin & AdGuard Official Defense)
-    // Prevents YouTube integrity scripts from detecting adblocking, raising error 282054944, or triggering interruption modals
+    // 1B. Neutralize YouTube inline anti-adblock detection scripts containing 'window,"fetch"' (uBlock Origin Standard)
     try {
-      const origPromiseThen = Promise.prototype.then;
-      const hookedPromiseThen = function (onFulfilled, onRejected) {
-        if (typeof onFulfilled === 'function') {
-          try {
-            const fnStr = Function.prototype.toString.call(onFulfilled);
-            if (fnStr.includes('onAbnormalityDetected')) {
-              onFulfilled = function () {};
+      const handleScriptMutations = (mutations) => {
+        for (let i = 0; i < mutations.length; i++) {
+          const added = mutations[i].addedNodes;
+          for (let j = 0; j < added.length; j++) {
+            const node = added[j];
+            if (node.nodeName === 'SCRIPT' && node.textContent && node.textContent.includes('window,"fetch"')) {
+              node.textContent = '';
             }
-          } catch (e) {}
+          }
         }
-        return origPromiseThen.call(this, onFulfilled, onRejected);
       };
-      protectNative(hookedPromiseThen, origPromiseThen, 'then');
-      Promise.prototype.then = hookedPromiseThen;
+      const scriptObserver = new MutationObserver(handleScriptMutations);
+      scriptObserver.observe(document.documentElement || document, {
+        childList: true,
+        subtree: true
+      });
+      document.addEventListener('DOMContentLoaded', () => {
+        scriptObserver.disconnect();
+      }, { once: true });
+    } catch (e) {}
+
+    // 1C. Intercept onSnackbarMessage in Map.prototype.has (uBlock Origin Standard)
+    // Neutralizes YouTube's "Bạn đang gặp sự cố gây gián đoạn?" snackbar prompt at the runtime level
+    try {
+      const origMapHas = Map.prototype.has;
+      const hookedMapHas = function (key) {
+        if (key === 'onSnackbarMessage') {
+          return false;
+        }
+        return origMapHas.apply(this, arguments);
+      };
+      protectNative(hookedMapHas, origMapHas, 'has');
+      Map.prototype.has = hookedMapHas;
     } catch (e) {}
 
     // 2. GhostEngine Pure Native Ad Suppressor (No Prototype Pollution)
-    try {
-      if (window.yt && window.yt.ads) {
-        window.yt.ads = undefined;
-      }
-    } catch (e) {}
+    // Preserves native yt.ads structure so YouTube integrity checks never detect missing ad objects
 
     // 3. Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
@@ -2988,8 +3002,27 @@
       // Auto-heal player error / detection warning in playabilityStatus
       if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
         const status = val.playabilityStatus.status;
+        let isAntiAdblock = false;
+        if (val.playabilityStatus.errorScreen) {
+          const errStr = JSON.stringify(val.playabilityStatus.errorScreen);
+          if (errStr.includes('3037019') || errStr.includes('support.google.com') || errStr.includes('WEB_PAGE_TYPE_UNKNOWN') || errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock') || errStr.includes('gián đoạn') || errStr.includes('sự cố')) {
+            isAntiAdblock = true;
+            delete val.playabilityStatus.errorScreen;
+            delete val.playabilityStatus.reason;
+            delete val.playabilityStatus.subreason;
+          }
+        }
+        if (val.playabilityStatus.reason) {
+          const rStr = String(val.playabilityStatus.reason).toLowerCase();
+          if (rStr.includes('adblock') || rStr.includes('chặn quảng cáo') || rStr.includes('điều khoản') || rStr.includes('gián đoạn') || rStr.includes('sự cố')) {
+            isAntiAdblock = true;
+            delete val.playabilityStatus.reason;
+            delete val.playabilityStatus.subreason;
+            delete val.playabilityStatus.errorScreen;
+          }
+        }
         if (val.streamingData) {
-          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+          if (isAntiAdblock || status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
             val.playabilityStatus.status = 'OK';
             delete val.playabilityStatus.reason;
             delete val.playabilityStatus.subreason;
@@ -2997,14 +3030,8 @@
             delete val.playabilityStatus.messages;
           }
         }
-        if (val.playabilityStatus.errorScreen) {
-          const errStr = JSON.stringify(val.playabilityStatus.errorScreen);
-          if (errStr.includes('3037019') || errStr.includes('support.google.com') || errStr.includes('WEB_PAGE_TYPE_UNKNOWN') || errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock') || errStr.includes('gián đoạn') || errStr.includes('sự cố')) {
-            delete val.playabilityStatus.errorScreen;
-            delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.subreason;
-            if (val.streamingData) val.playabilityStatus.status = 'OK';
-          }
+        if (isAntiAdblock && val.streamingData) {
+          val.playabilityStatus.status = 'OK';
         }
         if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
           val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
@@ -3040,8 +3067,12 @@
       if ('no_ads' in val) { delete val.no_ads; adsRemoved++; }
       if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
       if ('adPlacementConfig' in val) delete val.adPlacementConfig;
-      if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
-      if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+      const isLiveStream = (val.videoDetails && val.videoDetails.isLive) ||
+                           (val.streamingData && (val.streamingData.hlsManifestUrl || val.streamingData.dashManifestUrl));
+      if (!isLiveStream) {
+        if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
+        if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+      }
       if ('interstitial' in val) { delete val.interstitial; adsRemoved++; }
       if ('instream' in val) { delete val.instream; adsRemoved++; }
       if ('adSlotRenderer' in val) { delete val.adSlotRenderer; adsRemoved++; }
@@ -3530,6 +3561,10 @@
           snackbar-view-model:has(#feedback),
           .snackbarViewModelEngagementBarWrapper,
           .toast-button.style-scope.yt-notification-action-renderer,
+          #toast:has(> #text-container > yt-formatted-string#text.yt-notification-action-renderer),
+          .ytSnackbarContainerOpened:has(> .snackbarViewModelSwipeable > .snackbarViewModelEngagementBarWrapper),
+          #toast.tp-yt-paper-toast,
+          tp-yt-paper-toast#toast,
           tp-yt-paper-toast#toast:has(a[href*="3037019"]),
           tp-yt-paper-toast:has(a[href*="answer"]),
           tp-yt-paper-toast:has(a[href*="support.google.com"]),
@@ -3561,8 +3596,6 @@
     // 10. Pure Anti-Adblock Enforcement Modal Cleaner & Fallback Skip
     // ZERO interference with player controls, pause, volume, timeline, settings, or playback rate!
     let lastAdShowing = false;
-    let lastRecoveryVideoId = null;
-    let lastRecoveryTime = 0;
 
     function handleYouTubeAdState() {
       if (!isEnabled()) return;
@@ -3601,11 +3634,10 @@
             try { ytPlayer.skipAd(); } catch (e) {}
           }
 
-          // Safe conclusion if ad reaches end or is stuck at end or dead ad stream
-          if (video && ((video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) || video.error)) {
+          // Safe conclusion if ad reaches end
+          if (video && video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 1 && video.currentTime >= video.duration - 0.25) {
             try {
               if (video.paused) video.play().catch(() => {});
-              video.dispatchEvent(new Event('ended'));
             } catch (e) {}
           }
         } else if (lastAdShowing) {
@@ -3691,8 +3723,8 @@
         let hadErrorScreen = false;
         if (errorContainer && errorContainer.id !== 'movie_player' && !errorContainer.classList.contains('html5-video-player')) {
           const text = (errorContainer.textContent || errorContainer.innerText || '').toLowerCase();
-          // Target genuine anti-adblock playback blocks (code 282054944, prompt to disable adblock, or error screen)
-          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service')) || (text.includes('thử lại') && text.includes('lỗi')) || (text.includes('try again') && text.includes('error')) || errorContainer.querySelector('a[href*="3037019"]')) {
+          // Target genuine anti-adblock playback blocks (code 282054944, prompt to disable adblock, or 3037019 link)
+          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service')) || errorContainer.querySelector('a[href*="3037019"]')) {
             hadErrorScreen = true;
             hadInterruption = true;
             // CRITICAL: NEVER call .remove() on #error-screen! YouTube Polymer's updateErrorScreenLocation requires
@@ -3706,22 +3738,6 @@
 
             if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
               ytPlayer.classList.remove('ytp-error');
-            }
-
-            // Auto-recover playback via loadVideoById (uBlock Origin Standard)
-            const currentVideoId = getCurrentVideoId();
-            const now = Date.now();
-            if (currentVideoId && (lastRecoveryVideoId !== currentVideoId || (now - lastRecoveryTime > 2500))) {
-              lastRecoveryVideoId = currentVideoId;
-              lastRecoveryTime = now;
-              const urlParams = new URLSearchParams(window.location.search);
-              const startSeconds = parseInt(urlParams.get('t') || '0', 10) || 0;
-              if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-                try {
-                  ytPlayer.loadVideoById(currentVideoId, startSeconds);
-                  ytPlayer.playVideo();
-                } catch (e) {}
-              }
             }
 
             const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
@@ -3860,7 +3876,7 @@
       if (!video) return;
 
       // Kickstart if the video is paused and not ended during the initial loading window
-      if (video.paused && !video.ended) {
+      if (video.paused && !video.ended && (video.readyState >= 1 || (video.duration && !isNaN(video.duration) && video.duration > 0))) {
         if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         }

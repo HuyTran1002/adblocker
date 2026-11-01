@@ -79,8 +79,7 @@ check('Cosmetic CSS hides interruption toast and ad overlays',
   injectJs.includes('tp-yt-paper-toast#toast:has(a[href*="3037019"])'));
 check('In-player fallback skip handler reports ads in real-time and recovers stalled video endings',
   injectJs.includes('reportAdDetected(1);') &&
-  injectJs.includes('video.currentTime >= video.duration - 0.25') &&
-  injectJs.includes("video.dispatchEvent(new Event('ended'))"));
+  injectJs.includes('video.currentTime >= video.duration - 0.25'));
 
 // 5. CONTENT.JS & MOVIE SITE AD GUARDIAN AUDIT
 console.log('\n🛡️  5. Movie Site Ad Guardian & Content Script Audit (content.js & inject.js):');
