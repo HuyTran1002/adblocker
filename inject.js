@@ -2965,8 +2965,8 @@
         }
         if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
           val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
-            const str = JSON.stringify(m);
-            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn');
+            const str = JSON.stringify(m).toLowerCase();
+            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn') && !str.includes('sự cố');
           });
           if (val.playabilityStatus.messages.length === 0) delete val.playabilityStatus.messages;
         }
@@ -3011,6 +3011,12 @@
       // Clean anti-adblock enforcement dialogs & interruption prompts from payload
       if (val.auxiliaryUi && val.auxiliaryUi.messageRenderers) {
         const mr = val.auxiliaryUi.messageRenderers;
+        for (const k of Object.keys(mr)) {
+          const str = JSON.stringify(mr[k]).toLowerCase();
+          if (str.includes('enforcement') || str.includes('interruption') || str.includes('gián đoạn') || str.includes('sự cố') || str.includes('adblock') || str.includes('support.google.com') || str.includes('3037019')) {
+            delete mr[k];
+          }
+        }
         if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
         if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
         if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
@@ -3436,10 +3442,16 @@
           ytd-enforcement-message-renderer,
           snackbar-view-model:has(a[href*="support.google.com"]),
           snackbar-view-model:has(a[href*="answer"]),
+          snackbar-view-model:has(#feedback),
           .snackbarViewModelEngagementBarWrapper,
+          .toast-button.style-scope.yt-notification-action-renderer,
           tp-yt-paper-toast#toast:has(a[href*="3037019"]),
           tp-yt-paper-toast:has(a[href*="answer"]),
           tp-yt-paper-toast:has(a[href*="support.google.com"]),
+          tp-yt-paper-toast:has(#feedback),
+          ytd-notification-action-renderer:has(a[href*="answer"]),
+          ytd-notification-action-renderer:has(a[href*="support.google.com"]),
+          ytd-notification-action-renderer:has(#feedback),
           tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
           tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
           tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
@@ -3529,11 +3541,15 @@
           }
         }
 
-        // Dismiss and remove anti-adblock enforcement dialogs & interruption toasts if any appear
+        // Dismiss and remove anti-adblock enforcement dialogs & interruption toasts
+        let hadInterruption = false;
+
+        // A. Dialog-based enforcement modals
         const enforcementModal = document.querySelector(
-          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, ytd-notification-action-renderer:has(a[href*="support.google.com"]), ytd-notification-action-renderer:has(a[href*="answer"]), snackbar-view-model:has(a[href*="support.google.com"])'
+          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, tp-yt-paper-dialog:has(ytd-enforcement-message-view-model), tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)'
         );
         if (enforcementModal) {
+          hadInterruption = true;
           const dialog = enforcementModal.closest('tp-yt-paper-dialog');
           if (dialog) {
             try {
@@ -3550,8 +3566,39 @@
             try { dialog.remove(); } catch (e) {}
           }
           try { enforcementModal.remove(); } catch (e) {}
+        }
 
-          // Auto-resume playback ONLY if video is currently paused
+        // B. Interruption Toasts ("Bạn đang gặp sự cố gây gián đoạn?", "Experiencing interruptions?", help links)
+        const toastCandidates = document.querySelectorAll(
+          'tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer, snackbar-view-model, #toast, .toast-button'
+        );
+        for (let i = 0; i < toastCandidates.length; i++) {
+          const toast = toastCandidates[i];
+          if (toast.closest('ytd-live-chat-frame, #chat, #chatframe, yt-live-chat-renderer')) continue;
+          const text = (toast.textContent || toast.innerText || '').toLowerCase();
+          const isInterruption = text.includes('sự cố') ||
+                                 text.includes('gián đoạn') ||
+                                 text.includes('interruption') ||
+                                 text.includes('tìm hiểu lý do') ||
+                                 text.includes('find out why') ||
+                                 text.includes('chặn quảng cáo') ||
+                                 text.includes('ad blocker') ||
+                                 toast.querySelector('a[href*="answer"], a[href*="support.google.com"], a[href*="3037019"]');
+          if (isInterruption) {
+            hadInterruption = true;
+            try {
+              toast.setAttribute('aria-hidden', 'true');
+              toast.removeAttribute('opened');
+              toast.style.setProperty('display', 'none', 'important');
+              toast.style.setProperty('visibility', 'hidden', 'important');
+              toast.style.setProperty('pointer-events', 'none', 'important');
+              toast.remove();
+            } catch (e) {}
+          }
+        }
+
+        // C. Auto-resume playback if YouTube paused video due to enforcement prompt or interruption
+        if (hadInterruption) {
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
           if (video && video.paused && !video.ended) {
             try {
