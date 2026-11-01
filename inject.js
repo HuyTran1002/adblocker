@@ -2969,14 +2969,21 @@
       // Auto-heal player error / detection warning in playabilityStatus
       if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
         const status = val.playabilityStatus.status;
-        if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
-          val.playabilityStatus.status = 'OK';
-          delete val.playabilityStatus.reason;
-          delete val.playabilityStatus.errorScreen;
-          delete val.playabilityStatus.messages;
+        if (val.streamingData) {
+          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+            val.playabilityStatus.status = 'OK';
+            delete val.playabilityStatus.reason;
+            delete val.playabilityStatus.errorScreen;
+            delete val.playabilityStatus.messages;
+          }
         }
         if (val.playabilityStatus.errorScreen) {
-          delete val.playabilityStatus.errorScreen;
+          const errStr = JSON.stringify(val.playabilityStatus.errorScreen);
+          if (errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock')) {
+            delete val.playabilityStatus.errorScreen;
+            delete val.playabilityStatus.reason;
+            if (val.streamingData) val.playabilityStatus.status = 'OK';
+          }
         }
         if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
           val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
@@ -3061,6 +3068,7 @@
       const keys = Object.keys(val);
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
+        if (key === 'streamingData') continue; // Preserve stream formats, codecs & signatures
         const child = val[key];
         if (child && typeof child === 'object') {
           recursiveDeepPrune(child, depth + 1);
@@ -3644,49 +3652,43 @@
           }
         }
 
-        // C. In-Player Anti-Adblock Fake Error Screen Watchdog (Code 282054944 / "Đã xảy ra lỗi")
-        const errorNodes = document.querySelectorAll(
+        // C. In-Player Anti-Adblock Fake Error Screen Watchdog (Code 282054944 / Anti-Adblock Enforcement)
+        const errorContainer = document.querySelector(
           '#error-screen, ytd-playability-error-supported-renderers, yt-playability-error-supported-renderers, #player-error-message-container, .yt-player-error-message-renderer, yt-player-error-message-renderer, .ytp-error-content'
         );
         let hadErrorScreen = false;
-        for (let i = 0; i < errorNodes.length; i++) {
-          const node = errorNodes[i];
-          if (node.id === 'movie_player' || node.classList.contains('html5-video-player')) continue;
-          const text = (node.textContent || node.innerText || '').toLowerCase();
-          if (text.includes('282054944') || text.includes('thử lại sau') || text.includes('try again') || text.includes('đã xảy ra lỗi') || text.includes('something went wrong') || node.id === 'error-screen') {
+        if (errorContainer && errorContainer.id !== 'movie_player' && !errorContainer.classList.contains('html5-video-player')) {
+          const text = (errorContainer.textContent || errorContainer.innerText || '').toLowerCase();
+          // ONLY target genuine anti-adblock playback blocks (code 282054944 or explicit enforcement)
+          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service'))) {
             hadErrorScreen = true;
             hadInterruption = true;
+            // CRITICAL: NEVER call .remove() on #error-screen! YouTube Polymer's updateErrorScreenLocation requires
+            // errorScreen to retain its parentElement in the DOM tree, otherwise it throws TypeError and crashes.
             try {
-              node.style.setProperty('display', 'none', 'important');
-              node.style.setProperty('visibility', 'hidden', 'important');
-              node.style.setProperty('pointer-events', 'none', 'important');
-              node.remove();
+              errorContainer.style.setProperty('display', 'none', 'important');
+              errorContainer.style.setProperty('visibility', 'hidden', 'important');
+              errorContainer.style.setProperty('pointer-events', 'none', 'important');
+              errorContainer.style.setProperty('height', '0', 'important');
             } catch (e) {}
-          }
-        }
 
-        if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
-          ytPlayer.classList.remove('ytp-error');
-          hadErrorScreen = true;
-          hadInterruption = true;
-        }
+            if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
+              ytPlayer.classList.remove('ytp-error');
+            }
 
-        if (hadErrorScreen) {
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video) {
-            video.style.setProperty('display', 'block', 'important');
-            video.style.setProperty('visibility', 'visible', 'important');
-            video.style.setProperty('opacity', '1', 'important');
+            const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+            if (video) {
+              video.style.setProperty('display', 'block', 'important');
+              video.style.setProperty('visibility', 'visible', 'important');
+              video.style.setProperty('opacity', '1', 'important');
+            }
+            const chromeBottom = ytPlayer && ytPlayer.querySelector('.ytp-chrome-bottom');
+            if (chromeBottom) {
+              chromeBottom.style.setProperty('display', 'block', 'important');
+              chromeBottom.style.setProperty('visibility', 'visible', 'important');
+              chromeBottom.style.setProperty('opacity', '1', 'important');
+            }
           }
-          const chromeBottom = ytPlayer && ytPlayer.querySelector('.ytp-chrome-bottom');
-          if (chromeBottom) {
-            chromeBottom.style.setProperty('display', 'block', 'important');
-            chromeBottom.style.setProperty('visibility', 'visible', 'important');
-            chromeBottom.style.setProperty('opacity', '1', 'important');
-          }
-          try {
-            window.dispatchEvent(new Event('resize'));
-          } catch (e) {}
         }
 
         // D. Auto-resume playback if YouTube paused video due to enforcement prompt, interruption, or error screen
