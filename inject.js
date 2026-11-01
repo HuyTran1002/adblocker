@@ -2963,6 +2963,13 @@
             delete val.playabilityStatus.messages;
           }
         }
+        if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
+          val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
+            const str = JSON.stringify(m);
+            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn');
+          });
+          if (val.playabilityStatus.messages.length === 0) delete val.playabilityStatus.messages;
+        }
       }
 
       // Strip ad placements, player ads, ad slots, and server-side dynamic ad configurations
@@ -3456,8 +3463,8 @@
         const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
         if (ytPlayer) hookMoviePlayer(ytPlayer);
 
-        const isAdShowing = document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null ||
-          (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting')));
+        const isAdShowing = (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) ||
+          document.querySelector('#movie_player.ad-showing, #movie_player.ad-interrupting, .html5-video-player.ad-showing, .html5-video-player.ad-interrupting') !== null;
 
         if (isAdShowing) {
           lastAdShowing = true;
@@ -3496,16 +3503,27 @@
           }
         } else if (lastAdShowing) {
           lastAdShowing = false;
-          // Unmute video after ad transition
+          // Unmute video after ad transition and ensure main video resumes smoothly
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video && video.muted) {
-            try { video.muted = false; } catch (e) {}
+          if (video) {
+            if (video.muted) {
+              try { video.muted = false; } catch (e) {}
+            }
+            if (video.paused && !video.ended) {
+              try {
+                const p = video.play();
+                if (p && p.catch) p.catch(() => {});
+              } catch (e) {}
+            }
+          }
+          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+            try { ytPlayer.playVideo(); } catch (e) {}
           }
         }
 
-        // Dismiss anti-adblock enforcement dialogs if any appear
+        // Dismiss and remove anti-adblock enforcement dialogs & interruption toasts if any appear
         const enforcementModal = document.querySelector(
-          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model'
+          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, ytd-notification-action-renderer:has(a[href*="support.google.com"]), ytd-notification-action-renderer:has(a[href*="answer"]), snackbar-view-model'
         );
         if (enforcementModal) {
           const dialog = enforcementModal.closest('tp-yt-paper-dialog');
@@ -3521,6 +3539,19 @@
               }
             } catch (e) {}
           }
+          try { enforcementModal.remove(); } catch (e) {}
+
+          // Auto-resume playback if YouTube paused video due to enforcement prompt
+          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+          if (video && video.paused && !video.ended) {
+            try {
+              const p = video.play();
+              if (p && p.catch) p.catch(() => {});
+            } catch (e) {}
+          }
+          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+            try { ytPlayer.playVideo(); } catch (e) {}
+          }
         }
       } catch (e) {}
     }
@@ -3535,6 +3566,69 @@
     } catch (e) {}
 
     setInterval(handleYouTubeAdState, 150);
+
+    // 11. Smart Autoplay Kickstarter (Solves Chromium / Cốc Cốc Autoplay Silence & Focus Loss)
+    // Automatically kicks off video playback when opening videos/playlists without requiring F12 or extra clicks
+    let userManuallyPaused = false;
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.closest && e.target.closest('.ytp-play-button')) {
+        userManuallyPaused = true;
+      }
+    }, true);
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'KeyK') {
+        userManuallyPaused = true;
+      }
+    }, true);
+
+    function kickstartYouTubeAutoplay() {
+      if (!isEnabled() || userManuallyPaused) return;
+      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts')) return;
+      
+      const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+      const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+      if (!video) return;
+
+      // Only kickstart if the video is paused right at the start (under 0.5s) and not ended
+      if (video.paused && !video.ended && video.currentTime < 0.5) {
+        if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          try { ytPlayer.playVideo(); } catch (e) {}
+        }
+        try {
+          const playPromise = video.play();
+          if (playPromise && playPromise.catch) {
+            playPromise.catch((err) => {
+              // If browser strictly blocks unmuted autoplay without prior gesture (Chromium Autoplay Policy):
+              // Temporarily mute to start instant playback, then automatically restore volume on first interaction!
+              if (err && err.name === 'NotAllowedError') {
+                video.muted = true;
+                video.play().catch(() => {});
+                const unmuteOnce = () => {
+                  video.muted = false;
+                  window.removeEventListener('click', unmuteOnce, true);
+                  window.removeEventListener('keydown', unmuteOnce, true);
+                };
+                window.addEventListener('click', unmuteOnce, true);
+                window.addEventListener('keydown', unmuteOnce, true);
+              }
+            });
+          }
+        } catch (e) {}
+      }
+    }
+
+    window.addEventListener('yt-navigate-finish', () => {
+      userManuallyPaused = false;
+      setTimeout(kickstartYouTubeAutoplay, 300);
+      setTimeout(kickstartYouTubeAutoplay, 800);
+      setTimeout(kickstartYouTubeAutoplay, 1500);
+    });
+
+    let kickstartCount = 0;
+    const kickstartInterval = setInterval(() => {
+      kickstartYouTubeAutoplay();
+      if (++kickstartCount > 8) clearInterval(kickstartInterval);
+    }, 350);
   }
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
