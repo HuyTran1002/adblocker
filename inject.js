@@ -3777,7 +3777,6 @@
     scheduleBypassScan();
   }
 
-  runYouTubeAdGuardEngine();
   // Universal Video Player Protection, Clickadu Disarm & Play Enforcer (Runs on both main sites and embedded iframes)
   (function () {
     if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('google')) return;
@@ -3913,7 +3912,7 @@
                   return; // Disarm ad listener!
                 }
               }
-              return origDocAEL.call(this, type, wrapped, options);
+              return listener.apply(this, arguments);
             };
             return origDocAEL.call(this, type, wrapped, options);
           }

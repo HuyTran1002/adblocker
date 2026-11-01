@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.0.0');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.0.5');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.0.7', manifest.version === '5.0.7');
+check('Version is 5.0.5', manifest.version === '5.0.5');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -98,16 +98,16 @@ check('Overlaid play button kickstarter runs on bubbling phase without stopPropa
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.0.7 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.0.7</span>'));
+check('popup.html displays version v5.0.5 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.0.5</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.0.7-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.0.7-firefox.zip');
-check('webshield-v5.0.7-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.0.5-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.0.5-firefox.zip');
+check('webshield-v5.0.5-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.0.7-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.0.5-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 console.log('\n======================================================================');
