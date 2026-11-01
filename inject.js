@@ -2895,6 +2895,25 @@
       return hookedFn;
     }
 
+    // 1B. Neutralize onAbnormalityDetected in Promise Chains (uBlock Origin & AdGuard Official Defense)
+    // Prevents YouTube integrity scripts from detecting adblocking, raising error 282054944, or triggering interruption modals
+    try {
+      const origPromiseThen = Promise.prototype.then;
+      const hookedPromiseThen = function (onFulfilled, onRejected) {
+        if (typeof onFulfilled === 'function') {
+          try {
+            const fnStr = Function.prototype.toString.call(onFulfilled);
+            if (fnStr.includes('onAbnormalityDetected')) {
+              onFulfilled = function () {};
+            }
+          } catch (e) {}
+        }
+        return origPromiseThen.call(this, onFulfilled, onRejected);
+      };
+      protectNative(hookedPromiseThen, origPromiseThen, 'then');
+      Promise.prototype.then = hookedPromiseThen;
+    } catch (e) {}
+
     // 2. GhostEngine Pure Native Ad Suppressor (No Prototype Pollution)
     try {
       if (window.yt && window.yt.ads) {
@@ -2973,25 +2992,33 @@
           if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
             val.playabilityStatus.status = 'OK';
             delete val.playabilityStatus.reason;
+            delete val.playabilityStatus.subreason;
             delete val.playabilityStatus.errorScreen;
             delete val.playabilityStatus.messages;
           }
         }
         if (val.playabilityStatus.errorScreen) {
           const errStr = JSON.stringify(val.playabilityStatus.errorScreen);
-          if (errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock')) {
+          if (errStr.includes('3037019') || errStr.includes('support.google.com') || errStr.includes('WEB_PAGE_TYPE_UNKNOWN') || errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock') || errStr.includes('gián đoạn') || errStr.includes('sự cố')) {
             delete val.playabilityStatus.errorScreen;
             delete val.playabilityStatus.reason;
+            delete val.playabilityStatus.subreason;
             if (val.streamingData) val.playabilityStatus.status = 'OK';
           }
         }
         if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
           val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
+            if (m && m.youThereRenderer) return false;
             const str = JSON.stringify(m).toLowerCase();
-            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn') && !str.includes('sự cố');
+            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn') && !str.includes('sự cố') && !str.includes('3037019');
           });
           if (val.playabilityStatus.messages.length === 0) delete val.playabilityStatus.messages;
         }
+      }
+
+      if (val.messages && Array.isArray(val.messages)) {
+        val.messages = val.messages.filter(m => !m.youThereRenderer);
+        if (val.messages.length === 0) delete val.messages;
       }
 
       // Strip ad placements, player ads, ad slots, and server-side dynamic ad configurations
@@ -3026,6 +3053,9 @@
       if ('adClientData' in val) { delete val.adClientData; adsRemoved++; }
 
       if (val.playerConfig && typeof val.playerConfig === 'object') {
+        if (val.playerConfig.audioConfig && val.playerConfig.audioConfig.muteOnStart) {
+          delete val.playerConfig.audioConfig.muteOnStart;
+        }
         if (val.playerConfig.daiConfig) { delete val.playerConfig.daiConfig; adsRemoved++; }
         if (val.playerConfig.ssapConfig) { delete val.playerConfig.ssapConfig; adsRemoved++; }
         if (val.playerConfig.adConfig) { delete val.playerConfig.adConfig; adsRemoved++; }
@@ -3531,6 +3561,8 @@
     // 10. Pure Anti-Adblock Enforcement Modal Cleaner & Fallback Skip
     // ZERO interference with player controls, pause, volume, timeline, settings, or playback rate!
     let lastAdShowing = false;
+    let lastRecoveryVideoId = null;
+    let lastRecoveryTime = 0;
 
     function handleYouTubeAdState() {
       if (!isEnabled()) return;
@@ -3569,8 +3601,8 @@
             try { ytPlayer.skipAd(); } catch (e) {}
           }
 
-          // Safe conclusion if ad reaches end or is stuck at end
-          if (video && video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) {
+          // Safe conclusion if ad reaches end or is stuck at end or dead ad stream
+          if (video && ((video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) || video.error)) {
             try {
               if (video.paused) video.play().catch(() => {});
               video.dispatchEvent(new Event('ended'));
@@ -3659,8 +3691,8 @@
         let hadErrorScreen = false;
         if (errorContainer && errorContainer.id !== 'movie_player' && !errorContainer.classList.contains('html5-video-player')) {
           const text = (errorContainer.textContent || errorContainer.innerText || '').toLowerCase();
-          // ONLY target genuine anti-adblock playback blocks (code 282054944 or explicit enforcement)
-          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service'))) {
+          // Target genuine anti-adblock playback blocks (code 282054944, prompt to disable adblock, or error screen)
+          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service')) || (text.includes('thử lại') && text.includes('lỗi')) || (text.includes('try again') && text.includes('error')) || errorContainer.querySelector('a[href*="3037019"]')) {
             hadErrorScreen = true;
             hadInterruption = true;
             // CRITICAL: NEVER call .remove() on #error-screen! YouTube Polymer's updateErrorScreenLocation requires
@@ -3674,6 +3706,22 @@
 
             if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
               ytPlayer.classList.remove('ytp-error');
+            }
+
+            // Auto-recover playback via loadVideoById (uBlock Origin Standard)
+            const currentVideoId = getCurrentVideoId();
+            const now = Date.now();
+            if (currentVideoId && (lastRecoveryVideoId !== currentVideoId || (now - lastRecoveryTime > 2500))) {
+              lastRecoveryVideoId = currentVideoId;
+              lastRecoveryTime = now;
+              const urlParams = new URLSearchParams(window.location.search);
+              const startSeconds = parseInt(urlParams.get('t') || '0', 10) || 0;
+              if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+                try {
+                  ytPlayer.loadVideoById(currentVideoId, startSeconds);
+                  ytPlayer.playVideo();
+                } catch (e) {}
+              }
             }
 
             const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
@@ -3702,6 +3750,14 @@
             if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
               try { ytPlayer.playVideo(); } catch (e) {}
             }
+          }
+        }
+
+        // E. Continuous Autoplay Watchdog for Instant Playback without F12 (Supports timestamp & normal URLs)
+        if (!userManuallyPaused && (window.location.pathname.startsWith('/watch') || window.location.pathname.startsWith('/shorts') || window.location.pathname.startsWith('/live'))) {
+          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+          if (video && video.paused && !video.ended && (video.readyState >= 2 || (video.duration && !isNaN(video.duration)))) {
+            kickstartYouTubeAutoplay();
           }
         }
 
@@ -3776,18 +3832,28 @@
     let userManuallyPaused = false;
     document.addEventListener('click', (e) => {
       if (e.target && e.target.closest && e.target.closest('.ytp-play-button')) {
-        userManuallyPaused = true;
+        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+        if (video && video.paused) {
+          userManuallyPaused = false;
+        } else {
+          userManuallyPaused = true;
+        }
       }
     }, true);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.code === 'KeyK') {
-        userManuallyPaused = true;
+        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+        if (video && video.paused) {
+          userManuallyPaused = false;
+        } else {
+          userManuallyPaused = true;
+        }
       }
     }, true);
 
     function kickstartYouTubeAutoplay() {
       if (!isEnabled() || userManuallyPaused) return;
-      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts')) return;
+      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts') && !window.location.pathname.startsWith('/live')) return;
       
       const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
@@ -3821,11 +3887,19 @@
       }
     }
 
+    document.addEventListener('loadeddata', () => {
+      if (!userManuallyPaused) kickstartYouTubeAutoplay();
+    }, true);
+    document.addEventListener('canplay', () => {
+      if (!userManuallyPaused) kickstartYouTubeAutoplay();
+    }, true);
+
     window.addEventListener('yt-navigate-finish', () => {
       userManuallyPaused = false;
       setTimeout(kickstartYouTubeAutoplay, 300);
       setTimeout(kickstartYouTubeAutoplay, 800);
       setTimeout(kickstartYouTubeAutoplay, 1500);
+      setTimeout(kickstartYouTubeAutoplay, 2500);
     });
 
     let kickstartCount = 0;
