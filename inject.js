@@ -2956,12 +2956,13 @@
       if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
         const status = val.playabilityStatus.status;
         if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
-          if (val.streamingData) {
-            val.playabilityStatus.status = 'OK';
-            delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.errorScreen;
-            delete val.playabilityStatus.messages;
-          }
+          val.playabilityStatus.status = 'OK';
+          delete val.playabilityStatus.reason;
+          delete val.playabilityStatus.errorScreen;
+          delete val.playabilityStatus.messages;
+        }
+        if (val.playabilityStatus.errorScreen) {
+          delete val.playabilityStatus.errorScreen;
         }
         if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
           val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
@@ -3009,18 +3010,26 @@
       }
 
       // Clean anti-adblock enforcement dialogs & interruption prompts from payload
-      if (val.auxiliaryUi && val.auxiliaryUi.messageRenderers) {
-        const mr = val.auxiliaryUi.messageRenderers;
-        for (const k of Object.keys(mr)) {
-          const str = JSON.stringify(mr[k]).toLowerCase();
-          if (str.includes('enforcement') || str.includes('interruption') || str.includes('gián đoạn') || str.includes('sự cố') || str.includes('adblock') || str.includes('support.google.com') || str.includes('3037019')) {
-            delete mr[k];
+      if (val.auxiliaryUi && typeof val.auxiliaryUi === 'object') {
+        const auxStr = JSON.stringify(val.auxiliaryUi).toLowerCase();
+        if (auxStr.includes('enforcement') || auxStr.includes('interruption') || auxStr.includes('gián đoạn') || auxStr.includes('sự cố') || auxStr.includes('adblock') || auxStr.includes('support.google.com') || auxStr.includes('3037019')) {
+          delete val.auxiliaryUi;
+        } else if (val.auxiliaryUi.messageRenderers) {
+          const mr = val.auxiliaryUi.messageRenderers;
+          for (const k of Object.keys(mr)) {
+            const str = JSON.stringify(mr[k]).toLowerCase();
+            if (str.includes('enforcement') || str.includes('interruption') || str.includes('gián đoạn') || str.includes('sự cố') || str.includes('adblock') || str.includes('support.google.com') || str.includes('3037019')) {
+              delete mr[k];
+            }
+          }
+          if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
+          if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
+          if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
+          if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
+          if (Object.keys(mr).length === 0) {
+            delete val.auxiliaryUi;
           }
         }
-        if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
-        if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
-        if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
-        if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
       }
 
       if (adsRemoved > 0) {
@@ -3349,7 +3358,7 @@
             const origText = response.text.bind(response);
             response.text = async function () {
               const text = await origText();
-              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
+              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig') || text.includes('playabilityStatus') || text.includes('auxiliaryUi'))) {
                 try {
                   const data = JSON.parse(text);
                   recursiveDeepPrune(data);
@@ -3440,6 +3449,15 @@
           ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
           ytd-enforcement-message-view-model,
           ytd-enforcement-message-renderer,
+          #error-screen,
+          #player-error-message-container,
+          .yt-playability-error-supported-renderers,
+          ytd-playability-error-supported-renderers,
+          yt-playability-error-supported-renderers,
+          yt-player-error-message-renderer,
+          .yt-player-error-message-renderer,
+          .ytp-error-content,
+          div.ytp-error:not(#movie_player):not(.html5-video-player),
           snackbar-view-model:has(a[href*="support.google.com"]),
           snackbar-view-model:has(a[href*="answer"]),
           snackbar-view-model:has(#feedback),
@@ -3597,7 +3615,52 @@
           }
         }
 
-        // C. Auto-resume playback if YouTube paused video due to enforcement prompt or interruption
+        // C. In-Player Anti-Adblock Fake Error Screen Watchdog (Code 282054944 / "Đã xảy ra lỗi")
+        const errorNodes = document.querySelectorAll(
+          '#error-screen, ytd-playability-error-supported-renderers, yt-playability-error-supported-renderers, #player-error-message-container, .yt-player-error-message-renderer, yt-player-error-message-renderer, .ytp-error-content'
+        );
+        let hadErrorScreen = false;
+        for (let i = 0; i < errorNodes.length; i++) {
+          const node = errorNodes[i];
+          if (node.id === 'movie_player' || node.classList.contains('html5-video-player')) continue;
+          const text = (node.textContent || node.innerText || '').toLowerCase();
+          if (text.includes('282054944') || text.includes('thử lại sau') || text.includes('try again') || text.includes('đã xảy ra lỗi') || text.includes('something went wrong') || node.id === 'error-screen') {
+            hadErrorScreen = true;
+            hadInterruption = true;
+            try {
+              node.style.setProperty('display', 'none', 'important');
+              node.style.setProperty('visibility', 'hidden', 'important');
+              node.style.setProperty('pointer-events', 'none', 'important');
+              node.remove();
+            } catch (e) {}
+          }
+        }
+
+        if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
+          ytPlayer.classList.remove('ytp-error');
+          hadErrorScreen = true;
+          hadInterruption = true;
+        }
+
+        if (hadErrorScreen) {
+          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+          if (video) {
+            video.style.setProperty('display', 'block', 'important');
+            video.style.setProperty('visibility', 'visible', 'important');
+            video.style.setProperty('opacity', '1', 'important');
+          }
+          const chromeBottom = ytPlayer && ytPlayer.querySelector('.ytp-chrome-bottom');
+          if (chromeBottom) {
+            chromeBottom.style.setProperty('display', 'block', 'important');
+            chromeBottom.style.setProperty('visibility', 'visible', 'important');
+            chromeBottom.style.setProperty('opacity', '1', 'important');
+          }
+          try {
+            window.dispatchEvent(new Event('resize'));
+          } catch (e) {}
+        }
+
+        // D. Auto-resume playback if YouTube paused video due to enforcement prompt, interruption, or error screen
         if (hadInterruption) {
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
           if (video && video.paused && !video.ended) {
@@ -3699,8 +3762,8 @@
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
       if (!video) return;
 
-      // Only kickstart if the video is paused right at the start (under 0.5s) and not ended
-      if (video.paused && !video.ended && video.currentTime < 0.5) {
+      // Kickstart if the video is paused and not ended during the initial loading window
+      if (video.paused && !video.ended) {
         if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         }
