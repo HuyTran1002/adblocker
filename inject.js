@@ -8,13 +8,19 @@
     if (window.self !== window.top) {
       if (isYouTubeHost) return;
       const ref = (document.referrer || '').toLowerCase();
-      if (ref.includes('youtube.com') || ref.includes('youtu.be')) return;
+      if (ref.includes('youtube.com') || ref.includes('youtu.be') || ref.includes('googlevideo.com')) return;
       if (window.location && window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
         for (let i = 0; i < window.location.ancestorOrigins.length; i++) {
           const orig = String(window.location.ancestorOrigins[i] || '').toLowerCase();
-          if (orig.includes('youtube.com') || orig.includes('youtu.be')) return;
+          if (orig.includes('youtube.com') || orig.includes('youtu.be') || orig.includes('googlevideo.com')) return;
         }
       }
+      try {
+        if (window.top && window.top.location && window.top.location.hostname) {
+          const topH = window.top.location.hostname.toLowerCase();
+          if (topH.includes('youtube.com') || topH.includes('youtu.be')) return;
+        }
+      } catch (e) {}
     }
   } catch (e) {}
 
@@ -2563,6 +2569,16 @@
   function overrideWindowOpen(win) {
     if (!win) return;
     try {
+      // Cross-origin check: never access properties of cross-origin windows to prevent
+      // "Unsafe attempt to load URL ... Domains, protocols and ports must match"
+      try {
+        if (win.location && win.location.origin && win.location.origin !== window.location.origin && win.location.protocol !== 'about:') {
+          return;
+        }
+      } catch (crossErr) {
+        return; // Cross-origin access threw SecurityError
+      }
+
       if (win.open !== customOpen) {
         Object.defineProperty(win, 'open', {
           value: customOpen,
@@ -2591,8 +2607,16 @@
     // Override top-level window, self, top, parent, globalThis, and Window.prototype
     overrideWindowOpen(window);
     overrideWindowOpen(window.self);
-    overrideWindowOpen(window.top);
-    overrideWindowOpen(window.parent);
+    try {
+      if (window.top && window.top !== window && window.top.location && window.top.location.origin === window.location.origin) {
+        overrideWindowOpen(window.top);
+      }
+    } catch (e) {}
+    try {
+      if (window.parent && window.parent !== window && window.parent.location && window.parent.location.origin === window.location.origin) {
+        overrideWindowOpen(window.parent);
+      }
+    } catch (e) {}
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
 
@@ -2675,7 +2699,11 @@
           get: function () {
             const win = cwDescriptor.get.apply(this);
             if (win) {
-              overrideWindowOpen(win);
+              try {
+                if (win.location && (win.location.origin === window.location.origin || win.location.protocol === 'about:')) {
+                  overrideWindowOpen(win);
+                }
+              } catch (e) {}
             }
             return win;
           },
@@ -2689,7 +2717,11 @@
           get: function () {
             const doc = cdDescriptor.get.apply(this);
             if (doc && doc.defaultView) {
-              overrideWindowOpen(doc.defaultView);
+              try {
+                if (doc.defaultView.location && (doc.defaultView.location.origin === window.location.origin || doc.defaultView.location.protocol === 'about:')) {
+                  overrideWindowOpen(doc.defaultView);
+                }
+              } catch (e) {}
             }
             return doc;
           },
@@ -2895,45 +2927,12 @@
       return hookedFn;
     }
 
-    // 1B. Neutralize YouTube inline anti-adblock detection scripts containing 'window,"fetch"' (uBlock Origin Standard)
-    try {
-      const handleScriptMutations = (mutations) => {
-        for (let i = 0; i < mutations.length; i++) {
-          const added = mutations[i].addedNodes;
-          for (let j = 0; j < added.length; j++) {
-            const node = added[j];
-            if (node.nodeName === 'SCRIPT' && node.textContent && node.textContent.includes('window,"fetch"')) {
-              node.textContent = '';
-            }
-          }
-        }
-      };
-      const scriptObserver = new MutationObserver(handleScriptMutations);
-      scriptObserver.observe(document.documentElement || document, {
-        childList: true,
-        subtree: true
-      });
-      document.addEventListener('DOMContentLoaded', () => {
-        scriptObserver.disconnect();
-      }, { once: true });
-    } catch (e) {}
-
-    // 1C. Intercept onSnackbarMessage in Map.prototype.has (uBlock Origin Standard)
-    // Neutralizes YouTube's "Bạn đang gặp sự cố gây gián đoạn?" snackbar prompt at the runtime level
-    try {
-      const origMapHas = Map.prototype.has;
-      const hookedMapHas = function (key) {
-        if (key === 'onSnackbarMessage') {
-          return false;
-        }
-        return origMapHas.apply(this, arguments);
-      };
-      protectNative(hookedMapHas, origMapHas, 'has');
-      Map.prototype.has = hookedMapHas;
-    } catch (e) {}
-
     // 2. GhostEngine Pure Native Ad Suppressor (No Prototype Pollution)
-    // Preserves native yt.ads structure so YouTube integrity checks never detect missing ad objects
+    try {
+      if (window.yt && window.yt.ads) {
+        window.yt.ads = undefined;
+      }
+    } catch (e) {}
 
     // 3. Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
@@ -2975,23 +2974,9 @@
       if (!val || typeof val !== 'object' || depth > 16) return val;
 
       if (Array.isArray(val)) {
-        for (let i = val.length - 1; i >= 0; i--) {
-          const item = val[i];
-          if (item && typeof item === 'object') {
-            // Strip feed ads, promoted video items, and shorts ad entries
-            if (item.adSlotRenderer || item.inFeedAdLayoutRenderer || item.promotedSparklesWebRenderer || item.promotedVideoRenderer || item.compactPromotedVideoRenderer) {
-              val.splice(i, 1);
-              adsRemoved++;
-              continue;
-            }
-            if (item.command && item.command.reelWatchEndpoint &&
-                (item.command.reelWatchEndpoint.adClientData ||
-                 (item.command.reelWatchEndpoint.adClientParams && item.command.reelWatchEndpoint.adClientParams.isAd))) {
-              val.splice(i, 1);
-              adsRemoved++;
-              continue;
-            }
-            recursiveDeepPrune(item, depth + 1);
+        for (let i = 0; i < val.length; i++) {
+          if (val[i] && typeof val[i] === 'object') {
+            recursiveDeepPrune(val[i], depth + 1);
           }
         }
         return val;
@@ -3002,50 +2987,14 @@
       // Auto-heal player error / detection warning in playabilityStatus
       if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
         const status = val.playabilityStatus.status;
-        let isAntiAdblock = false;
-        if (val.playabilityStatus.errorScreen) {
-          const errStr = JSON.stringify(val.playabilityStatus.errorScreen);
-          if (errStr.includes('3037019') || errStr.includes('support.google.com') || errStr.includes('WEB_PAGE_TYPE_UNKNOWN') || errStr.includes('282054944') || errStr.includes('enforcement') || errStr.includes('interruption') || errStr.includes('adblock') || errStr.includes('gián đoạn') || errStr.includes('sự cố')) {
-            isAntiAdblock = true;
-            delete val.playabilityStatus.errorScreen;
-            delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.subreason;
-          }
-        }
-        if (val.playabilityStatus.reason) {
-          const rStr = String(val.playabilityStatus.reason).toLowerCase();
-          if (rStr.includes('adblock') || rStr.includes('chặn quảng cáo') || rStr.includes('điều khoản') || rStr.includes('gián đoạn') || rStr.includes('sự cố')) {
-            isAntiAdblock = true;
-            delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.subreason;
-            delete val.playabilityStatus.errorScreen;
-          }
-        }
-        if (val.streamingData) {
-          if (isAntiAdblock || status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+        if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
+          if (val.streamingData) {
             val.playabilityStatus.status = 'OK';
             delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.subreason;
             delete val.playabilityStatus.errorScreen;
             delete val.playabilityStatus.messages;
           }
         }
-        if (isAntiAdblock && val.streamingData) {
-          val.playabilityStatus.status = 'OK';
-        }
-        if (val.playabilityStatus.messages && Array.isArray(val.playabilityStatus.messages)) {
-          val.playabilityStatus.messages = val.playabilityStatus.messages.filter(m => {
-            if (m && m.youThereRenderer) return false;
-            const str = JSON.stringify(m).toLowerCase();
-            return !str.includes('enforcement') && !str.includes('violate') && !str.includes('interruption') && !str.includes('gián đoạn') && !str.includes('sự cố') && !str.includes('3037019');
-          });
-          if (val.playabilityStatus.messages.length === 0) delete val.playabilityStatus.messages;
-        }
-      }
-
-      if (val.messages && Array.isArray(val.messages)) {
-        val.messages = val.messages.filter(m => !m.youThereRenderer);
-        if (val.messages.length === 0) delete val.messages;
       }
 
       // Strip ad placements, player ads, ad slots, and server-side dynamic ad configurations
@@ -3067,132 +3016,99 @@
       if ('no_ads' in val) { delete val.no_ads; adsRemoved++; }
       if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
       if ('adPlacementConfig' in val) delete val.adPlacementConfig;
-      const isLiveStream = (val.videoDetails && val.videoDetails.isLive) ||
-                           (val.streamingData && (val.streamingData.hlsManifestUrl || val.streamingData.dashManifestUrl));
-      if (!isLiveStream) {
-        if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
-        if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
-      }
-      if ('interstitial' in val) { delete val.interstitial; adsRemoved++; }
-      if ('instream' in val) { delete val.instream; adsRemoved++; }
-      if ('adSlotRenderer' in val) { delete val.adSlotRenderer; adsRemoved++; }
-      if ('inFeedAdLayoutRenderer' in val) { delete val.inFeedAdLayoutRenderer; adsRemoved++; }
-      if ('promotedSparklesWebRenderer' in val) { delete val.promotedSparklesWebRenderer; adsRemoved++; }
-      if ('promotedVideoRenderer' in val) { delete val.promotedVideoRenderer; adsRemoved++; }
-      if ('compactPromotedVideoRenderer' in val) { delete val.compactPromotedVideoRenderer; adsRemoved++; }
-      if ('adClientParams' in val) { delete val.adClientParams; adsRemoved++; }
-      if ('adClientData' in val) { delete val.adClientData; adsRemoved++; }
-
-      if (val.playerConfig && typeof val.playerConfig === 'object') {
-        if (val.playerConfig.audioConfig && val.playerConfig.audioConfig.muteOnStart) {
-          delete val.playerConfig.audioConfig.muteOnStart;
-        }
-        if (val.playerConfig.daiConfig) { delete val.playerConfig.daiConfig; adsRemoved++; }
-        if (val.playerConfig.ssapConfig) { delete val.playerConfig.ssapConfig; adsRemoved++; }
-        if (val.playerConfig.adConfig) { delete val.playerConfig.adConfig; adsRemoved++; }
-      }
-
-      if (val.playbackTracking && typeof val.playbackTracking === 'object') {
-        if (val.playbackTracking.ptrackingUrl) delete val.playbackTracking.ptrackingUrl;
-        if (val.playbackTracking.youtubeRemarketingUrl) delete val.playbackTracking.youtubeRemarketingUrl;
-        if (val.playbackTracking.googleRemarketingUrl) delete val.playbackTracking.googleRemarketingUrl;
-      }
-
-      // Clean anti-adblock enforcement dialogs & interruption prompts from payload
-      if (val.auxiliaryUi && typeof val.auxiliaryUi === 'object') {
-        const auxStr = JSON.stringify(val.auxiliaryUi).toLowerCase();
-        if (auxStr.includes('enforcement') || auxStr.includes('interruption') || auxStr.includes('gián đoạn') || auxStr.includes('sự cố') || auxStr.includes('adblock') || auxStr.includes('support.google.com') || auxStr.includes('3037019')) {
-          delete val.auxiliaryUi;
-        } else if (val.auxiliaryUi.messageRenderers) {
-          const mr = val.auxiliaryUi.messageRenderers;
-          for (const k of Object.keys(mr)) {
-            const str = JSON.stringify(mr[k]).toLowerCase();
-            if (str.includes('enforcement') || str.includes('interruption') || str.includes('gián đoạn') || str.includes('sự cố') || str.includes('adblock') || str.includes('support.google.com') || str.includes('3037019')) {
-              delete mr[k];
-            }
-          }
-          if (mr.enforcementMessageViewModel) delete mr.enforcementMessageViewModel;
-          if (mr.upsellDialogRenderer) delete mr.upsellDialogRenderer;
-          if (mr.mealbarPromoRenderer) delete mr.mealbarPromoRenderer;
-          if (mr.notificationActionRenderer) delete mr.notificationActionRenderer;
-          if (Object.keys(mr).length === 0) {
-            delete val.auxiliaryUi;
-          }
-        }
-      }
+      if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
+      if ('adSlotsPreroll' in val) { delete val.adSlotsPreroll; adsRemoved++; }
+      if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
 
       if (adsRemoved > 0) {
         reportAdDetected(adsRemoved);
       }
 
-      // Recurse into child properties and deserialize stringified playerResponse
-      const keys = Object.keys(val);
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (key === 'streamingData') continue; // Preserve stream formats, codecs & signatures
-        const child = val[key];
-        if (child && typeof child === 'object') {
-          recursiveDeepPrune(child, depth + 1);
-        } else if (typeof child === 'string' && (key === 'player_response' || key === 'playerResponse' || key === 'raw_player_response')) {
-          try {
-            const parsed = JSON.parse(child);
-            recursiveDeepPrune(parsed, depth + 1);
-            val[key] = JSON.stringify(parsed);
-          } catch (e) {}
+      for (const k in val) {
+        if (Object.prototype.hasOwnProperty.call(val, k)) {
+          if (k === 'streamingData') continue;
+          const child = val[k];
+          if (child && typeof child === 'object') {
+            recursiveDeepPrune(child, depth + 1);
+          }
         }
       }
       return val;
     }
 
-    // Alias for compatibility
-    function pruneAdData(obj) {
-      return recursiveDeepPrune(obj);
-    }
-
-    // 5. Pre-Render Interception: window.ytInitialPlayerResponse & window.ytInitialData
-    let _ytInitialPlayerResponse = window.ytInitialPlayerResponse;
-    if (_ytInitialPlayerResponse) {
-      recursiveDeepPrune(_ytInitialPlayerResponse);
-    }
+    // 4B. Early Hook on window.ytInitialPlayerResponse & ytInitialData
     try {
+      if (window.ytInitialPlayerResponse) {
+        recursiveDeepPrune(window.ytInitialPlayerResponse);
+        initialPlayerResponse = window.ytInitialPlayerResponse;
+      }
       Object.defineProperty(window, 'ytInitialPlayerResponse', {
         get() {
-          return _ytInitialPlayerResponse;
+          return initialPlayerResponse;
         },
         set(val) {
-          _ytInitialPlayerResponse = recursiveDeepPrune(val);
+          if (val && typeof val === 'object') {
+            recursiveDeepPrune(val);
+          }
+          initialPlayerResponse = val;
         },
         configurable: true,
         enumerable: true
       });
     } catch (e) {}
 
-    let _ytInitialData = window.ytInitialData;
-    if (_ytInitialData) {
-      recursiveDeepPrune(_ytInitialData);
-    }
     try {
+      if (window.ytInitialData) {
+        recursiveDeepPrune(window.ytInitialData);
+        initialData = window.ytInitialData;
+      }
       Object.defineProperty(window, 'ytInitialData', {
         get() {
-          return _ytInitialData;
+          return initialData;
         },
         set(val) {
-          _ytInitialData = recursiveDeepPrune(val);
+          if (val && typeof val === 'object') {
+            recursiveDeepPrune(val);
+          }
+          initialData = val;
         },
         configurable: true,
         enumerable: true
       });
     } catch (e) {}
 
-    // 5B. Universal JSON.parse & Response.prototype Hook (uBlock Origin json-prune Standard)
-    // Ensures adPlacements, playerAds, adSlots are stripped regardless of whether YouTube fetches via
-    // XHR, Fetch, inline <script> var ytInitialPlayerResponse = JSON.parse(...), or Service Worker cache!
+    // 4C. Early Hook on window.ytplayer
+    try {
+      if (window.ytplayer) {
+        if (window.ytplayer.config && window.ytplayer.config.args) {
+          recursiveDeepPrune(window.ytplayer.config.args);
+        }
+        ytplayer = window.ytplayer;
+      }
+      Object.defineProperty(window, 'ytplayer', {
+        get() {
+          return ytplayer;
+        },
+        set(val) {
+          if (val && typeof val === 'object' && val.config && val.config.args) {
+            recursiveDeepPrune(val.config.args);
+          }
+          ytplayer = val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+
+    // 4D. Universal JSON.parse Hook
     try {
       const origJSONParse = JSON.parse;
       const hookedJSONParse = function (text, reviver) {
         const result = origJSONParse.apply(this, arguments);
         if (result && typeof result === 'object') {
-          recursiveDeepPrune(result);
+          if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig') || text.includes('ssapConfig'))) {
+            recursiveDeepPrune(result);
+          }
         }
         return result;
       };
@@ -3200,42 +3116,23 @@
       JSON.parse = hookedJSONParse;
     } catch (e) {}
 
+    // 4E. Universal Response.prototype.json Hook
     try {
-      if (typeof Response !== 'undefined' && Response.prototype) {
-        if (Response.prototype.json) {
-          const origResponseJson = Response.prototype.json;
-          const hookedResponseJson = async function () {
-            const result = await origResponseJson.apply(this, arguments);
-            if (result && typeof result === 'object') {
-              recursiveDeepPrune(result);
-            }
-            return result;
-          };
-          protectNative(hookedResponseJson, origResponseJson, 'json');
-          Response.prototype.json = hookedResponseJson;
-        }
-
-        if (Response.prototype.text) {
-          const origResponseText = Response.prototype.text;
-          const hookedResponseText = async function () {
-            const text = await origResponseText.apply(this, arguments);
-            if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
-              try {
-                const parsed = JSON.parse(text);
-                recursiveDeepPrune(parsed);
-                return JSON.stringify(parsed);
-              } catch (e) {
-                return text;
-              }
-            }
-            return text;
-          };
-          protectNative(hookedResponseText, origResponseText, 'text');
-          Response.prototype.text = hookedResponseText;
-        }
+      if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
+        const origResponseJson = Response.prototype.json;
+        const hookedResponseJson = async function () {
+          const data = await origResponseJson.apply(this, arguments);
+          if (data && typeof data === 'object') {
+            recursiveDeepPrune(data);
+          }
+          return data;
+        };
+        protectNative(hookedResponseJson, origResponseJson, 'json');
+        Response.prototype.json = hookedResponseJson;
       }
     } catch (e) {}
 
+    // 4F. Universal XMLHttpRequest Hook
     try {
       if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
         const origXhrOpen = XMLHttpRequest.prototype.open;
@@ -3301,39 +3198,7 @@
       }
     } catch (e) {}
 
-    // 5C. Intercept window.ytplayer (Classic / Embedded Player config arguments)
-    let _ytplayer = window.ytplayer;
-    function sanitizeYtPlayer(yp) {
-      if (!yp || typeof yp !== 'object') return;
-      try {
-        if (yp.config && yp.config.args) {
-          const args = yp.config.args;
-          if (args.raw_player_response) recursiveDeepPrune(args.raw_player_response);
-          if (args.player_response && typeof args.player_response === 'string') {
-            try {
-              const parsed = JSON.parse(args.player_response);
-              recursiveDeepPrune(parsed);
-              args.player_response = JSON.stringify(parsed);
-            } catch (e) {}
-          }
-          if ('ad3_module' in args) args.ad3_module = null;
-        }
-      } catch (e) {}
-    }
-    if (_ytplayer) sanitizeYtPlayer(_ytplayer);
-    try {
-      Object.defineProperty(window, 'ytplayer', {
-        get() { return _ytplayer; },
-        set(val) {
-          _ytplayer = val;
-          sanitizeYtPlayer(_ytplayer);
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
-
-    // 5D. Direct In-Player (#movie_player) Protection & Sanitizer
+    // 5. YouTube Player Instance (#movie_player) Protection & Sanitizer
     function hookMoviePlayer(player) {
       if (!player || player._webshield_hooked) return;
       player._webshield_hooked = true;
@@ -3448,7 +3313,7 @@
             const origText = response.text.bind(response);
             response.text = async function () {
               const text = await origText();
-              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig') || text.includes('playabilityStatus') || text.includes('auxiliaryUi'))) {
+              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
                 try {
                   const data = JSON.parse(text);
                   recursiveDeepPrune(data);
@@ -3506,14 +3371,8 @@
         const style = document.createElement('style');
         style.id = 'webshield-yt-engine-css';
         style.textContent = `
-          #masthead-ad,
-          ytd-ad-slot-renderer,
-          ytd-in-feed-ad-layout-renderer,
-          ytd-banner-promo-renderer,
-          ytd-statement-banner-renderer,
-          ytd-mealbar-promo-renderer,
-          .ytd-carousel-ad-renderer,
-          #player-ads,
+          .video-ads,
+          .ytp-ad-module,
           .ytp-ad-overlay-container,
           .ytp-ad-overlay-slot,
           .ytp-ad-image-overlay,
@@ -3524,48 +3383,34 @@
           .ytp-ad-player-overlay-flyout-cta,
           .ytp-ad-endscreen-element,
           .ytp-ad-companion-slot,
+          .ytp-ad-progress,
+          .ytp-ad-progress-list,
           .ytp-ad-message-container,
-          ytd-action-companion-ad-renderer,
-          ytd-companion-ad-renderer,
-          ytd-display-ad-renderer,
+          #player-ads,
+          #panels:has(ytd-ads-engagement-panel-renderer),
+          ytd-ad-slot-renderer,
+          ytd-in-feed-ad-layout-renderer,
+          ytd-banner-promo-renderer,
+          ytd-statement-banner-renderer,
           ytd-promoted-sparkles-web-renderer,
           ytd-promoted-video-renderer,
-          ytd-search-pyv-renderer,
-          #inline-survey,
-          .ytd-player-legacy-desktop-watch-ads-renderer,
-          .ytp-suggested-action-badge[data-ad-preview="true"],
-          ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"],
-          ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
-          ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
-          ytd-compact-promoted-video-renderer,
-          ytd-compact-promoted-item-renderer,
-          ytd-promoted-sparkles-text-search-renderer,
-          ytd-brand-video-shelf-renderer,
-          ytd-primetime-promo-renderer,
-          ytd-merch-shelf-renderer,
-          ytd-ad-hover-text-button-renderer,
-          ytd-badge-supported-renderer:has(.badge-style-type-ad),
-          ytd-enforcement-message-view-model,
+          ytd-display-ad-renderer,
+          #items.ytd-ad-slot-renderer,
+          ytd-brand-video-singleton-renderer,
+          ytd-video-masthead-ad-v3-renderer,
           ytd-enforcement-message-renderer,
-          #error-screen,
-          #player-error-message-container,
-          .yt-playability-error-supported-renderers,
-          ytd-playability-error-supported-renderers,
-          yt-playability-error-supported-renderers,
-          yt-player-error-message-renderer,
-          .yt-player-error-message-renderer,
-          .ytp-error-content,
-          div.ytp-error:not(#movie_player):not(.html5-video-player),
-          snackbar-view-model:has(a[href*="support.google.com"]),
-          snackbar-view-model:has(a[href*="answer"]),
-          snackbar-view-model:has(#feedback),
+          ytd-enforcement-message-view-model,
+          snackbar-view-model,
           .snackbarViewModelEngagementBarWrapper,
-          .toast-button.style-scope.yt-notification-action-renderer,
-          #toast:has(> #text-container > yt-formatted-string#text.yt-notification-action-renderer),
-          .ytSnackbarContainerOpened:has(> .snackbarViewModelSwipeable > .snackbarViewModelEngagementBarWrapper),
-          #toast.tp-yt-paper-toast,
-          tp-yt-paper-toast#toast,
           tp-yt-paper-toast#toast:has(a[href*="3037019"]),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-view-model),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-renderer),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(#feedback.ytd-enforcement-message-view-model),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(yt-upsell-dialog-renderer),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-upsell-dialog-renderer),
+          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-single-option-survey-renderer),
+          ytd-mealbar-promo-renderer,
+          yt-mealbar-promo-renderer,
           tp-yt-paper-toast:has(a[href*="answer"]),
           tp-yt-paper-toast:has(a[href*="support.google.com"]),
           tp-yt-paper-toast:has(#feedback),
@@ -3574,19 +3419,12 @@
           ytd-notification-action-renderer:has(#feedback),
           tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
           tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
-          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
-          tp-yt-paper-dialog:has(ytd-enforcement-message-view-model) ~ tp-yt-iron-overlay-backdrop,
-          tp-yt-paper-dialog:has(ytd-enforcement-message-renderer) ~ tp-yt-iron-overlay-backdrop,
-          tp-yt-iron-overlay-backdrop:has(~ ytd-popup-container tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)) {
+          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model) {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
             height: 0 !important;
-          }
-
-          html {
-            overflow-y: scroll !important;
           }
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -3596,6 +3434,7 @@
     // 10. Pure Anti-Adblock Enforcement Modal Cleaner & Fallback Skip
     // ZERO interference with player controls, pause, volume, timeline, settings, or playback rate!
     let lastAdShowing = false;
+    let userManuallyPaused = false;
 
     function handleYouTubeAdState() {
       if (!isEnabled()) return;
@@ -3603,8 +3442,8 @@
         const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
         if (ytPlayer) hookMoviePlayer(ytPlayer);
 
-        const isAdShowing = (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting'))) ||
-          document.querySelector('#movie_player.ad-showing, #movie_player.ad-interrupting, .html5-video-player.ad-showing, .html5-video-player.ad-interrupting') !== null;
+        const isAdShowing = document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null ||
+          (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting')));
 
         if (isAdShowing) {
           lastAdShowing = true;
@@ -3634,41 +3473,39 @@
             try { ytPlayer.skipAd(); } catch (e) {}
           }
 
-          // Safe conclusion if ad reaches end
-          if (video && video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 1 && video.currentTime >= video.duration - 0.25) {
+          // Safe conclusion if ad reaches end or is stuck at end
+          if (video && video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) {
             try {
               if (video.paused) video.play().catch(() => {});
+              video.dispatchEvent(new Event('ended'));
             } catch (e) {}
           }
         } else if (lastAdShowing) {
           lastAdShowing = false;
-          // Unmute video after ad transition and ensure main video resumes smoothly
+          // Unmute video after ad transition and safely resume main video playback
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
           if (video) {
             if (video.muted) {
               try { video.muted = false; } catch (e) {}
             }
-            if (video.paused && !video.ended) {
-              try {
-                const p = video.play();
-                if (p && p.catch) p.catch(() => {});
-              } catch (e) {}
+            if (video.paused && !video.ended && !userManuallyPaused) {
               if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
                 try { ytPlayer.playVideo(); } catch (e) {}
+              } else {
+                try {
+                  const p = video.play();
+                  if (p && p.catch) p.catch(() => {});
+                } catch (e) {}
               }
             }
           }
         }
 
-        // Dismiss and remove anti-adblock enforcement dialogs & interruption toasts
-        let hadInterruption = false;
-
-        // A. Dialog-based enforcement modals
+        // Dismiss anti-adblock enforcement dialogs if any appear
         const enforcementModal = document.querySelector(
-          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, tp-yt-paper-dialog:has(ytd-enforcement-message-view-model), tp-yt-paper-dialog:has(ytd-enforcement-message-renderer)'
+          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model'
         );
         if (enforcementModal) {
-          hadInterruption = true;
           const dialog = enforcementModal.closest('tp-yt-paper-dialog');
           if (dialog) {
             try {
@@ -3679,158 +3516,12 @@
               if (dialog.backdropElement) {
                 dialog.backdropElement.opened = false;
                 dialog.backdropElement.style.setProperty('display', 'none', 'important');
-                dialog.backdropElement.remove();
               }
             } catch (e) {}
-            try { dialog.remove(); } catch (e) {}
-          }
-          try { enforcementModal.remove(); } catch (e) {}
-        }
-
-        // B. Interruption Toasts ("Bạn đang gặp sự cố gây gián đoạn?", "Experiencing interruptions?", help links)
-        const toastCandidates = document.querySelectorAll(
-          'tp-yt-paper-toast, ytd-notification-action-renderer, yt-notification-action-renderer, snackbar-view-model, #toast, .toast-button'
-        );
-        for (let i = 0; i < toastCandidates.length; i++) {
-          const toast = toastCandidates[i];
-          if (toast.closest('ytd-live-chat-frame, #chat, #chatframe, yt-live-chat-renderer')) continue;
-          const text = (toast.textContent || toast.innerText || '').toLowerCase();
-          const isInterruption = text.includes('sự cố') ||
-                                 text.includes('gián đoạn') ||
-                                 text.includes('interruption') ||
-                                 text.includes('tìm hiểu lý do') ||
-                                 text.includes('find out why') ||
-                                 text.includes('chặn quảng cáo') ||
-                                 text.includes('ad blocker') ||
-                                 toast.querySelector('a[href*="answer"], a[href*="support.google.com"], a[href*="3037019"]');
-          if (isInterruption) {
-            hadInterruption = true;
-            try {
-              toast.setAttribute('aria-hidden', 'true');
-              toast.removeAttribute('opened');
-              toast.style.setProperty('display', 'none', 'important');
-              toast.style.setProperty('visibility', 'hidden', 'important');
-              toast.style.setProperty('pointer-events', 'none', 'important');
-              toast.remove();
-            } catch (e) {}
-          }
-        }
-
-        // C. In-Player Anti-Adblock Fake Error Screen Watchdog (Code 282054944 / Anti-Adblock Enforcement)
-        const errorContainer = document.querySelector(
-          '#error-screen, ytd-playability-error-supported-renderers, yt-playability-error-supported-renderers, #player-error-message-container, .yt-player-error-message-renderer, yt-player-error-message-renderer, .ytp-error-content'
-        );
-        let hadErrorScreen = false;
-        if (errorContainer && errorContainer.id !== 'movie_player' && !errorContainer.classList.contains('html5-video-player')) {
-          const text = (errorContainer.textContent || errorContainer.innerText || '').toLowerCase();
-          // Target genuine anti-adblock playback blocks (code 282054944, prompt to disable adblock, or 3037019 link)
-          if (text.includes('282054944') || (text.includes('chặn quảng cáo') && text.includes('điều khoản')) || (text.includes('ad blocker') && text.includes('terms of service')) || errorContainer.querySelector('a[href*="3037019"]')) {
-            hadErrorScreen = true;
-            hadInterruption = true;
-            // CRITICAL: NEVER call .remove() on #error-screen! YouTube Polymer's updateErrorScreenLocation requires
-            // errorScreen to retain its parentElement in the DOM tree, otherwise it throws TypeError and crashes.
-            try {
-              errorContainer.style.setProperty('display', 'none', 'important');
-              errorContainer.style.setProperty('visibility', 'hidden', 'important');
-              errorContainer.style.setProperty('pointer-events', 'none', 'important');
-              errorContainer.style.setProperty('height', '0', 'important');
-            } catch (e) {}
-
-            if (ytPlayer && ytPlayer.classList.contains('ytp-error')) {
-              ytPlayer.classList.remove('ytp-error');
-            }
-
-            const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-            if (video) {
-              video.style.setProperty('display', 'block', 'important');
-              video.style.setProperty('visibility', 'visible', 'important');
-              video.style.setProperty('opacity', '1', 'important');
-            }
-            const chromeBottom = ytPlayer && ytPlayer.querySelector('.ytp-chrome-bottom');
-            if (chromeBottom) {
-              chromeBottom.style.setProperty('display', 'block', 'important');
-              chromeBottom.style.setProperty('visibility', 'visible', 'important');
-              chromeBottom.style.setProperty('opacity', '1', 'important');
-            }
-          }
-        }
-
-        // D. Auto-resume playback if YouTube paused video due to enforcement prompt, interruption, or error screen
-        if (hadInterruption) {
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video && video.paused && !video.ended) {
-            try {
-              const p = video.play();
-              if (p && p.catch) p.catch(() => {});
-            } catch (e) {}
-            if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-              try { ytPlayer.playVideo(); } catch (e) {}
-            }
-          }
-        }
-
-        // E. Continuous Autoplay Watchdog for Instant Playback without F12 (Supports timestamp & normal URLs)
-        if (!userManuallyPaused && (window.location.pathname.startsWith('/watch') || window.location.pathname.startsWith('/shorts') || window.location.pathname.startsWith('/live'))) {
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video && video.paused && !video.ended && (video.readyState >= 2 || (video.duration && !isNaN(video.duration)))) {
-            kickstartYouTubeAutoplay();
-          }
-        }
-
-        // --- YOUTUBE CONTINUOUS SCROLL GUARDIAN ---
-        // Restores document scroll if any anti-adblock dialog locked body/html overflow or left backdrops behind
-        if (!hasLegitYouTubeDialog()) {
-          if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
-            document.documentElement.style.overflow = '';
-            document.documentElement.classList.remove('overflow-hidden');
-          }
-          if (document.body && document.body.style.overflow === 'hidden') {
-            document.body.style.overflow = '';
-            document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
-          }
-
-          const openedBackdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop.opened, iron-overlay-backdrop.opened');
-          if (openedBackdrops.length > 0) {
-            openedBackdrops.forEach(bd => {
-              try {
-                bd.opened = false;
-                bd.style.setProperty('display', 'none', 'important');
-                bd.remove();
-              } catch (e) {}
-            });
           }
         }
       } catch (e) {}
     }
-
-    function hasLegitYouTubeDialog() {
-      const openDialogs = document.querySelectorAll('tp-yt-paper-dialog[opened], tp-yt-paper-dialog:not([style*="display: none"]), ytd-playlist-add-to-option-renderer, ytd-unified-share-panel-renderer');
-      for (let i = 0; i < openDialogs.length; i++) {
-        const d = openDialogs[i];
-        if (d.querySelector && d.querySelector('ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model')) {
-          continue;
-        }
-        if (d.offsetWidth > 0 || d.offsetHeight > 0 || d.hasAttribute('opened')) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 12. YouTube Native Page Scroll Guardian
-    // Defangs Polymer's iron-scroll-manager from intercepting and canceling native wheel/touch scroll
-    // when anti-adblock dialogs or overlays are dismissed/hidden.
-    window.addEventListener('wheel', (e) => {
-      if (!hasLegitYouTubeDialog()) {
-        e.preventDefault = () => {};
-      }
-    }, { capture: true, passive: false });
-
-    window.addEventListener('touchmove', (e) => {
-      if (!hasLegitYouTubeDialog()) {
-        e.preventDefault = () => {};
-      }
-    }, { capture: true, passive: false });
 
     try {
       const observer = new MutationObserver(handleYouTubeAdState);
@@ -3843,87 +3534,103 @@
 
     setInterval(handleYouTubeAdState, 150);
 
-    // 11. Smart Autoplay Kickstarter (Solves Chromium / Cốc Cốc Autoplay Silence & Focus Loss)
-    // Automatically kicks off video playback when opening videos/playlists without requiring F12 or extra clicks
-    let userManuallyPaused = false;
+    // 11. Gentle Autoplay & Load Completion Resumer
+    // Resolves the issue where YouTube automatically pauses when video buffer finishes loading (currentTime < 0.5s)
+    // Track genuine user manual pause actions (Clicks on play button / video surface or Space/K keys)
     document.addEventListener('click', (e) => {
-      if (e.target && e.target.closest && e.target.closest('.ytp-play-button')) {
-        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
-        if (video && video.paused) {
-          userManuallyPaused = false;
-        } else {
-          userManuallyPaused = true;
-        }
-      }
-    }, true);
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' || e.code === 'KeyK') {
-        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
-        if (video && video.paused) {
-          userManuallyPaused = false;
-        } else {
-          userManuallyPaused = true;
-        }
-      }
-    }, true);
-
-    function kickstartYouTubeAutoplay() {
-      if (!isEnabled() || userManuallyPaused) return;
-      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts') && !window.location.pathname.startsWith('/live')) return;
-      
+      if (!e.isTrusted) return;
       const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
       if (!video) return;
 
-      // Kickstart if the video is paused and not ended during the initial loading window
-      if (video.paused && !video.ended && (video.readyState >= 1 || (video.duration && !isNaN(video.duration) && video.duration > 0))) {
+      if (e.target && e.target.closest && e.target.closest('.ytp-play-button, .html5-video-player, video')) {
+        // Ignore clicks on control panels (volume slider, settings menu, subtitles, fullscreen, etc.)
+        if (e.target.closest('.ytp-volume-panel, .ytp-volume-control, .ytp-settings-menu, .ytp-settings-button, .ytp-size-button, .ytp-subtitles-button, .ytp-fullscreen-button, .ytp-time-display')) {
+          return;
+        }
+        if (!video.paused) {
+          userManuallyPaused = true;
+        } else {
+          userManuallyPaused = false;
+        }
+      }
+    }, true);
+
+    window.addEventListener('keydown', (e) => {
+      if (!e.isTrusted) return;
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+
+      if (e.code === 'Space' || e.code === 'KeyK') {
+        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+        if (video) {
+          if (!video.paused) {
+            userManuallyPaused = true;
+          } else {
+            userManuallyPaused = false;
+          }
+        }
+      }
+    }, true);
+
+    function resumeIfAutoPaused() {
+      if (userManuallyPaused || !isEnabled()) return;
+      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts')) return;
+
+      const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+      const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+      if (!video) return;
+
+      // Only auto-resume if the video is paused at the beginning (< 0.5s) and not ended
+      if (video.paused && !video.ended && video.currentTime < 0.5) {
         if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
+        } else {
+          try {
+            const p = video.play();
+            if (p && p.catch) {
+              p.catch((err) => {
+                if (err && err.name === 'NotAllowedError') {
+                  video.muted = true;
+                  video.play().catch(() => {});
+                  const unmuteOnce = () => {
+                    video.muted = false;
+                    window.removeEventListener('click', unmuteOnce, true);
+                    window.removeEventListener('keydown', unmuteOnce, true);
+                  };
+                  window.addEventListener('click', unmuteOnce, true);
+                  window.addEventListener('keydown', unmuteOnce, true);
+                }
+              });
+            }
+          } catch (e) {}
         }
-        try {
-          const playPromise = video.play();
-          if (playPromise && playPromise.catch) {
-            playPromise.catch((err) => {
-              // If browser strictly blocks unmuted autoplay without prior gesture (Chromium Autoplay Policy):
-              // Temporarily mute to start instant playback, then automatically restore volume on first interaction!
-              if (err && err.name === 'NotAllowedError') {
-                video.muted = true;
-                video.play().catch(() => {});
-                const unmuteOnce = () => {
-                  video.muted = false;
-                  window.removeEventListener('click', unmuteOnce, true);
-                  window.removeEventListener('keydown', unmuteOnce, true);
-                };
-                window.addEventListener('click', unmuteOnce, true);
-                window.addEventListener('keydown', unmuteOnce, true);
-              }
-            });
-          }
-        } catch (e) {}
       }
     }
 
-    document.addEventListener('loadeddata', () => {
-      if (!userManuallyPaused) kickstartYouTubeAutoplay();
-    }, true);
+    // When video finishes loading buffer data:
     document.addEventListener('canplay', () => {
-      if (!userManuallyPaused) kickstartYouTubeAutoplay();
+      setTimeout(resumeIfAutoPaused, 100);
     }, true);
 
+    // If YouTube script artificially pauses video right at start:
+    document.addEventListener('pause', (e) => {
+      if (e.target && e.target.tagName === 'VIDEO') {
+        const vid = e.target;
+        if (!userManuallyPaused && vid.currentTime < 0.5 && !vid.ended) {
+          setTimeout(resumeIfAutoPaused, 150);
+        }
+      }
+    }, true);
+
+    // Reset state and resume on SPA navigation
     window.addEventListener('yt-navigate-finish', () => {
       userManuallyPaused = false;
-      setTimeout(kickstartYouTubeAutoplay, 300);
-      setTimeout(kickstartYouTubeAutoplay, 800);
-      setTimeout(kickstartYouTubeAutoplay, 1500);
-      setTimeout(kickstartYouTubeAutoplay, 2500);
+      setTimeout(resumeIfAutoPaused, 300);
+      setTimeout(resumeIfAutoPaused, 700);
     });
-
-    let kickstartCount = 0;
-    const kickstartInterval = setInterval(() => {
-      kickstartYouTubeAutoplay();
-      if (++kickstartCount > 8) clearInterval(kickstartInterval);
-    }, 350);
   }
+
 
   // Bulletproof override of Location.prototype navigation to prevent scripted location changes & forced reloads
   if (!isYouTube) {

@@ -161,9 +161,9 @@ function ensureMainWorldLoaded() {
     if (!chrome || !chrome.runtime || !chrome.runtime.id) return;
     if (window.self !== window.top) return; // NEVER run in iframes!
     const host = currentHost || ((window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '');
-    const isYt = isYtDomain || host.includes('youtube.com') || host.includes('youtu.be');
+    const isYt = isYtDomain || isYtSubFrame || host.includes('youtube.com') || host.includes('youtu.be') || host.includes('googlevideo.com');
     // YouTube strictly forbids chrome-extension:// script tags via CSP. inject.js is ALREADY running via manifest.json (world: "MAIN").
-    if (isYt || isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
+    if (isYt || !host || isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
     if (document.documentElement && document.documentElement.getAttribute('data-webshield-main') === '1') {
       return; // Already injected and running in MAIN world!
     }
@@ -650,15 +650,6 @@ function injectYouTubeAdBlockCSS() {
     /* 2. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!) */
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
-    #error-screen,
-    #player-error-message-container,
-    .yt-playability-error-supported-renderers,
-    ytd-playability-error-supported-renderers,
-    yt-playability-error-supported-renderers,
-    yt-player-error-message-renderer,
-    .yt-player-error-message-renderer,
-    .ytp-error-content,
-    div.ytp-error:not(#movie_player):not(.html5-video-player),
     snackbar-view-model:has(a[href*="support.google.com"]),
     snackbar-view-model:has(a[href*="answer"]),
     snackbar-view-model:has(#feedback),
@@ -666,8 +657,6 @@ function injectYouTubeAdBlockCSS() {
     .toast-button.style-scope.yt-notification-action-renderer,
     #toast:has(> #text-container > yt-formatted-string#text.yt-notification-action-renderer),
     .ytSnackbarContainerOpened:has(> .snackbarViewModelSwipeable > .snackbarViewModelEngagementBarWrapper),
-    #toast.tp-yt-paper-toast,
-    tp-yt-paper-toast#toast,
     tp-yt-paper-toast#toast:has(a[href*="3037019"]),
     tp-yt-paper-toast:has(a[href*="answer"]),
     tp-yt-paper-toast:has(a[href*="support.google.com"]),
