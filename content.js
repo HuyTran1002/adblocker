@@ -642,10 +642,16 @@ function injectYouTubeAdBlockCSS() {
   ytStyleElement = document.createElement('style');
   ytStyleElement.setAttribute('type', 'text/css');
   ytStyleElement.textContent = `
-    /* 1. Hide anti-adblock enforcement dialogs & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!) */
+    /* 1. Ensure YouTube scrolling is NEVER locked by anti-adblock dialogs */
+    html {
+      overflow-y: scroll !important;
+    }
+
+    /* 2. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!) */
     ytd-enforcement-message-renderer,
     ytd-enforcement-message-view-model,
-    snackbar-view-model,
+    snackbar-view-model:has(a[href*="support.google.com"]),
+    snackbar-view-model:has(a[href*="answer"]),
     .snackbarViewModelEngagementBarWrapper,
     tp-yt-paper-toast#toast:has(a[href*="3037019"]),
     tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-view-model),
@@ -656,6 +662,9 @@ function injectYouTubeAdBlockCSS() {
     tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(yt-upsell-dialog-renderer),
     tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-upsell-dialog-renderer),
     tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-single-option-survey-renderer),
+    tp-yt-paper-dialog:has(ytd-enforcement-message-view-model) ~ tp-yt-iron-overlay-backdrop,
+    tp-yt-paper-dialog:has(ytd-enforcement-message-renderer) ~ tp-yt-iron-overlay-backdrop,
+    tp-yt-iron-overlay-backdrop:has(~ ytd-popup-container tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)),
     ytd-mealbar-promo-renderer,
     yt-mealbar-promo-renderer,
     tp-yt-paper-toast:has(a[href*="answer"]),

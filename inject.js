@@ -3434,19 +3434,27 @@
           ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
           ytd-enforcement-message-view-model,
           ytd-enforcement-message-renderer,
-          snackbar-view-model,
+          snackbar-view-model:has(a[href*="support.google.com"]),
+          snackbar-view-model:has(a[href*="answer"]),
           .snackbarViewModelEngagementBarWrapper,
           tp-yt-paper-toast#toast:has(a[href*="3037019"]),
           tp-yt-paper-toast:has(a[href*="answer"]),
           tp-yt-paper-toast:has(a[href*="support.google.com"]),
           tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
           tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
-          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model) {
+          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
+          tp-yt-paper-dialog:has(ytd-enforcement-message-view-model) ~ tp-yt-iron-overlay-backdrop,
+          tp-yt-paper-dialog:has(ytd-enforcement-message-renderer) ~ tp-yt-iron-overlay-backdrop,
+          tp-yt-iron-overlay-backdrop:has(~ ytd-popup-container tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)) {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
             height: 0 !important;
+          }
+
+          html {
+            overflow-y: scroll !important;
           }
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -3514,16 +3522,16 @@
                 const p = video.play();
                 if (p && p.catch) p.catch(() => {});
               } catch (e) {}
+              if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+                try { ytPlayer.playVideo(); } catch (e) {}
+              }
             }
-          }
-          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-            try { ytPlayer.playVideo(); } catch (e) {}
           }
         }
 
         // Dismiss and remove anti-adblock enforcement dialogs & interruption toasts if any appear
         const enforcementModal = document.querySelector(
-          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, ytd-notification-action-renderer:has(a[href*="support.google.com"]), ytd-notification-action-renderer:has(a[href*="answer"]), snackbar-view-model'
+          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model, ytd-notification-action-renderer:has(a[href*="support.google.com"]), ytd-notification-action-renderer:has(a[href*="answer"]), snackbar-view-model:has(a[href*="support.google.com"])'
         );
         if (enforcementModal) {
           const dialog = enforcementModal.closest('tp-yt-paper-dialog');
@@ -3536,25 +3544,80 @@
               if (dialog.backdropElement) {
                 dialog.backdropElement.opened = false;
                 dialog.backdropElement.style.setProperty('display', 'none', 'important');
+                dialog.backdropElement.remove();
               }
             } catch (e) {}
+            try { dialog.remove(); } catch (e) {}
           }
           try { enforcementModal.remove(); } catch (e) {}
 
-          // Auto-resume playback if YouTube paused video due to enforcement prompt
+          // Auto-resume playback ONLY if video is currently paused
           const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
           if (video && video.paused && !video.ended) {
             try {
               const p = video.play();
               if (p && p.catch) p.catch(() => {});
             } catch (e) {}
+            if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+              try { ytPlayer.playVideo(); } catch (e) {}
+            }
           }
-          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-            try { ytPlayer.playVideo(); } catch (e) {}
+        }
+
+        // --- YOUTUBE CONTINUOUS SCROLL GUARDIAN ---
+        // Restores document scroll if any anti-adblock dialog locked body/html overflow or left backdrops behind
+        if (!hasLegitYouTubeDialog()) {
+          if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
+            document.documentElement.style.overflow = '';
+            document.documentElement.classList.remove('overflow-hidden');
+          }
+          if (document.body && document.body.style.overflow === 'hidden') {
+            document.body.style.overflow = '';
+            document.body.classList.remove('modal-open', 'no-scroll', 'overflow-hidden');
+          }
+
+          const openedBackdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop.opened, iron-overlay-backdrop.opened');
+          if (openedBackdrops.length > 0) {
+            openedBackdrops.forEach(bd => {
+              try {
+                bd.opened = false;
+                bd.style.setProperty('display', 'none', 'important');
+                bd.remove();
+              } catch (e) {}
+            });
           }
         }
       } catch (e) {}
     }
+
+    function hasLegitYouTubeDialog() {
+      const openDialogs = document.querySelectorAll('tp-yt-paper-dialog[opened], tp-yt-paper-dialog:not([style*="display: none"]), ytd-playlist-add-to-option-renderer, ytd-unified-share-panel-renderer');
+      for (let i = 0; i < openDialogs.length; i++) {
+        const d = openDialogs[i];
+        if (d.querySelector && d.querySelector('ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model')) {
+          continue;
+        }
+        if (d.offsetWidth > 0 || d.offsetHeight > 0 || d.hasAttribute('opened')) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // 12. YouTube Native Page Scroll Guardian
+    // Defangs Polymer's iron-scroll-manager from intercepting and canceling native wheel/touch scroll
+    // when anti-adblock dialogs or overlays are dismissed/hidden.
+    window.addEventListener('wheel', (e) => {
+      if (!hasLegitYouTubeDialog()) {
+        e.preventDefault = () => {};
+      }
+    }, { capture: true, passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!hasLegitYouTubeDialog()) {
+        e.preventDefault = () => {};
+      }
+    }, { capture: true, passive: false });
 
     try {
       const observer = new MutationObserver(handleYouTubeAdState);
