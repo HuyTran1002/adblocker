@@ -729,6 +729,14 @@ function injectYouTubeAdBlockCSS() {
     ytd-display-ad-renderer,
     #items.ytd-ad-slot-renderer,
     ytd-brand-video-singleton-renderer,
+    ytd-compact-promoted-video-renderer,
+    ytd-compact-promoted-item-renderer,
+    ytd-promoted-sparkles-text-search-renderer,
+    ytd-brand-video-shelf-renderer,
+    ytd-primetime-promo-renderer,
+    ytd-merch-shelf-renderer,
+    ytd-ad-hover-text-button-renderer,
+    ytd-badge-supported-renderer:has(.badge-style-type-ad),
     ytd-video-masthead-ad-v3-renderer {
       display: none !important;
       height: 0 !important;

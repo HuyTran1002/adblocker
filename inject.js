@@ -2942,9 +2942,23 @@
       if (!val || typeof val !== 'object' || depth > 16) return val;
 
       if (Array.isArray(val)) {
-        for (let i = 0; i < val.length; i++) {
-          if (val[i] && typeof val[i] === 'object') {
-            recursiveDeepPrune(val[i], depth + 1);
+        for (let i = val.length - 1; i >= 0; i--) {
+          const item = val[i];
+          if (item && typeof item === 'object') {
+            // Strip feed ads, promoted video items, and shorts ad entries
+            if (item.adSlotRenderer || item.inFeedAdLayoutRenderer || item.promotedSparklesWebRenderer || item.promotedVideoRenderer || item.compactPromotedVideoRenderer) {
+              val.splice(i, 1);
+              adsRemoved++;
+              continue;
+            }
+            if (item.command && item.command.reelWatchEndpoint &&
+                (item.command.reelWatchEndpoint.adClientData ||
+                 (item.command.reelWatchEndpoint.adClientParams && item.command.reelWatchEndpoint.adClientParams.isAd))) {
+              val.splice(i, 1);
+              adsRemoved++;
+              continue;
+            }
+            recursiveDeepPrune(item, depth + 1);
           }
         }
         return val;
@@ -2996,6 +3010,13 @@
       if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
       if ('interstitial' in val) { delete val.interstitial; adsRemoved++; }
       if ('instream' in val) { delete val.instream; adsRemoved++; }
+      if ('adSlotRenderer' in val) { delete val.adSlotRenderer; adsRemoved++; }
+      if ('inFeedAdLayoutRenderer' in val) { delete val.inFeedAdLayoutRenderer; adsRemoved++; }
+      if ('promotedSparklesWebRenderer' in val) { delete val.promotedSparklesWebRenderer; adsRemoved++; }
+      if ('promotedVideoRenderer' in val) { delete val.promotedVideoRenderer; adsRemoved++; }
+      if ('compactPromotedVideoRenderer' in val) { delete val.compactPromotedVideoRenderer; adsRemoved++; }
+      if ('adClientParams' in val) { delete val.adClientParams; adsRemoved++; }
+      if ('adClientData' in val) { delete val.adClientData; adsRemoved++; }
 
       if (val.playerConfig && typeof val.playerConfig === 'object') {
         if (val.playerConfig.daiConfig) { delete val.playerConfig.daiConfig; adsRemoved++; }
@@ -3447,6 +3468,14 @@
           ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"],
           ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
           ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
+          ytd-compact-promoted-video-renderer,
+          ytd-compact-promoted-item-renderer,
+          ytd-promoted-sparkles-text-search-renderer,
+          ytd-brand-video-shelf-renderer,
+          ytd-primetime-promo-renderer,
+          ytd-merch-shelf-renderer,
+          ytd-ad-hover-text-button-renderer,
+          ytd-badge-supported-renderer:has(.badge-style-type-ad),
           ytd-enforcement-message-view-model,
           ytd-enforcement-message-renderer,
           #error-screen,
