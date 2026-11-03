@@ -8,11 +8,11 @@ const isYtSubFrame = (function() {
     if (typeof window === 'undefined' || window.self === window.top) return false;
     if (isYtDomain) return true;
     const ref = (typeof document !== 'undefined' && document.referrer) ? document.referrer.toLowerCase() : '';
-    if (ref.includes('youtube.com') || ref.includes('youtu.be')) return true;
+    if (ref.includes('youtube.com') || ref.includes('youtu.be') || ref.includes('googlevideo.com')) return true;
     if (window.location && window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
       for (let i = 0; i < window.location.ancestorOrigins.length; i++) {
         const orig = String(window.location.ancestorOrigins[i] || '').toLowerCase();
-        if (orig.includes('youtube.com') || orig.includes('youtu.be')) return true;
+        if (orig.includes('youtube.com') || orig.includes('youtu.be') || orig.includes('googlevideo.com')) return true;
       }
     }
   } catch (e) {}
@@ -174,8 +174,15 @@ function ensureMainWorldLoaded() {
       }
       return;
     }
+    let scriptUrl = '';
+    try {
+      scriptUrl = chrome.runtime.getURL('inject.js');
+    } catch (e) {
+      return;
+    }
+    if (!scriptUrl || scriptUrl.includes('invalid')) return;
     const s = document.createElement('script');
-    s.src = chrome.runtime.getURL('inject.js');
+    s.src = scriptUrl;
     s.async = false;
     try {
       root.appendChild(s);

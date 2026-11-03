@@ -15,12 +15,6 @@
           if (orig.includes('youtube.com') || orig.includes('youtu.be') || orig.includes('googlevideo.com')) return;
         }
       }
-      try {
-        if (window.top && window.top.location && window.top.location.hostname) {
-          const topH = window.top.location.hostname.toLowerCase();
-          if (topH.includes('youtube.com') || topH.includes('youtu.be')) return;
-        }
-      } catch (e) {}
     }
   } catch (e) {}
 
@@ -2569,12 +2563,10 @@
   function overrideWindowOpen(win) {
     if (!win) return;
     try {
-      // Cross-origin check: never access properties of cross-origin windows to prevent
+      // Cross-origin check: never access Location properties of cross-origin windows to prevent
       // "Unsafe attempt to load URL ... Domains, protocols and ports must match"
       try {
-        if (win.location && win.location.origin && win.location.origin !== window.location.origin && win.location.protocol !== 'about:') {
-          return;
-        }
+        if (!win.document) return;
       } catch (crossErr) {
         return; // Cross-origin access threw SecurityError
       }
@@ -2604,19 +2596,9 @@
   }
 
   if (!isYouTube) {
-    // Override top-level window, self, top, parent, globalThis, and Window.prototype
+    // Override current window, self, globalThis, and Window.prototype
     overrideWindowOpen(window);
     overrideWindowOpen(window.self);
-    try {
-      if (window.top && window.top !== window && window.top.location && window.top.location.origin === window.location.origin) {
-        overrideWindowOpen(window.top);
-      }
-    } catch (e) {}
-    try {
-      if (window.parent && window.parent !== window && window.parent.location && window.parent.location.origin === window.location.origin) {
-        overrideWindowOpen(window.parent);
-      }
-    } catch (e) {}
     if (typeof globalThis !== 'undefined') overrideWindowOpen(globalThis);
     if (typeof Window !== 'undefined' && Window.prototype) overrideWindowOpen(Window.prototype);
 
@@ -2700,7 +2682,7 @@
             const win = cwDescriptor.get.apply(this);
             if (win) {
               try {
-                if (win.location && (win.location.origin === window.location.origin || win.location.protocol === 'about:')) {
+                if (win.document) {
                   overrideWindowOpen(win);
                 }
               } catch (e) {}
@@ -2718,7 +2700,7 @@
             const doc = cdDescriptor.get.apply(this);
             if (doc && doc.defaultView) {
               try {
-                if (doc.defaultView.location && (doc.defaultView.location.origin === window.location.origin || doc.defaultView.location.protocol === 'about:')) {
+                if (doc.defaultView.document) {
                   overrideWindowOpen(doc.defaultView);
                 }
               } catch (e) {}
@@ -3135,21 +3117,24 @@
     // 4F. Universal XMLHttpRequest Hook
     try {
       if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
+        const xhrUrls = new WeakMap();
         const origXhrOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function (method, url, ...rest) {
           try {
-            this._webshieldUrl = typeof url === 'string' ? url : ((url && (url.href || url.url)) || '');
+            const urlStr = typeof url === 'string' ? url : ((url && (url.href || url.url)) || '');
+            xhrUrls.set(this, urlStr);
           } catch (e) {}
           return origXhrOpen.apply(this, [method, url, ...rest]);
         };
         protectNative(XMLHttpRequest.prototype.open, origXhrOpen, 'open');
 
         const isPlayerXhr = (xhr) => {
-          return xhr._webshieldUrl && (
-            xhr._webshieldUrl.includes('/youtubei/v1/player') ||
-            xhr._webshieldUrl.includes('/youtubei/v1/next') ||
-            xhr._webshieldUrl.includes('/youtubei/v1/browse') ||
-            xhr._webshieldUrl.includes('/youtubei/v1/reel/')
+          const urlStr = xhrUrls.get(xhr) || '';
+          return urlStr && (
+            urlStr.includes('/youtubei/v1/player') ||
+            urlStr.includes('/youtubei/v1/next') ||
+            urlStr.includes('/youtubei/v1/browse') ||
+            urlStr.includes('/youtubei/v1/reel/')
           );
         };
 
@@ -3199,9 +3184,10 @@
     } catch (e) {}
 
     // 5. YouTube Player Instance (#movie_player) Protection & Sanitizer
+    const hookedPlayers = new WeakSet();
     function hookMoviePlayer(player) {
-      if (!player || player._webshield_hooked) return;
-      player._webshield_hooked = true;
+      if (!player || hookedPlayers.has(player)) return;
+      hookedPlayers.add(player);
       try {
         if (typeof player.getPlayerResponse === 'function') {
           const origGetPR = player.getPlayerResponse.bind(player);
@@ -3220,62 +3206,8 @@
     const existingPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
     if (existingPlayer) hookMoviePlayer(existingPlayer);
 
-    // 6. Native Ytcfg Preserver (Zero tampering with EXPERIMENT_FLAGS to prevent BotGuard checksum mismatch)
-    function sanitizeYtcfg(cfg) {
-      // Intentionally leave EXPERIMENT_FLAGS 100% native.
-    }
-
-    function hookYtcfg(ytcfgObj) {
-      if (!ytcfgObj || ytcfgObj._webshield_hooked) return;
-      try {
-        ytcfgObj._webshield_hooked = true;
-        const origSet = ytcfgObj.set;
-        if (typeof origSet === 'function') {
-          ytcfgObj.set = function (...args) {
-            if (args[0] && typeof args[0] === 'object') {
-              sanitizeYtcfg(args[0]);
-            } else if (typeof args[0] === 'string' && args[0] === 'EXPERIMENT_FLAGS' && args[1] && typeof args[1] === 'object') {
-              sanitizeYtcfg({ EXPERIMENT_FLAGS: args[1] });
-            }
-            return origSet.apply(this, args);
-          };
-          protectNative(ytcfgObj.set, origSet, 'set');
-        }
-        const origGet = ytcfgObj.get;
-        if (typeof origGet === 'function') {
-          ytcfgObj.get = function (key) {
-            const val = origGet.apply(this, arguments);
-            if (key === 'EXPERIMENT_FLAGS' && val && typeof val === 'object') {
-              sanitizeYtcfg({ EXPERIMENT_FLAGS: val });
-            }
-            return val;
-          };
-          protectNative(ytcfgObj.get, origGet, 'get');
-        }
-        if (typeof ytcfgObj.get === 'function') {
-          const currentExp = ytcfgObj.get('EXPERIMENT_FLAGS');
-          if (currentExp) sanitizeYtcfg({ EXPERIMENT_FLAGS: currentExp });
-        }
-      } catch (e) {}
-    }
-
-    if (window.ytcfg) {
-      hookYtcfg(window.ytcfg);
-    }
-    let _ytcfg = window.ytcfg;
-    try {
-      Object.defineProperty(window, 'ytcfg', {
-        get() {
-          return _ytcfg;
-        },
-        set(val) {
-          _ytcfg = val;
-          hookYtcfg(_ytcfg);
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
+    // 6. Native Ytcfg Preserver (Leaves window.ytcfg 100% native without hooks to ensure zero BotGuard detection)
+    // No-op: window.ytcfg and EXPERIMENT_FLAGS are intentionally left completely untouched.
 
     // 7. Targeted Fetch Interceptor for SPA video player data & Pure Ad Telemetry Spoofing
     try {
@@ -3371,8 +3303,9 @@
         const style = document.createElement('style');
         style.id = 'webshield-yt-engine-css';
         style.textContent = `
-          .video-ads,
-          .ytp-ad-module,
+          .ytp-ad-module {
+            pointer-events: none !important;
+          }
           .ytp-ad-overlay-container,
           .ytp-ad-overlay-slot,
           .ytp-ad-image-overlay,
@@ -3519,6 +3452,18 @@
               }
             } catch (e) {}
           }
+          // Resume video playback immediately if YouTube paused it due to enforcement
+          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
+          if (video && video.paused && !video.ended && !userManuallyPaused) {
+            if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+              try { ytPlayer.playVideo(); } catch (e) {}
+            } else {
+              try {
+                const p = video.play();
+                if (p && p.catch) p.catch(() => {});
+              } catch (e) {}
+            }
+          }
         }
       } catch (e) {}
     }
@@ -3581,8 +3526,8 @@
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
       if (!video) return;
 
-      // Only auto-resume if the video is paused at the beginning (< 0.5s) and not ended
-      if (video.paused && !video.ended && video.currentTime < 0.5) {
+      // Only auto-resume if the video is paused at the beginning (< 1.0s) or during an ad interruption, and not ended
+      if (video.paused && !video.ended && (video.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null)) {
         if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
           try { ytPlayer.playVideo(); } catch (e) {}
         } else {
@@ -3613,12 +3558,14 @@
       setTimeout(resumeIfAutoPaused, 100);
     }, true);
 
-    // If YouTube script artificially pauses video right at start:
+    // If YouTube script artificially pauses video right at start or during ad interruptions:
     document.addEventListener('pause', (e) => {
       if (e.target && e.target.tagName === 'VIDEO') {
         const vid = e.target;
-        if (!userManuallyPaused && vid.currentTime < 0.5 && !vid.ended) {
-          setTimeout(resumeIfAutoPaused, 150);
+        if (!userManuallyPaused && !vid.ended) {
+          if (vid.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
+            setTimeout(resumeIfAutoPaused, 150);
+          }
         }
       }
     }, true);
