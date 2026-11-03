@@ -3212,9 +3212,15 @@
     // 7. Targeted Fetch Interceptor for SPA video player data & Pure Ad Telemetry Spoofing
     try {
       const originalFetch = window.fetch;
-      const hookedFetch = async function (...args) {
+      const hookedFetch = function (...args) {
         const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || args[0].href || '')) : '';
         const urlStr = typeof url === 'string' ? url : '';
+
+        // Fast path: High-throughput video media stream (videoplayback / googlevideo.com)
+        // Hand off directly to native fetch without async tick or wrapper overhead!
+        if (urlStr.includes('googlevideo.com') || urlStr.includes('/videoplayback')) {
+          return originalFetch.apply(this, args);
+        }
 
         // A. Spoof pure ad tracking telemetry pings so YouTube never penalizes with error 204 or delay
         if (urlStr.includes('/api/stats/ads') ||
@@ -3222,47 +3228,46 @@
             urlStr.includes('doubleclick.net') ||
             urlStr.includes('/ptracking') ||
             urlStr.includes('/get_midroll_info')) {
-          return new Response(JSON.stringify({ status: 'ok' }), {
+          return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), {
             status: 200,
             statusText: 'OK',
             headers: { 'Content-Type': 'application/json' }
-          });
+          }));
         }
 
         // B. Intercept SPA video player & navigation data (/youtubei/v1/player, /youtubei/v1/next, /youtubei/v1/browse, /youtubei/v1/reel/)
         // Safely wrap response methods on the native Response instance to preserve HTTP compression (gzip/br) and stream integrity!
         if (urlStr.includes('/youtubei/v1/player') || urlStr.includes('/youtubei/v1/next') || urlStr.includes('/youtubei/v1/browse') || urlStr.includes('/youtubei/v1/reel/')) {
-          const response = await originalFetch.apply(this, args);
-          try {
-            const origJson = response.json.bind(response);
-            response.json = async function () {
-              const data = await origJson();
-              if (data && typeof data === 'object') {
-                recursiveDeepPrune(data);
-              }
-              return data;
-            };
-            const origText = response.text.bind(response);
-            response.text = async function () {
-              const text = await origText();
-              if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
-                try {
-                  const data = JSON.parse(text);
+          return originalFetch.apply(this, args).then(response => {
+            try {
+              const origJson = response.json.bind(response);
+              response.json = async function () {
+                const data = await origJson();
+                if (data && typeof data === 'object') {
                   recursiveDeepPrune(data);
-                  return JSON.stringify(data);
-                } catch (e) {
-                  return text;
                 }
-              }
-              return text;
-            };
-          } catch (e) {}
-          return response;
+                return data;
+              };
+              const origText = response.text.bind(response);
+              response.text = async function () {
+                const text = await origText();
+                if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
+                  try {
+                    const data = JSON.parse(text);
+                    recursiveDeepPrune(data);
+                    return JSON.stringify(data);
+                  } catch (e) {
+                    return text;
+                  }
+                }
+                return text;
+              };
+            } catch (e) {}
+            return response;
+          });
         }
 
-        try {
-          return await originalFetch.apply(this, args);
-        } catch (fetchErr) {
+        return originalFetch.apply(this, args).catch(fetchErr => {
           if (urlStr.includes('/api/stats/') || urlStr.includes('/pagead/') || urlStr.includes('doubleclick') || urlStr.includes('/ptracking')) {
             return new Response('', {
               status: 204,
@@ -3270,7 +3275,7 @@
             });
           }
           throw fetchErr;
-        }
+        });
       };
       protectNative(hookedFetch, originalFetch, 'fetch');
       window.fetch = hookedFetch;
