@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.0.9');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.1.0');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.0.9', manifest.version === '5.0.9');
+check('Version is 5.1.0', manifest.version === '5.1.0');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -80,6 +80,11 @@ check('Cosmetic CSS hides interruption toast and ad overlays',
 check('In-player fallback skip handler reports ads in real-time and recovers stalled video endings',
   injectJs.includes('reportAdDetected(1);') &&
   injectJs.includes('video.currentTime >= video.duration - 0.25'));
+check('YouTube Live Stream Architecture preserves DAI, SSAP cuepoints, and avoids live-edge auto-pause disruption',
+  injectJs.includes('isYouTubeLiveStream') &&
+  injectJs.includes('isLivePayload') &&
+  injectJs.includes('if (!isLive)') &&
+  injectJs.includes('!isLive && video.currentTime >= video.duration - 0.25'));
 
 // 5. CONTENT.JS & MOVIE SITE AD GUARDIAN AUDIT
 console.log('\n🛡️  5. Movie Site Ad Guardian & Content Script Audit (content.js & inject.js):');
@@ -98,16 +103,16 @@ check('Overlaid play button kickstarter runs on bubbling phase without stopPropa
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.0.9 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.0.9</span>'));
+check('popup.html displays version v5.1.0 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.1.0</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.0.9-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.0.9-firefox.zip');
-check('webshield-v5.0.9-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.1.0-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.1.0-firefox.zip');
+check('webshield-v5.1.0-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.0.9-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.1.0-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 console.log('\n======================================================================');

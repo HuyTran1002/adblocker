@@ -2952,13 +2952,59 @@
 
     // 4. GhostEngine Core: Recursive Deep-Prune (AdGuard / uBlock Origin Standard)
     // Deletes ad structures anywhere in the JSON tree at any depth (up to 16), handling objects, arrays, and stringified JSON.
-    function recursiveDeepPrune(val, depth = 0) {
+    let currentIsLiveStream = false;
+
+    function isLivePayload(val) {
+      if (!val || typeof val !== 'object') return false;
+      if (val.videoDetails && (val.videoDetails.isLive || val.videoDetails.isLiveContent || val.videoDetails.isPostLiveDvr)) return true;
+      if (val.liveStreamability) return true;
+      if (val.microformat && val.microformat.playerMicroformatRenderer && val.microformat.playerMicroformatRenderer.liveBroadcastDetails) return true;
+      return false;
+    }
+
+    function isYouTubeLiveStream() {
+      if (currentIsLiveStream) return true;
+      try {
+        if (window.location && window.location.pathname && (window.location.pathname.startsWith('/live/') || window.location.pathname.startsWith('/live'))) return true;
+        const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        if (ytPlayer) {
+          if (ytPlayer.classList.contains('ytp-live') || ytPlayer.classList.contains('ytp-live-mode')) return true;
+          if (typeof ytPlayer.getVideoData === 'function') {
+            const vd = ytPlayer.getVideoData();
+            if (vd && (vd.isLive || vd.isLiveContent || vd.isPostLiveDvr)) return true;
+          }
+        }
+        if (document.querySelector('.ytp-live, .ytp-live-badge, .ytp-live-mode, ytd-watch-flexy[is-live-stream]')) return true;
+        if (window.ytInitialPlayerResponse && isLivePayload(window.ytInitialPlayerResponse)) return true;
+      } catch (e) {}
+      return false;
+    }
+
+    function recursiveDeepPrune(val, depth = 0, isLiveContext = false) {
       if (!val || typeof val !== 'object' || depth > 16) return val;
+
+      let isLive = isLiveContext;
+      if (!isLive) {
+        if (val.videoDetails && typeof val.videoDetails === 'object') {
+          if (val.videoDetails.isLive || val.videoDetails.isLiveContent || val.videoDetails.isPostLiveDvr) {
+            isLive = true;
+            currentIsLiveStream = true;
+          } else {
+            isLive = false;
+            currentIsLiveStream = false;
+          }
+        } else if (val.liveStreamability || (val.microformat && val.microformat.playerMicroformatRenderer && val.microformat.playerMicroformatRenderer.liveBroadcastDetails)) {
+          isLive = true;
+          currentIsLiveStream = true;
+        } else if (isYouTubeLiveStream()) {
+          isLive = true;
+        }
+      }
 
       if (Array.isArray(val)) {
         for (let i = 0; i < val.length; i++) {
           if (val[i] && typeof val[i] === 'object') {
-            recursiveDeepPrune(val[i], depth + 1);
+            recursiveDeepPrune(val[i], depth + 1, isLive);
           }
         }
         return val;
@@ -2996,11 +3042,19 @@
         delete val.adSlots;
       }
       if ('no_ads' in val) { delete val.no_ads; adsRemoved++; }
-      if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
-      if ('adPlacementConfig' in val) delete val.adPlacementConfig;
-      if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
       if ('adSlotsPreroll' in val) { delete val.adSlotsPreroll; adsRemoved++; }
-      if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+
+      // CRITICAL ARCHITECTURE RULE FOR LIVE STREAMS:
+      // On YouTube Live Streams (DVR & low-latency broadcasts), daiConfig, ssapConfig, and adBreakHeartbeatParams
+      // contain the live timeline synchronization cuepoints, live window bounds, and DASH manifest sync.
+      // Stripping them on a live stream causes the live playback engine to lose the live head, jump to 0:00 (DVR start),
+      // fail with 403 Forbidden on progressive itag=18 fallback, and spin infinitely when seeking to live!
+      if (!isLive) {
+        if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
+        if ('adPlacementConfig' in val) delete val.adPlacementConfig;
+        if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
+        if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+      }
 
       if (adsRemoved > 0) {
         reportAdDetected(adsRemoved);
@@ -3011,7 +3065,7 @@
           if (k === 'streamingData') continue;
           const child = val[k];
           if (child && typeof child === 'object') {
-            recursiveDeepPrune(child, depth + 1);
+            recursiveDeepPrune(child, depth + 1, isLive);
           }
         }
       }
@@ -3407,12 +3461,13 @@
             } catch (e) {}
           });
 
-          if (ytPlayer && typeof ytPlayer.skipAd === 'function') {
+          const isLive = isYouTubeLiveStream();
+          if (!isLive && ytPlayer && typeof ytPlayer.skipAd === 'function') {
             try { ytPlayer.skipAd(); } catch (e) {}
           }
 
-          // Safe conclusion if ad reaches end or is stuck at end
-          if (video && video.duration && !isNaN(video.duration) && video.currentTime >= video.duration - 0.25) {
+          // Safe conclusion if ad reaches end or is stuck at end (VOD only - never trigger on Live Streams where currentTime approaches duration at live edge!)
+          if (video && video.duration && !isNaN(video.duration) && !isLive && video.currentTime >= video.duration - 0.25) {
             try {
               if (video.paused) video.play().catch(() => {});
               video.dispatchEvent(new Event('ended'));
@@ -3525,11 +3580,25 @@
 
     function resumeIfAutoPaused() {
       if (userManuallyPaused || !isEnabled()) return;
-      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts')) return;
+      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts') && !window.location.pathname.startsWith('/live')) return;
 
       const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
       if (!video) return;
+
+      // Live Stream Guard:
+      // Live streams start at currentTime = 0 while the DASH/MSE manifest calculates the live edge (e.g. 9386s).
+      // Forcing playVideo() at currentTime < 1.0 interrupts the native live-edge seek and locks video at 0:00 (DVR start).
+      // Never force resume at currentTime < 1.0 on a live stream! Only resume if an ad interruption is actively ending.
+      const isLive = isYouTubeLiveStream();
+      if (isLive) {
+        if (video.paused && !video.ended && document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
+          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+            try { ytPlayer.playVideo(); } catch (e) {}
+          }
+        }
+        return;
+      }
 
       // Only auto-resume if the video is paused at the beginning (< 1.0s) or during an ad interruption, and not ended
       if (video.paused && !video.ended && (video.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null)) {
@@ -3568,7 +3637,10 @@
       if (e.target && e.target.tagName === 'VIDEO') {
         const vid = e.target;
         if (!userManuallyPaused && !vid.ended) {
-          if (vid.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
+          const isLive = isYouTubeLiveStream();
+          if (!isLive && (vid.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null)) {
+            setTimeout(resumeIfAutoPaused, 150);
+          } else if (isLive && document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
             setTimeout(resumeIfAutoPaused, 150);
           }
         }
@@ -3578,6 +3650,7 @@
     // Reset state and resume on SPA navigation
     window.addEventListener('yt-navigate-finish', () => {
       userManuallyPaused = false;
+      currentIsLiveStream = false;
       setTimeout(resumeIfAutoPaused, 300);
       setTimeout(resumeIfAutoPaused, 700);
     });
