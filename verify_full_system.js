@@ -115,6 +115,25 @@ check('webshield-v5.1.0-chrome.zip exists and is non-empty (>100KB)',
 check('webshield-v5.1.0-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
+const { execSync } = require('child_process');
+const readZipManifest = (zipPath) => {
+  const cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('${zipPath.replace(/\\/g, '\\\\')}'); $e = $z.GetEntry('manifest.json'); $s = $e.Open(); $r = New-Object System.IO.StreamReader($s); $t = $r.ReadToEnd(); $r.Close(); $s.Close(); $z.Dispose(); $t"`;
+  return JSON.parse(execSync(cmd, { stdio: ['pipe', 'pipe', 'ignore'] }).toString());
+};
+
+const chromeManifest = readZipManifest(chromeZip);
+check('Chrome package manifest uses background.service_worker',
+  chromeManifest.background && chromeManifest.background.service_worker === 'background.js');
+
+const firefoxManifest = readZipManifest(firefoxZip);
+check('Firefox package manifest is AMO-compliant: has gecko.id and background.scripts',
+  firefoxManifest.browser_specific_settings &&
+  firefoxManifest.browser_specific_settings.gecko &&
+  firefoxManifest.browser_specific_settings.gecko.id === 'anti-popunder@huytran1002' &&
+  firefoxManifest.background &&
+  Array.isArray(firefoxManifest.background.scripts) &&
+  firefoxManifest.background.scripts.includes('background.js'));
+
 console.log('\n======================================================================');
 console.log(`🏁 FINAL AUDIT SUMMARY: ${pass} PASSED, ${fail} FAILED`);
 console.log('======================================================================');
