@@ -3586,6 +3586,21 @@
       const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
       if (!video) return;
 
+      // Error / Unavailable Video Guard:
+      // Never force playback if video is deleted, private, or has an unrecoverable error.
+      // This prevents suppressing YouTube's native error screen and avoids dead black screen!
+      if (document.querySelector('.ytp-error, ytd-playability-error-supported-renderers') !== null) {
+        return;
+      }
+      try {
+        if (ytPlayer && typeof ytPlayer.getPlayerResponse === 'function') {
+          const pr = ytPlayer.getPlayerResponse();
+          if (pr && pr.playabilityStatus && pr.playabilityStatus.status === 'ERROR' && !pr.streamingData) {
+            return;
+          }
+        }
+      } catch (e) {}
+
       // Live Stream Guard:
       // Live streams start at currentTime = 0 while the DASH/MSE manifest calculates the live edge (e.g. 9386s).
       // Forcing playVideo() at currentTime < 1.0 interrupts the native live-edge seek and locks video at 0:00 (DVR start).
