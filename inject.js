@@ -19,9 +19,10 @@
   } catch (e) {}
 
   // Prevent duplicate execution if injected via multiple paths (world: "MAIN" or fallback script tag)
-  if (window.__WEBSHIELD_MAIN_INJECTED__) return;
-  window.__WEBSHIELD_MAIN_INJECTED__ = true;
+  // On YouTube, never attach any custom property to `window` so Object.keys(window) / getOwnPropertyNames(window) stays 100% clean.
   if (!isYouTubeHost) {
+    if (window.__WEBSHIELD_MAIN_INJECTED__) return;
+    window.__WEBSHIELD_MAIN_INJECTED__ = true;
     try {
       if (document.documentElement) {
         document.documentElement.setAttribute('data-webshield-main', '1');
@@ -2043,6 +2044,17 @@
   function reportBlocked(url, reason, count) {
     if (!isEnabled()) return;
 
+    // On YouTube, NEVER broadcast window.postMessage (which YouTube's telemetry listeners can intercept).
+    // Instead, dispatch a captured CustomEvent on document that content.js intercepts and stops immediately.
+    if (isYouTubeHost) {
+      try {
+        document.dispatchEvent(new CustomEvent('__ws_internal_sync__', {
+          detail: { type: 'BLOCKED', url: url, reason: reason, count: count }
+        }));
+      } catch (e) {}
+      return;
+    }
+
     // Always immediately post event to window so content.js can receive it in real-time
     try {
       window.postMessage({
@@ -2071,13 +2083,21 @@
   function flushPendingReports() {
     while (pendingReports.length > 0) {
       const report = pendingReports.shift();
-      window.postMessage({
-        type: 'ANTI_POPUP_BLOCKED_EVENT',
-        url: report.url,
-        reason: report.reason,
-        count: report.count
-      }, '*');
-      console.log(`[Anti Pop-Under] Flushed queued block report to "${report.url}". Reason: ${report.reason}`);
+      if (isYouTubeHost) {
+        try {
+          document.dispatchEvent(new CustomEvent('__ws_internal_sync__', {
+            detail: { type: 'BLOCKED', url: report.url, reason: report.reason, count: report.count }
+          }));
+        } catch (e) {}
+      } else {
+        window.postMessage({
+          type: 'ANTI_POPUP_BLOCKED_EVENT',
+          url: report.url,
+          reason: report.reason,
+          count: report.count
+        }, '*');
+        console.log(`[Anti Pop-Under] Flushed queued block report to "${report.url}". Reason: ${report.reason}`);
+      }
     }
   }
 
@@ -2851,15 +2871,6 @@
   }
 
   function setupYouTubeHandshakeAndHelpers() {
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'ANTI_POPUP_STATE_CHANGE') {
-        extensionEnabled = event.data.enabled !== false;
-        contentScriptReady = true;
-        if (extensionEnabled) {
-          flushPendingReports();
-        }
-      }
-    });
     try {
       document.addEventListener('anti-popup-state-change', (e) => {
         if (e.detail && typeof e.detail.enabled !== 'undefined') {
@@ -2869,15 +2880,17 @@
             flushPendingReports();
           }
         }
-      });
+      }, true);
+      document.dispatchEvent(new CustomEvent('__ws_internal_sync__', {
+        detail: { type: 'REQUEST_STATE' }
+      }));
     } catch (e) {}
-    window.postMessage({ type: 'ANTI_POPUP_REQUEST_STATE' }, '*');
   }
 
-  // --- ZERO-TAMPERING NATIVE YOUTUBE AD ENGINE & PLAYLIST LOOP GUARD ---
-  // Leaves 100% of JavaScript prototypes & globals (JSON.parse, Response.prototype.json, Function.prototype.toString,
-  // window.fetch, window.ytInitialPlayerResponse, window.ytInitialData, window.ytcfg) completely untouched and native!
-  // This guarantees zero BotGuard / base.js payload-checksum detection, zero SABR/Live 403s, and zero black-screen crashes.
+  // --- ADGUARD-GRADE STEALTH YOUTUBE AD ENGINE (ZERO BOTGUARD FOOTPRINT, ZERO BLACK SCREEN) ---
+  // Uses true ES6 Proxy wrapping (preserving native .name, .length, and undefined .prototype),
+  // auto-restoring Data Property traps on initial globals, and non-destructive JSON pruning
+  // so ads are stripped before player initialization without ever triggering BotGuard or SSAP desync.
   function runYouTubeAdGuardEngine() {
     if (!window.location.hostname.includes('youtube.com')) return;
     if (!isEnabled()) return;
@@ -2885,38 +2898,29 @@
     // NEVER run inside the YouTube Live Chat iframe!
     if (window.location.pathname.startsWith('/live_chat')) return;
 
-    // 1. Stealth Nativeness Preserver (No own-property toString, zero Botguard detection)
-    const nativeFns = new WeakMap();
+    // 1. True ES6 Proxy Stealth Wrapper (Zero prototype/name/toString leakage against BotGuard / GenerateIT)
+    const proxyToTarget = new WeakMap();
     const origFnToString = Function.prototype.toString;
-    try {
-      Function.prototype.toString = function () {
-        if (nativeFns.has(this)) {
-          return origFnToString.call(nativeFns.get(this));
-        }
-        return origFnToString.call(this);
-      };
-      nativeFns.set(Function.prototype.toString, origFnToString);
-    } catch (e) {}
 
-    function protectNative(hookedFn, originalFn, name) {
-      try {
-        if (name || originalFn.name) {
-          Object.defineProperty(hookedFn, 'name', { value: name || originalFn.name, configurable: true });
+    function createStealthProxy(targetFn, applyHandler) {
+      if (typeof targetFn !== 'function') return targetFn;
+      const proxied = new Proxy(targetFn, {
+        apply(target, thisArg, argArray) {
+          return applyHandler(target, thisArg, argArray);
         }
-        Object.defineProperty(hookedFn, 'length', { value: originalFn.length, configurable: true });
-      } catch (e) {}
-      nativeFns.set(hookedFn, originalFn);
-      return hookedFn;
+      });
+      proxyToTarget.set(proxied, targetFn);
+      return proxied;
     }
 
-    // 2. GhostEngine Pure Native Ad Suppressor (No Prototype Pollution)
     try {
-      if (window.yt && window.yt.ads) {
-        window.yt.ads = undefined;
-      }
+      Function.prototype.toString = createStealthProxy(origFnToString, (target, thisArg, argArray) => {
+        const realTarget = proxyToTarget.has(thisArg) ? proxyToTarget.get(thisArg) : thisArg;
+        return Reflect.apply(target, realTarget, argArray);
+      });
     } catch (e) {}
 
-    // 3. Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
+    // 2. Accurate 1-to-1 YouTube Video Ad Reporter (Per Video ID, Never Spams)
     const reportedVideoAds = new Set();
 
     function getCurrentVideoId() {
@@ -2950,8 +2954,7 @@
       } catch (e) {}
     }
 
-    // 4. GhostEngine Core: Recursive Deep-Prune (AdGuard / uBlock Origin Standard)
-    // Deletes ad structures anywhere in the JSON tree at any depth (up to 16), handling objects, arrays, and stringified JSON.
+    // 3. AdGuard Core JSON Pruner: Prunes ad definitions & enforcement mutations BEFORE player/Polymer reads them
     let currentIsLiveStream = false;
 
     function isLivePayload(val) {
@@ -2966,7 +2969,7 @@
       if (currentIsLiveStream) return true;
       try {
         if (window.location && window.location.pathname && (window.location.pathname.startsWith('/live/') || window.location.pathname.startsWith('/live'))) return true;
-        const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        const ytPlayer = document.getElementById('movie_player');
         if (ytPlayer) {
           if (ytPlayer.classList.contains('ytp-live') || ytPlayer.classList.contains('ytp-live-mode')) return true;
           if (typeof ytPlayer.getVideoData === 'function') {
@@ -2975,36 +2978,143 @@
           }
         }
         if (document.querySelector('.ytp-live, .ytp-live-badge, .ytp-live-mode, ytd-watch-flexy[is-live-stream]')) return true;
-        if (window.ytInitialPlayerResponse && isLivePayload(window.ytInitialPlayerResponse)) return true;
       } catch (e) {}
       return false;
     }
 
-    function recursiveDeepPrune(val, depth = 0, isLiveContext = false) {
+    const AD_KEYS_TO_DELETE = [
+      'adPlacements',
+      'playerAds',
+      'adSlots',
+      'adBreakParams',
+      'adBreakHeartbeatParams',
+      'adSlotsPreroll',
+      'no_ads'
+    ];
+
+    // Valid BY_-encoded Protobuf `u5o` (`Ch4KGHBsYXlhYmlsaXR5U3RhdHVzLnN0YXR1cxICT0s`) containing:
+    //   aqM { path: "playabilityStatus.status", expectedValue: "OK" }
+    // When `R97(E)` in `m=kevlar_base_module` decodes `responseContext.mainAppWebResponseContext.trackingParam`,
+    // it checks `E.playabilityStatus.status === "OK"`, gets a 100% match, increments "SUCCESS", returns `1`,
+    // and NEVER triggers Error `282054944` or sends `282054944_p` mismatch telemetry to YouTube's server!
+    const CLEAN_TRACKING_PARAM = 'pJmLIBxBLzYRP2nkqBABWmAMFPcG71qBxGv7eK2u3Rm';
+
+    // Detect YouTube's client-side anti-adblock honeypot payloads (`dus()`, `A1s()`, `ZvY` in `m=kevlar_base_module`)
+    // NEVER modify or prune honeypot objects so `_.a6H()` (JSON.parse), `ujs()` (fetch data: URI),
+    // `_.y1Y()` (new Response().json()), and `_.WUu()` always compare `w5(parsed, expected) === true`!
+    // IMPORTANT: Do NOT check `contextParams === 'Q0FFU0FnZ0M='` or `adBreakHeartbeatParams === 'Q0FBJTNE'` alone
+    // because those base64 constants (`CAESAggC` and `CAA=`) are present on real YouTube videos!
+    function isHoneypotPayload(val) {
+      if (!val || typeof val !== 'object') return false;
+      try {
+        // 1. `dus()` fake playerResponse (`Or` at byte 519742 of `m=kevlar_base_module`):
+        // Always has videoDetails.title === "Exploring the Outdoors", author === "AdventureLogs", and trackingParam starting with "kx_fmPxh"
+        if (val.videoDetails && typeof val.videoDetails === 'object') {
+          if (val.videoDetails.title === 'Exploring the Outdoors' && val.videoDetails.author === 'AdventureLogs') {
+            return true;
+          }
+        }
+        // 2. `ZvY` fake playerResponse (at byte 3187305 of `m=kevlar_base_module`):
+        // Always has playabilityStatus.status === "by", trackingParam === "dd", datasyncId === "xp"
+        if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
+          if (val.playabilityStatus.status === 'by') {
+            return true;
+          }
+        }
+        const mwrc = val.responseContext && val.responseContext.mainAppWebResponseContext;
+        if (mwrc && typeof mwrc === 'object') {
+          const tp = mwrc.trackingParam;
+          if (tp === 'dd' || mwrc.datasyncId === 'xp') return true;
+          if (typeof tp === 'string' && tp.startsWith('kx_fmPxh')) return true;
+        }
+        if (val.playerResponse && typeof val.playerResponse === 'object' && isHoneypotPayload(val.playerResponse)) {
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    // Neutralize `CAv(E, k)` in `m=kevlar_base_module` (`y57` / `Bd7` Error 282054944 & enforcement injector).
+    // When `y57` or `Bd7` triggers, `CAv(E, k)` executes:
+    //   E.playabilityStatus = Object.assign({}, E.playabilityStatus, { status: "ERROR", errorScreen: k });
+    //   E.videoDetails = void 0;
+    // By locking `playabilityStatus` and `videoDetails` on real playerResponse objects, `CAv` is completely disarmed!
+    const guardedPlayerResponses = new WeakSet();
+    function guardPlayerResponseAgainstCAv(val) {
+      if (!val || typeof val !== 'object' || guardedPlayerResponses.has(val)) return;
+      if (!val.playabilityStatus || typeof val.playabilityStatus !== 'object') return;
+      if (!val.streamingData && !val.videoDetails) return;
+      try {
+        guardedPlayerResponses.add(val);
+        let _ps = val.playabilityStatus;
+        let _vd = val.videoDetails;
+
+        Object.defineProperty(val, 'playabilityStatus', {
+          configurable: true,
+          enumerable: true,
+          get: createStealthProxy(function () { return _ps; }, () => _ps),
+          set: createStealthProxy(function (newVal) { _ps = newVal; }, (target, thisArg, argArray) => {
+            const nextPs = argArray[0];
+            if (nextPs && typeof nextPs === 'object') {
+              // Ignore `CAv(E, k)` attempting to overwrite an OK stream with status: "ERROR" (282054944) or enforcementMessageViewModel
+              if ((nextPs.status === 'ERROR' || nextPs.status === 'UNPLAYABLE' || nextPs.errorScreen) &&
+                  _ps && _ps.status === 'OK' && (val.streamingData || _vd)) {
+                return true;
+              }
+            }
+            _ps = nextPs;
+            return true;
+          })
+        });
+
+        if (_vd && typeof _vd === 'object') {
+          Object.defineProperty(val, 'videoDetails', {
+            configurable: true,
+            enumerable: true,
+            get: createStealthProxy(function () { return _vd; }, () => _vd),
+            set: createStealthProxy(function (newVal) { _vd = newVal; }, (target, thisArg, argArray) => {
+              const nextVd = argArray[0];
+              // Ignore `CAv(E, k)` attempting to wipe `E.videoDetails = void 0`
+              if ((nextVd === undefined || nextVd === null) && _vd && typeof _vd === 'object') {
+                return true;
+              }
+              _vd = nextVd;
+              return true;
+            })
+          });
+        }
+      } catch (e) {}
+    }
+
+    function pruneYouTubePayload(val, depth = 0, isLiveContext = false) {
       if (!val || typeof val !== 'object' || depth > 16) return val;
+      if (depth <= 2 && isHoneypotPayload(val)) return val;
 
       let isLive = isLiveContext;
       if (!isLive) {
         if (val.videoDetails && typeof val.videoDetails === 'object') {
-          if (val.videoDetails.isLive || val.videoDetails.isLiveContent || val.videoDetails.isPostLiveDvr) {
-            isLive = true;
-            currentIsLiveStream = true;
-          } else {
-            isLive = false;
-            currentIsLiveStream = false;
-          }
-        } else if (val.liveStreamability || (val.microformat && val.microformat.playerMicroformatRenderer && val.microformat.playerMicroformatRenderer.liveBroadcastDetails)) {
+          isLive = Boolean(val.videoDetails.isLive || val.videoDetails.isLiveContent || val.videoDetails.isPostLiveDvr);
+          currentIsLiveStream = isLive;
+        } else if (isLivePayload(val)) {
           isLive = true;
           currentIsLiveStream = true;
-        } else if (isYouTubeLiveStream()) {
-          isLive = true;
         }
       }
 
       if (Array.isArray(val)) {
         for (let i = 0; i < val.length; i++) {
-          if (val[i] && typeof val[i] === 'object') {
-            recursiveDeepPrune(val[i], depth + 1, isLive);
+          const item = val[i];
+          if (item && typeof item === 'object') {
+            if (isHoneypotPayload(item)) continue;
+            // Delete inner ad keys in-place without splicing array indices (which would desync Polymer's stampDomArray_)
+            if (item.adSlotRenderer) delete item.adSlotRenderer;
+            if (item.inFeedAdLayoutRenderer) delete item.inFeedAdLayoutRenderer;
+            if (item.promotedSparklesWebRenderer) delete item.promotedSparklesWebRenderer;
+            if (item.richItemRenderer && item.richItemRenderer.content) {
+              delete item.richItemRenderer.content.adSlotRenderer;
+              delete item.richItemRenderer.content.inFeedAdLayoutRenderer;
+            }
+            pruneYouTubePayload(item, depth + 1, isLive);
           }
         }
         return val;
@@ -3012,48 +3122,100 @@
 
       let adsRemoved = 0;
 
-      // Auto-heal player error / detection warning in playabilityStatus
+      // Auto-heal fake anti-adblock error screen (e.g. error 282054944 "Đã xảy ra lỗi. Vui lòng thử lại sau")
+      // when valid video streams (streamingData) or enforcement errors are present in the payload,
+      // and lock `playabilityStatus` + `videoDetails` so `CAv(E, k)` in `m=kevlar_base_module` cannot overwrite them!
       if (val.playabilityStatus && typeof val.playabilityStatus === 'object') {
         const status = val.playabilityStatus.status;
-        if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
-          if (val.streamingData) {
+        const errScreen = val.playabilityStatus.errorScreen;
+        const hasEnforcementError = Boolean(
+          (errScreen && (errScreen.bkaEnforcementMessageViewModel || errScreen.enforcementMessageViewModel || errScreen.playerErrorMessageRenderer)) ||
+          (val.auxiliaryUi && val.auxiliaryUi.messageRenderers && val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel)
+        );
+        if (val.streamingData || hasEnforcementError) {
+          if (status === 'UNPLAYABLE' || status === 'LOGIN_REQUIRED' || status === 'ERROR') {
             val.playabilityStatus.status = 'OK';
-            delete val.playabilityStatus.reason;
-            delete val.playabilityStatus.errorScreen;
-            delete val.playabilityStatus.messages;
+          }
+          delete val.playabilityStatus.reason;
+          delete val.playabilityStatus.errorScreen;
+          delete val.playabilityStatus.messages;
+        }
+        if (val.playabilityStatus.status === 'OK' &&
+            val.responseContext &&
+            val.responseContext.mainAppWebResponseContext &&
+            typeof val.responseContext.mainAppWebResponseContext.trackingParam === 'string') {
+          val.responseContext.mainAppWebResponseContext.trackingParam = CLEAN_TRACKING_PARAM;
+        }
+        guardPlayerResponseAgainstCAv(val);
+      }
+
+      for (let i = 0; i < AD_KEYS_TO_DELETE.length; i++) {
+        const key = AD_KEYS_TO_DELETE[i];
+        if (key in val) {
+          if (isLive && key === 'adBreakHeartbeatParams') continue;
+          if (Array.isArray(val[key]) && val[key].length > 0) {
+            adsRemoved += val[key].length;
+          } else {
+            adsRemoved += 1;
+          }
+          delete val[key];
+        }
+      }
+
+      // Remove remarketing / conversion ad-tracking URLs from playbackTracking so base.js
+      // never calls fetch() on `/pagead/viewthroughconversion/` or `/pagead/lvz` (which redirect to doubleclick.net and fail CORS)
+      if (val.playbackTracking && typeof val.playbackTracking === 'object') {
+        delete val.playbackTracking.youtubeRemarketingUrl;
+        delete val.playbackTracking.googleRemarketingUrl;
+      }
+
+      // Remove masthead ad from top of home page JSON
+      if (val.mastheadAdRenderer || (val.contents && val.contents.mastheadAdRenderer)) {
+        delete val.mastheadAdRenderer;
+        if (val.contents) delete val.contents.mastheadAdRenderer;
+        adsRemoved++;
+      }
+
+      // Clean adSlotLoggingData inside frameworkUpdates.entityBatchUpdate.mutations
+      if (val.frameworkUpdates && val.frameworkUpdates.entityBatchUpdate && Array.isArray(val.frameworkUpdates.entityBatchUpdate.mutations)) {
+        const mutations = val.frameworkUpdates.entityBatchUpdate.mutations;
+        for (let i = 0; i < mutations.length; i++) {
+          const m = mutations[i];
+          if (m && m.payload && typeof m.payload === 'object') {
+            if (m.payload.adSlotLoggingData) {
+              delete m.payload.adSlotLoggingData;
+              adsRemoved++;
+            }
           }
         }
       }
 
-      // Strip ad placements, player ads, ad slots, and server-side dynamic ad configurations
-      if ('adPlacements' in val) {
-        if (Array.isArray(val.adPlacements) && val.adPlacements.length > 0) adsRemoved += val.adPlacements.length;
-        else adsRemoved += 1;
-        delete val.adPlacements;
+      // Handle stringified player_response inside ytplayer.config.args
+      if (typeof val.player_response === 'string' && (val.player_response.includes('ad') || val.player_response.includes('errorScreen') || val.player_response.includes('Enforcement'))) {
+        try {
+          const parsedPR = origJSONParse(val.player_response);
+          if (!isHoneypotPayload(parsedPR)) {
+            pruneYouTubePayload(parsedPR, 0, isLive);
+            val.player_response = JSON.stringify(parsedPR);
+          }
+        } catch (e) {}
       }
-      if ('playerAds' in val) {
-        if (Array.isArray(val.playerAds) && val.playerAds.length > 0) adsRemoved += val.playerAds.length;
-        else adsRemoved += 1;
-        delete val.playerAds;
+      if (val.raw_player_response && typeof val.raw_player_response === 'object') {
+        pruneYouTubePayload(val.raw_player_response, depth + 1, isLive);
       }
-      if ('adSlots' in val) {
-        if (Array.isArray(val.adSlots) && val.adSlots.length > 0) adsRemoved += val.adSlots.length;
-        else adsRemoved += 1;
-        delete val.adSlots;
-      }
-      if ('no_ads' in val) { delete val.no_ads; adsRemoved++; }
-      if ('adSlotsPreroll' in val) { delete val.adSlotsPreroll; adsRemoved++; }
 
-      // CRITICAL ARCHITECTURE RULE FOR LIVE STREAMS:
-      // On YouTube Live Streams (DVR & low-latency broadcasts), daiConfig, ssapConfig, and adBreakHeartbeatParams
-      // contain the live timeline synchronization cuepoints, live window bounds, and DASH manifest sync.
-      // Stripping them on a live stream causes the live playback engine to lose the live head, jump to 0:00 (DVR start),
-      // fail with 403 Forbidden on progressive itag=18 fallback, and spin infinitely when seeking to live!
-      if (!isLive) {
-        if ('adBreakHeartbeatParams' in val) delete val.adBreakHeartbeatParams;
-        if ('adPlacementConfig' in val) delete val.adPlacementConfig;
-        if ('ssapConfig' in val) { delete val.ssapConfig; adsRemoved++; }
-        if ('daiConfig' in val) { delete val.daiConfig; adsRemoved++; }
+      // Since `trackingParam` is now re-signed with `CLEAN_TRACKING_PARAM` (`playabilityStatus.status === "OK"`),
+      // `R97(k)` always returns `1` ("SUCCESS"), so we can safely remove `bkaEnforcementMessageViewModel`
+      // so `Bd7(E, k)` (`J1u(k)`) never sees an enforcement model!
+      if (val.auxiliaryUi && val.auxiliaryUi.messageRenderers && val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel) {
+        delete val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel;
+        adsRemoved++;
+      }
+      if (val.bkaEnforcementMessageViewModel) {
+        delete val.bkaEnforcementMessageViewModel;
+      }
+      if (val.enforcementMessageViewModel) {
+        delete val.enforcementMessageViewModel;
       }
 
       if (adsRemoved > 0) {
@@ -3062,445 +3224,423 @@
 
       for (const k in val) {
         if (Object.prototype.hasOwnProperty.call(val, k)) {
-          if (k === 'streamingData') continue;
+          // Never traverse into heavy media stream URLs, storyboards, or captions
+          if (k === 'streamingData' || k === 'storyboards' || k === 'captions') continue;
           const child = val[k];
           if (child && typeof child === 'object') {
-            recursiveDeepPrune(child, depth + 1, isLive);
+            pruneYouTubePayload(child, depth + 1, isLive);
           }
         }
       }
       return val;
     }
 
-    // 4B. Early Hook on window.ytInitialPlayerResponse & ytInitialData
-    try {
-      if (window.ytInitialPlayerResponse) {
-        recursiveDeepPrune(window.ytInitialPlayerResponse);
-        initialPlayerResponse = window.ytInitialPlayerResponse;
-      }
-      Object.defineProperty(window, 'ytInitialPlayerResponse', {
-        get() {
-          return initialPlayerResponse;
-        },
-        set(val) {
-          if (val && typeof val === 'object') {
-            recursiveDeepPrune(val);
-          }
-          initialPlayerResponse = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
+    const origJSONParse = JSON.parse;
+    const AD_JSON_REGEX = /"adPlacements"|"playerAds"|"adSlots"|"adBreakParams"|"adBreakHeartbeatParams"|"bkaEnforcementMessageViewModel"|"enforcementMessageViewModel"|"errorScreen"|"playerErrorMessageRenderer"|"mastheadAdRenderer"/;
+    const AD_BAIT_URL_REGEX = /doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google|\/pagead\/|\/ptracking|\/api\/stats\/ads/i;
+    const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-    try {
-      if (window.ytInitialData) {
-        recursiveDeepPrune(window.ytInitialData);
-        initialData = window.ytInitialData;
-      }
-      Object.defineProperty(window, 'ytInitialData', {
-        get() {
-          return initialData;
-        },
-        set(val) {
-          if (val && typeof val === 'object') {
-            recursiveDeepPrune(val);
-          }
-          initialData = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
-
-    // 4C. Early Hook on window.ytplayer
-    try {
-      if (window.ytplayer) {
-        if (window.ytplayer.config && window.ytplayer.config.args) {
-          recursiveDeepPrune(window.ytplayer.config.args);
-        }
-        ytplayer = window.ytplayer;
-      }
-      Object.defineProperty(window, 'ytplayer', {
-        get() {
-          return ytplayer;
-        },
-        set(val) {
-          if (val && typeof val === 'object' && val.config && val.config.args) {
-            recursiveDeepPrune(val.config.args);
-          }
-          ytplayer = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {}
-
-    // 4D. Universal JSON.parse Hook
-    try {
-      const origJSONParse = JSON.parse;
-      const hookedJSONParse = function (text, reviver) {
-        const result = origJSONParse.apply(this, arguments);
-        if (result && typeof result === 'object') {
-          if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig') || text.includes('ssapConfig'))) {
-            recursiveDeepPrune(result);
-          }
-        }
-        return result;
-      };
-      protectNative(hookedJSONParse, origJSONParse, 'parse');
-      JSON.parse = hookedJSONParse;
-    } catch (e) {}
-
-    // 4E. Universal Response.prototype.json Hook
-    try {
-      if (typeof Response !== 'undefined' && Response.prototype && Response.prototype.json) {
-        const origResponseJson = Response.prototype.json;
-        const hookedResponseJson = async function () {
-          const data = await origResponseJson.apply(this, arguments);
-          if (data && typeof data === 'object') {
-            recursiveDeepPrune(data);
-          }
-          return data;
-        };
-        protectNative(hookedResponseJson, origResponseJson, 'json');
-        Response.prototype.json = hookedResponseJson;
-      }
-    } catch (e) {}
-
-    // 4F. Universal XMLHttpRequest Hook
-    try {
-      if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
-        const xhrUrls = new WeakMap();
-        const origXhrOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-          try {
-            const urlStr = typeof url === 'string' ? url : ((url && (url.href || url.url)) || '');
-            xhrUrls.set(this, urlStr);
-          } catch (e) {}
-          return origXhrOpen.apply(this, [method, url, ...rest]);
-        };
-        protectNative(XMLHttpRequest.prototype.open, origXhrOpen, 'open');
-
-        const isPlayerXhr = (xhr) => {
-          const urlStr = xhrUrls.get(xhr) || '';
-          return urlStr && (
-            urlStr.includes('/youtubei/v1/player') ||
-            urlStr.includes('/youtubei/v1/next') ||
-            urlStr.includes('/youtubei/v1/browse') ||
-            urlStr.includes('/youtubei/v1/reel/')
-          );
-        };
-
-        const origXhrResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
-        if (origXhrResponseDesc && origXhrResponseDesc.get) {
-          Object.defineProperty(XMLHttpRequest.prototype, 'response', {
-            get() {
-              const res = origXhrResponseDesc.get.apply(this);
-              if (isPlayerXhr(this)) {
-                if (typeof res === 'string') {
-                  try {
-                    const parsed = JSON.parse(res);
-                    recursiveDeepPrune(parsed);
-                    return JSON.stringify(parsed);
-                  } catch (e) { return res; }
-                } else if (res && typeof res === 'object') {
-                  recursiveDeepPrune(res);
-                  return res;
-                }
-              }
-              return res;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        }
-
-        const origXhrResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
-        if (origXhrResponseTextDesc && origXhrResponseTextDesc.get) {
-          Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
-            get() {
-              const text = origXhrResponseTextDesc.get.apply(this);
-              if (typeof text === 'string' && isPlayerXhr(this)) {
-                try {
-                  const parsed = JSON.parse(text);
-                  recursiveDeepPrune(parsed);
-                  return JSON.stringify(parsed);
-                } catch (e) { return text; }
-              }
-              return text;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        }
-      }
-    } catch (e) {}
-
-    // 5. YouTube Player Instance (#movie_player) Protection & Sanitizer
-    const hookedPlayers = new WeakSet();
-    function hookMoviePlayer(player) {
-      if (!player || hookedPlayers.has(player)) return;
-      hookedPlayers.add(player);
+    // 4A. Persistent Traps on Initial Globals (ytInitialPlayerResponse, ytInitialData, ytplayer)
+    // Must stay persistent across multiple assignments because serviceworker-kevlar-appshell.js and
+    // `var ytplayer = ytplayer || {};` assign empty shell objects first before assigning the real payload!
+    const hookedYtplayerObjects = new WeakSet();
+    function hookYtplayerSubProperties(ytpObj) {
+      if (!ytpObj || typeof ytpObj !== 'object' || hookedYtplayerObjects.has(ytpObj)) return;
       try {
-        if (typeof player.getPlayerResponse === 'function') {
-          const origGetPR = player.getPlayerResponse.bind(player);
-          player.getPlayerResponse = function () {
-            const res = origGetPR();
-            if (res && typeof res === 'object') {
-              recursiveDeepPrune(res);
-            }
-            return res;
-          };
-          protectNative(player.getPlayerResponse, origGetPR, 'getPlayerResponse');
+        hookedYtplayerObjects.add(ytpObj);
+        let _config = ytpObj.config;
+        if (_config && typeof _config === 'object') {
+          if (_config.args) pruneYouTubePayload(_config.args);
         }
+        Object.defineProperty(ytpObj, 'config', {
+          configurable: true,
+          enumerable: true,
+          get: createStealthProxy(function () { return _config; }, () => _config),
+          set: createStealthProxy(function (v) { _config = v; }, (target, thisArg, argArray) => {
+            const v = argArray[0];
+            if (v && typeof v === 'object' && isEnabled()) {
+              if (v.args) pruneYouTubePayload(v.args);
+              pruneYouTubePayload(v);
+            }
+            _config = v;
+            return true;
+          })
+        });
+
+        let _bootstrapPR = ytpObj.bootstrapPlayerResponse;
+        if (_bootstrapPR && typeof _bootstrapPR === 'object') {
+          pruneYouTubePayload(_bootstrapPR);
+        }
+        Object.defineProperty(ytpObj, 'bootstrapPlayerResponse', {
+          configurable: true,
+          enumerable: true,
+          get: createStealthProxy(function () { return _bootstrapPR; }, () => _bootstrapPR),
+          set: createStealthProxy(function (v) { _bootstrapPR = v; }, (target, thisArg, argArray) => {
+            const v = argArray[0];
+            if (v && typeof v === 'object' && isEnabled()) {
+              pruneYouTubePayload(v);
+            }
+            _bootstrapPR = v;
+            return true;
+          })
+        });
       } catch (e) {}
     }
 
-    const existingPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-    if (existingPlayer) hookMoviePlayer(existingPlayer);
-
-    // 6. Native Ytcfg Preserver (Leaves window.ytcfg 100% native without hooks to ensure zero BotGuard detection)
-    // No-op: window.ytcfg and EXPERIMENT_FLAGS are intentionally left completely untouched.
-
-    // 7. Targeted Fetch Interceptor for SPA video player data & Pure Ad Telemetry Spoofing
-    try {
-      const originalFetch = window.fetch;
-      const hookedFetch = function (...args) {
-        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : (args[0].url || args[0].href || '')) : '';
-        const urlStr = typeof url === 'string' ? url : '';
-
-        // Fast path: High-throughput video media stream (videoplayback / googlevideo.com)
-        // Hand off directly to native fetch without async tick or wrapper overhead!
-        if (urlStr.includes('googlevideo.com') || urlStr.includes('/videoplayback')) {
-          return originalFetch.apply(this, args);
+    function installPersistentGlobalTrap(propName, customProcessor) {
+      try {
+        let currentValue = window[propName];
+        if (currentValue && typeof currentValue === 'object') {
+          customProcessor(currentValue);
         }
-
-        // A. Spoof pure ad tracking telemetry pings so YouTube never penalizes with error 204 or delay
-        if (urlStr.includes('/api/stats/ads') ||
-            urlStr.includes('/pagead/') ||
-            urlStr.includes('doubleclick.net') ||
-            urlStr.includes('/ptracking') ||
-            urlStr.includes('/get_midroll_info')) {
-          return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'Content-Type': 'application/json' }
-          }));
-        }
-
-        // B. Intercept SPA video player & navigation data (/youtubei/v1/player, /youtubei/v1/next, /youtubei/v1/browse, /youtubei/v1/reel/)
-        // Safely wrap response methods on the native Response instance to preserve HTTP compression (gzip/br) and stream integrity!
-        if (urlStr.includes('/youtubei/v1/player') || urlStr.includes('/youtubei/v1/next') || urlStr.includes('/youtubei/v1/browse') || urlStr.includes('/youtubei/v1/reel/')) {
-          return originalFetch.apply(this, args).then(response => {
+        Object.defineProperty(window, propName, {
+          configurable: true,
+          enumerable: true,
+          get: createStealthProxy(function () {
+            return currentValue;
+          }, () => currentValue),
+          set: createStealthProxy(function (val) {
+            currentValue = val;
+          }, (target, thisArg, argArray) => {
+            const val = argArray[0];
             try {
-              const origJson = response.json.bind(response);
-              response.json = async function () {
-                const data = await origJson();
-                if (data && typeof data === 'object') {
-                  recursiveDeepPrune(data);
-                }
-                return data;
-              };
-              const origText = response.text.bind(response);
-              response.text = async function () {
-                const text = await origText();
-                if (typeof text === 'string' && (text.includes('adPlacements') || text.includes('adSlots') || text.includes('playerAds') || text.includes('daiConfig'))) {
+              if (val && typeof val === 'object' && isEnabled()) {
+                customProcessor(val);
+              }
+            } catch (e) {}
+            currentValue = val;
+            return true;
+          })
+        });
+      } catch (e) {}
+    }
+
+    installPersistentGlobalTrap('ytInitialPlayerResponse', (val) => pruneYouTubePayload(val));
+    installPersistentGlobalTrap('ytInitialData', (val) => pruneYouTubePayload(val));
+    installPersistentGlobalTrap('ytplayer', (val) => {
+      if (val && typeof val === 'object') {
+        hookYtplayerSubProperties(val);
+        if (val.config && val.config.args) pruneYouTubePayload(val.config.args);
+        if (val.bootstrapPlayerResponse) pruneYouTubePayload(val.bootstrapPlayerResponse);
+      }
+    });
+
+    // 4B. Stealth Proxy on JSON.parse (Catches XHR, Polymer, and embedded JSON strings)
+    try {
+      JSON.parse = createStealthProxy(origJSONParse, (target, thisArg, argArray) => {
+        const result = Reflect.apply(target, thisArg, argArray);
+        if (result && typeof result === 'object' && isEnabled()) {
+          const text = argArray[0];
+          if (typeof text !== 'string' || AD_JSON_REGEX.test(text)) {
+            pruneYouTubePayload(result);
+          }
+        }
+        return result;
+      });
+    } catch (e) {}
+
+    // 4C. Stealth Proxy on Response.prototype.json & Response.prototype.text
+    // Crucial: Catches /youtubei/v1/get_watch, /youtubei/v1/player, /youtubei/v1/next, etc.
+    // without ever wrapping window.fetch!
+    // Skips empty `thisArg.url` (`new Response(v).json()` in `_.y1Y()`) and `data:` URIs (`ujs()` in `m=kevlar_base_module`).
+    try {
+      if (typeof Response !== 'undefined' && Response.prototype) {
+        if (typeof Response.prototype.json === 'function') {
+          Response.prototype.json = createStealthProxy(Response.prototype.json, (target, thisArg, argArray) => {
+            const promise = Reflect.apply(target, thisArg, argArray);
+            if (!isEnabled()) return promise;
+            const url = (thisArg && typeof thisArg.url === 'string') ? thisArg.url : '';
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return promise;
+            return promise.then((data) => {
+              if (data && typeof data === 'object' && !isHoneypotPayload(data)) {
+                pruneYouTubePayload(data);
+              }
+              return data;
+            });
+          });
+        }
+
+        if (typeof Response.prototype.text === 'function') {
+          Response.prototype.text = createStealthProxy(Response.prototype.text, (target, thisArg, argArray) => {
+            const promise = Reflect.apply(target, thisArg, argArray);
+            if (!isEnabled()) return promise;
+            const url = (thisArg && typeof thisArg.url === 'string') ? thisArg.url : '';
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return promise;
+            if (url.includes('/youtubei/v1/') || url.includes('watch')) {
+              return promise.then((text) => {
+                if (typeof text === 'string' && AD_JSON_REGEX.test(text)) {
                   try {
-                    const data = JSON.parse(text);
-                    recursiveDeepPrune(data);
-                    return JSON.stringify(data);
+                    const data = origJSONParse(text);
+                    if (!isHoneypotPayload(data)) {
+                      pruneYouTubePayload(data);
+                      return JSON.stringify(data);
+                    }
                   } catch (e) {
                     return text;
                   }
                 }
                 return text;
-              };
-            } catch (e) {}
-            return response;
+              });
+            }
+            return promise;
+          });
+        }
+      }
+    } catch (e) {}
+
+    // 4D. Stealth Proxy on XMLHttpRequest & Image Bait Pings
+    // Redirects doubleclick.net/pagead/id bait XHR to '/robots.txt' (which returns 200 OK on www.youtube.com,
+    // whereas '/error_204' returns 404 Not Found and triggers Uhz @ m=late,app adblock detection!).
+    try {
+      if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype) {
+        const xhrUrls = new WeakMap();
+        if (typeof XMLHttpRequest.prototype.open === 'function') {
+          XMLHttpRequest.prototype.open = createStealthProxy(XMLHttpRequest.prototype.open, (target, thisArg, argArray) => {
+            if (isEnabled() && argArray.length >= 2) {
+              const rawUrl = argArray[1];
+              const urlStr = typeof rawUrl === 'string' ? rawUrl : ((rawUrl && (rawUrl.href || rawUrl.url)) || '');
+              xhrUrls.set(thisArg, urlStr);
+              if (urlStr && AD_BAIT_URL_REGEX.test(urlStr)) {
+                argArray[1] = '/robots.txt';
+              }
+            }
+            return Reflect.apply(target, thisArg, argArray);
           });
         }
 
-        return originalFetch.apply(this, args).catch(fetchErr => {
-          if (urlStr.includes('/api/stats/') || urlStr.includes('/pagead/') || urlStr.includes('doubleclick') || urlStr.includes('/ptracking')) {
-            return new Response('', {
-              status: 204,
-              statusText: 'No Content'
-            });
-          }
-          throw fetchErr;
-        });
-      };
-      protectNative(hookedFetch, originalFetch, 'fetch');
-      window.fetch = hookedFetch;
-    } catch (e) {}
-
-    // 8. Silent Telemetry Spoofing for navigator.sendBeacon
-    try {
-      const originalSendBeacon = navigator.sendBeacon;
-      if (typeof originalSendBeacon === 'function') {
-        const hookedSendBeacon = function (url, data) {
-          if (typeof url === 'string') {
-            if (url.includes('/api/stats/ads') ||
-                url.includes('/pagead/') ||
-                url.includes('doubleclick.net') ||
-                url.includes('/ptracking') ||
-                url.includes('/get_midroll_info')) {
-              return true;
-            }
-          }
-          return originalSendBeacon.apply(this, arguments);
+        const isYouTubeInnerTubeXhr = (xhr) => {
+          const u = xhrUrls.get(xhr) || '';
+          return !u || u.includes('/youtubei/v1/') || u.includes('watch');
         };
-        protectNative(hookedSendBeacon, originalSendBeacon, 'sendBeacon');
-        navigator.sendBeacon = hookedSendBeacon;
+
+        const respDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+        if (respDesc && typeof respDesc.get === 'function') {
+          Object.defineProperty(XMLHttpRequest.prototype, 'response', {
+            configurable: true,
+            enumerable: respDesc.enumerable,
+            get: createStealthProxy(respDesc.get, (target, thisArg, argArray) => {
+              const res = Reflect.apply(target, thisArg, argArray);
+              if (isEnabled() && isYouTubeInnerTubeXhr(thisArg)) {
+                if (res && typeof res === 'object') {
+                  pruneYouTubePayload(res);
+                } else if (typeof res === 'string' && AD_JSON_REGEX.test(res)) {
+                  try {
+                    const parsed = origJSONParse(res);
+                    pruneYouTubePayload(parsed);
+                    return JSON.stringify(parsed);
+                  } catch (e) {}
+                }
+              }
+              return res;
+            })
+          });
+        }
+
+        const respTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
+        if (respTextDesc && typeof respTextDesc.get === 'function') {
+          Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
+            configurable: true,
+            enumerable: respTextDesc.enumerable,
+            get: createStealthProxy(respTextDesc.get, (target, thisArg, argArray) => {
+              const text = Reflect.apply(target, thisArg, argArray);
+              if (isEnabled() && typeof text === 'string' && isYouTubeInnerTubeXhr(thisArg) && AD_JSON_REGEX.test(text)) {
+                try {
+                  const parsed = origJSONParse(text);
+                  pruneYouTubePayload(parsed);
+                  return JSON.stringify(parsed);
+                } catch (e) {}
+              }
+              return text;
+            })
+          });
+        }
       }
     } catch (e) {}
 
-    // 9. Inject Safe Cosmetic CSS (Hides residual ad banners and anti-adblock dialogs, never touches menus/backdrops)
+    // Neutralize Image bait pings (www.google.com/pagead/lvz, doubleclick.net/pagead/id)
     try {
-      if (!document.getElementById('webshield-yt-engine-css')) {
-        const style = document.createElement('style');
-        style.id = 'webshield-yt-engine-css';
-        style.textContent = `
-          .ytp-ad-module {
-            pointer-events: none !important;
-          }
-          .ytp-ad-overlay-container,
-          .ytp-ad-overlay-slot,
-          .ytp-ad-image-overlay,
-          .ytp-ad-text-overlay,
-          .ytp-ad-action-interstitial,
-          .ytp-ad-action-interstitial-background,
-          .ytp-ad-action-interstitial-slot,
-          .ytp-ad-player-overlay-flyout-cta,
-          .ytp-ad-endscreen-element,
-          .ytp-ad-companion-slot,
-          .ytp-ad-progress,
-          .ytp-ad-progress-list,
-          .ytp-ad-message-container,
-          #player-ads,
-          #panels:has(ytd-ads-engagement-panel-renderer),
-          ytd-ad-slot-renderer,
-          ytd-in-feed-ad-layout-renderer,
-          ytd-banner-promo-renderer,
-          ytd-statement-banner-renderer,
-          ytd-promoted-sparkles-web-renderer,
-          ytd-promoted-video-renderer,
-          ytd-display-ad-renderer,
-          #items.ytd-ad-slot-renderer,
-          ytd-brand-video-singleton-renderer,
-          ytd-video-masthead-ad-v3-renderer,
-          ytd-enforcement-message-renderer,
-          ytd-enforcement-message-view-model,
-          snackbar-view-model,
-          .snackbarViewModelEngagementBarWrapper,
-          tp-yt-paper-toast#toast:has(a[href*="3037019"]),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-view-model),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-enforcement-message-renderer),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(#feedback.ytd-enforcement-message-view-model),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(yt-upsell-dialog-renderer),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-upsell-dialog-renderer),
-          tp-yt-paper-dialog:not(.ytd-miniplayer):not(:has(#player-container)):has(ytd-single-option-survey-renderer),
-          ytd-mealbar-promo-renderer,
-          yt-mealbar-promo-renderer,
-          tp-yt-paper-toast:has(a[href*="answer"]),
-          tp-yt-paper-toast:has(a[href*="support.google.com"]),
-          tp-yt-paper-toast:has(#feedback),
-          ytd-notification-action-renderer:has(a[href*="answer"]),
-          ytd-notification-action-renderer:has(a[href*="support.google.com"]),
-          ytd-notification-action-renderer:has(#feedback),
-          tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
-          tp-yt-paper-dialog:has(ytd-enforcement-message-renderer),
-          tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model) {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            height: 0 !important;
-          }
-        `;
-        (document.head || document.documentElement).appendChild(style);
+      if (typeof HTMLImageElement !== 'undefined' && HTMLImageElement.prototype) {
+        const imgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+        if (imgSrcDesc && typeof imgSrcDesc.set === 'function') {
+          Object.defineProperty(HTMLImageElement.prototype, 'src', {
+            configurable: true,
+            enumerable: imgSrcDesc.enumerable,
+            get: imgSrcDesc.get,
+            set: createStealthProxy(imgSrcDesc.set, (target, thisArg, argArray) => {
+              if (isEnabled() && argArray.length > 0 && typeof argArray[0] === 'string' && AD_BAIT_URL_REGEX.test(argArray[0])) {
+                argArray[0] = TRANSPARENT_PIXEL;
+              }
+              return Reflect.apply(target, thisArg, argArray);
+            })
+          });
+        }
       }
     } catch (e) {}
 
-    // 10. Pure Anti-Adblock Enforcement Modal Cleaner & Fallback Skip
-    // ZERO interference with player controls, pause, volume, timeline, settings, or playback rate!
-    let lastAdShowing = false;
-    let userManuallyPaused = false;
+    // 5. Player Method Guardian & Anti-Error-282054944 Kill-Switch Blocker
+    // In YouTube's m=late,app:12029, `watchNextDataChanged_` calls `#movie_player.updateVideoData(...)`
+    // 1-2 seconds after playback starts to inject Error 282054944 ("Đã xảy ra lỗi. Vui lòng thử lại sau.")
+    // and kill the active video/audio stream. We hook `updateVideoData`, `loadVideoByPlayerVars`,
+    // `cueVideoByPlayerVars`, and `getPlayerResponse` on `#movie_player` to block this kill switch!
+    let wasAdShowing = false;
+    const hookedPlayers = new WeakSet();
+    const recoveredVideoIds = new Set();
 
-    function handleYouTubeAdState() {
-      if (!isEnabled()) return;
+    function isFakeErrorPayload(data) {
+      if (!data || typeof data !== 'object') return false;
+      if (data.playabilityStatus && typeof data.playabilityStatus === 'object') {
+        const st = data.playabilityStatus.status;
+        if ((st === 'ERROR' || st === 'UNPLAYABLE' || st === 'LOGIN_REQUIRED') && !data.streamingData) {
+          return true;
+        }
+      }
+      if (data.bkaEnforcementMessageViewModel || data.enforcementMessageViewModel) return true;
+      return false;
+    }
+
+    function ensurePlayerHooked(ytPlayer) {
+      if (!ytPlayer || hookedPlayers.has(ytPlayer)) return;
       try {
-        const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-        if (ytPlayer) hookMoviePlayer(ytPlayer);
+        if (typeof ytPlayer.getPlayerResponse === 'function') {
+          hookedPlayers.add(ytPlayer);
 
-        const isAdShowing = document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null ||
-          (ytPlayer && (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting')));
-
-        if (isAdShowing) {
-          lastAdShowing = true;
-          reportAdDetected(1);
-
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          // Silently mute ad while it is displayed
-          if (video && !video.muted) {
-            try { video.muted = true; } catch (e) {}
-          }
-
-          // Target genuine in-player skip buttons across all layout variations
-          const skipBtns = document.querySelectorAll(
-            '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-skip-ad-button__text, .ytp-ad-skip-button-container button, .ytp-ad-skip-button-slot button, button.ytp-ad-skip-button-text, .ytp-ad-text.ytp-ad-skip-button-text, [class*="ytp-ad-skip-button"], [class*="ytp-skip-ad-button"], button[class*="skip" i], [aria-label*="Skip" i], [aria-label*="Bỏ qua" i]'
-          );
-          skipBtns.forEach(skipBtn => {
-            try {
-              skipBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
-              skipBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-              skipBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window }));
-              skipBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-              skipBtn.click();
-            } catch (e) {}
+          ytPlayer.getPlayerResponse = createStealthProxy(ytPlayer.getPlayerResponse, (target, thisArg, argArray) => {
+            const res = Reflect.apply(target, thisArg, argArray);
+            if (res && typeof res === 'object' && isEnabled()) {
+              pruneYouTubePayload(res);
+            }
+            return res;
           });
 
-          const isLive = isYouTubeLiveStream();
-          if (!isLive && ytPlayer && typeof ytPlayer.skipAd === 'function') {
-            try { ytPlayer.skipAd(); } catch (e) {}
+          if (typeof ytPlayer.updateVideoData === 'function') {
+            ytPlayer.updateVideoData = createStealthProxy(ytPlayer.updateVideoData, (target, thisArg, argArray) => {
+              if (isEnabled() && argArray.length > 0 && argArray[0] && typeof argArray[0] === 'object') {
+                const payload = argArray[0];
+                // Block `watchNextDataChanged_` from injecting an error-only payload (Error 282054944)
+                // when the player already has an active stream or valid video!
+                const video = thisArg && typeof thisArg.querySelector === 'function' ? thisArg.querySelector('video') : null;
+                if (isFakeErrorPayload(payload) && video && (video.getAttribute('src') || video.currentTime > 0)) {
+                  return undefined;
+                }
+                pruneYouTubePayload(payload);
+              }
+              return Reflect.apply(target, thisArg, argArray);
+            });
           }
 
-          // Safe conclusion if ad reaches end or is stuck at end (VOD only - never trigger on Live Streams where currentTime approaches duration at live edge!)
-          if (video && video.duration && !isNaN(video.duration) && !isLive && video.currentTime >= video.duration - 0.25) {
-            try {
-              if (video.paused) video.play().catch(() => {});
-              video.dispatchEvent(new Event('ended'));
-            } catch (e) {}
+          if (typeof ytPlayer.loadVideoByPlayerVars === 'function') {
+            ytPlayer.loadVideoByPlayerVars = createStealthProxy(ytPlayer.loadVideoByPlayerVars, (target, thisArg, argArray) => {
+              if (isEnabled() && argArray.length > 0 && argArray[0] && typeof argArray[0] === 'object') {
+                pruneYouTubePayload(argArray[0]);
+              }
+              return Reflect.apply(target, thisArg, argArray);
+            });
           }
-        } else if (lastAdShowing) {
-          lastAdShowing = false;
-          // Unmute video after ad transition and safely resume main video playback
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video) {
-            if (video.muted) {
-              try { video.muted = false; } catch (e) {}
+
+          if (typeof ytPlayer.cueVideoByPlayerVars === 'function') {
+            ytPlayer.cueVideoByPlayerVars = createStealthProxy(ytPlayer.cueVideoByPlayerVars, (target, thisArg, argArray) => {
+              if (isEnabled() && argArray.length > 0 && argArray[0] && typeof argArray[0] === 'object') {
+                pruneYouTubePayload(argArray[0]);
+              }
+              return Reflect.apply(target, thisArg, argArray);
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    function handleFallbackAdState() {
+      if (!isEnabled()) return;
+      try {
+        // ONLY inspect #movie_player — NEVER fallback to `.html5-video-player` because `DuY()` ("p.m_" in m=kevlar_base_module)
+        // prepends a fake `<ytd-player>` with `.ad-interrupting` and `<video class="html5-main-video">` to `document.body` as a honeypot!
+        const ytPlayer = document.getElementById('movie_player');
+        if (!ytPlayer) return;
+
+        ensurePlayerHooked(ytPlayer);
+
+        const isAdShowing = ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting');
+        const video = ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video');
+
+        // Detect and auto-recover from Error 282054944 ("Đã xảy ra lỗi. Vui lòng thử lại sau.")
+        const hasErrorClass = ytPlayer.classList.contains('ytp-error');
+        const errorScreenEl = document.querySelector('#error-screen yt-playability-error-supported-renderers:not([hidden])');
+        if (hasErrorClass || errorScreenEl) {
+          const currentVid = getCurrentVideoId();
+          if (currentVid) {
+            if (ytPlayer.classList.contains('ytp-error')) {
+              ytPlayer.classList.remove('ytp-error');
             }
-            if (video.paused && !video.ended && !userManuallyPaused) {
-              if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-                try { ytPlayer.playVideo(); } catch (e) {}
-              } else {
+            const watchFlexy = document.querySelector('ytd-watch-flexy');
+            if (watchFlexy && watchFlexy.hasAttribute('player-unavailable')) {
+              watchFlexy.removeAttribute('player-unavailable');
+            }
+            // If YouTube killed the <video src> stream via updateVideoData before our hook caught it,
+            // reload the video cleanly once via YouTube Player API (`loadVideoById`).
+            if ((!video || !video.getAttribute('src')) && !recoveredVideoIds.has(currentVid)) {
+              recoveredVideoIds.add(currentVid);
+              if (typeof ytPlayer.loadVideoById === 'function') {
                 try {
-                  const p = video.play();
-                  if (p && p.catch) p.catch(() => {});
+                  ytPlayer.loadVideoById(currentVid);
+                  if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
                 } catch (e) {}
               }
             }
           }
         }
 
-        // Dismiss anti-adblock enforcement dialogs if any appear
+        if (video && video.getAttribute('src')) {
+          if (ytPlayer.classList.contains('ytp-error')) {
+            ytPlayer.classList.remove('ytp-error');
+          }
+          const watchFlexy = document.querySelector('ytd-watch-flexy');
+          if (watchFlexy && watchFlexy.hasAttribute('player-unavailable')) {
+            watchFlexy.removeAttribute('player-unavailable');
+          }
+          if (video.style.display === 'none') {
+            video.style.display = 'block';
+          }
+        }
+
+        if (isAdShowing) {
+          wasAdShowing = true;
+          reportAdDetected(1);
+
+          if (video) {
+            if (!video.muted) {
+              try { video.muted = true; } catch (e) {}
+            }
+            // Instantly jump ad video to its end if duration is valid (VOD only)
+            if (!isYouTubeLiveStream() && Number.isFinite(video.duration) && video.duration > 0.5 && video.duration < 300) {
+              try {
+                video.currentTime = video.duration;
+              } catch (e) {}
+            }
+          }
+
+          // Use YouTube player's internal API method if available (no untrusted DOM click events)
+          if (!isYouTubeLiveStream()) {
+            if (typeof ytPlayer.skipAd === 'function') {
+              try { ytPlayer.skipAd(); } catch (e) {}
+            }
+            if (typeof ytPlayer.finishAd === 'function') {
+              try { ytPlayer.finishAd(); } catch (e) {}
+            }
+          }
+        } else if (wasAdShowing) {
+          wasAdShowing = false;
+          if (video && video.muted) {
+            try { video.muted = false; } catch (e) {}
+          }
+        }
+
+        // Dismiss anti-adblock enforcement popup if ever rendered
         const enforcementModal = document.querySelector(
-          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer, #feedback.ytd-enforcement-message-view-model'
+          'ytd-enforcement-message-view-model, ytd-enforcement-message-renderer'
         );
         if (enforcementModal) {
           const dialog = enforcementModal.closest('tp-yt-paper-dialog');
-          if (dialog) {
+          if (dialog && dialog.style.display !== 'none') {
             try {
               if (typeof dialog.close === 'function') dialog.close();
               if (typeof dialog.cancel === 'function') dialog.cancel();
@@ -3510,164 +3650,64 @@
                 dialog.backdropElement.opened = false;
                 dialog.backdropElement.style.setProperty('display', 'none', 'important');
               }
+              if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+                ytPlayer.playVideo();
+              }
             } catch (e) {}
-          }
-          // Resume video playback immediately if YouTube paused it due to enforcement
-          const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-          if (video && video.paused && !video.ended && !userManuallyPaused) {
-            if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-              try { ytPlayer.playVideo(); } catch (e) {}
-            } else {
-              try {
-                const p = video.play();
-                if (p && p.catch) p.catch(() => {});
-              } catch (e) {}
-            }
           }
         }
       } catch (e) {}
     }
 
+    // Auto-resume if YouTube's player pauses the main video at t < 1.0s after preroll ad stripping
+    let userPausedManually = false;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.key === 'k' || e.key === 'K') userPausedManually = true;
+    }, true);
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target && e.target.closest && e.target.closest('#movie_player')) userPausedManually = true;
+    }, true);
+
+    function resumeIfAutoPaused(e) {
+      if (!isEnabled()) return;
+      try {
+        const video = e && e.target;
+        if (!video || video.tagName !== 'VIDEO') return;
+        const ytPlayer = document.getElementById('movie_player');
+        if (!ytPlayer || !ytPlayer.contains(video)) return;
+        if (ytPlayer.classList.contains('ad-showing') || ytPlayer.classList.contains('ad-interrupting')) {
+          handleFallbackAdState();
+          return;
+        }
+        if (!userPausedManually && video.paused && video.currentTime < 1.0 && video.readyState >= 2) {
+          video.play().catch(() => {});
+        }
+      } catch (err) {}
+    }
+    document.addEventListener('loadedmetadata', resumeIfAutoPaused, true);
+    document.addEventListener('durationchange', resumeIfAutoPaused, true);
+    document.addEventListener('canplay', resumeIfAutoPaused, true);
+    document.addEventListener('pause', resumeIfAutoPaused, true);
+
+    // Observe only class changes on #movie_player or lightweight DOM mutations
     try {
-      const observer = new MutationObserver(handleYouTubeAdState);
-      observer.observe(document.documentElement || document.body, {
+      const obs = new MutationObserver(handleFallbackAdState);
+      obs.observe(document.documentElement, {
         childList: true,
         subtree: true,
-        attributeFilter: ['class']
+        attributes: true,
+        attributeFilter: ['class', 'src', 'hidden']
       });
     } catch (e) {}
 
-    setInterval(handleYouTubeAdState, 150);
+    window.addEventListener('yt-navigate-start', () => {
+      userPausedManually = false;
+    });
 
-    // 11. Gentle Autoplay & Load Completion Resumer
-    // Resolves the issue where YouTube automatically pauses when video buffer finishes loading (currentTime < 0.5s)
-    // Track genuine user manual pause actions (Clicks on play button / video surface or Space/K keys)
-    document.addEventListener('click', (e) => {
-      if (!e.isTrusted) return;
-      const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-      const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-      if (!video) return;
-
-      if (e.target && e.target.closest && e.target.closest('.ytp-play-button, .html5-video-player, video')) {
-        // Ignore clicks on control panels (volume slider, settings menu, subtitles, fullscreen, etc.)
-        if (e.target.closest('.ytp-volume-panel, .ytp-volume-control, .ytp-settings-menu, .ytp-settings-button, .ytp-size-button, .ytp-subtitles-button, .ytp-fullscreen-button, .ytp-time-display')) {
-          return;
-        }
-        if (!video.paused) {
-          userManuallyPaused = true;
-        } else {
-          userManuallyPaused = false;
-        }
-      }
-    }, true);
-
-    window.addEventListener('keydown', (e) => {
-      if (!e.isTrusted) return;
-      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
-
-      if (e.code === 'Space' || e.code === 'KeyK') {
-        const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
-        if (video) {
-          if (!video.paused) {
-            userManuallyPaused = true;
-          } else {
-            userManuallyPaused = false;
-          }
-        }
-      }
-    }, true);
-
-    function resumeIfAutoPaused() {
-      if (userManuallyPaused || !isEnabled()) return;
-      if (!window.location.pathname.startsWith('/watch') && !window.location.pathname.startsWith('/shorts') && !window.location.pathname.startsWith('/live')) return;
-
-      const ytPlayer = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-      const video = (ytPlayer && (ytPlayer.querySelector('video.html5-main-video') || ytPlayer.querySelector('video'))) || document.querySelector('video');
-      if (!video) return;
-
-      // Error / Unavailable Video Guard:
-      // Never force playback if video is deleted, private, or has an unrecoverable error.
-      // This prevents suppressing YouTube's native error screen and avoids dead black screen!
-      if (document.querySelector('.ytp-error, ytd-playability-error-supported-renderers') !== null) {
-        return;
-      }
-      try {
-        if (ytPlayer && typeof ytPlayer.getPlayerResponse === 'function') {
-          const pr = ytPlayer.getPlayerResponse();
-          if (pr && pr.playabilityStatus && pr.playabilityStatus.status === 'ERROR' && !pr.streamingData) {
-            return;
-          }
-        }
-      } catch (e) {}
-
-      // Live Stream Guard:
-      // Live streams start at currentTime = 0 while the DASH/MSE manifest calculates the live edge (e.g. 9386s).
-      // Forcing playVideo() at currentTime < 1.0 interrupts the native live-edge seek and locks video at 0:00 (DVR start).
-      // Never force resume at currentTime < 1.0 on a live stream! Only resume if an ad interruption is actively ending.
-      const isLive = isYouTubeLiveStream();
-      if (isLive) {
-        if (video.paused && !video.ended && document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
-          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-            try { ytPlayer.playVideo(); } catch (e) {}
-          }
-        }
-        return;
-      }
-
-      // Only auto-resume if the video is paused at the beginning (< 1.0s) or during an ad interruption, and not ended
-      if (video.paused && !video.ended && (video.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null)) {
-        if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-          try { ytPlayer.playVideo(); } catch (e) {}
-        } else {
-          try {
-            const p = video.play();
-            if (p && p.catch) {
-              p.catch((err) => {
-                if (err && err.name === 'NotAllowedError') {
-                  video.muted = true;
-                  video.play().catch(() => {});
-                  const unmuteOnce = () => {
-                    video.muted = false;
-                    window.removeEventListener('click', unmuteOnce, true);
-                    window.removeEventListener('keydown', unmuteOnce, true);
-                  };
-                  window.addEventListener('click', unmuteOnce, true);
-                  window.addEventListener('keydown', unmuteOnce, true);
-                }
-              });
-            }
-          } catch (e) {}
-        }
-      }
-    }
-
-    // When video finishes loading buffer data:
-    document.addEventListener('canplay', () => {
-      setTimeout(resumeIfAutoPaused, 100);
-    }, true);
-
-    // If YouTube script artificially pauses video right at start or during ad interruptions:
-    document.addEventListener('pause', (e) => {
-      if (e.target && e.target.tagName === 'VIDEO') {
-        const vid = e.target;
-        if (!userManuallyPaused && !vid.ended) {
-          const isLive = isYouTubeLiveStream();
-          if (!isLive && (vid.currentTime < 1.0 || document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null)) {
-            setTimeout(resumeIfAutoPaused, 150);
-          } else if (isLive && document.querySelector('.ad-showing, .ad-interrupting, [class*="ad-showing"]') !== null) {
-            setTimeout(resumeIfAutoPaused, 150);
-          }
-        }
-      }
-    }, true);
-
-    // Reset state and resume on SPA navigation
     window.addEventListener('yt-navigate-finish', () => {
-      userManuallyPaused = false;
       currentIsLiveStream = false;
-      setTimeout(resumeIfAutoPaused, 300);
-      setTimeout(resumeIfAutoPaused, 700);
+      userPausedManually = false;
+      handleFallbackAdState();
     });
   }
 

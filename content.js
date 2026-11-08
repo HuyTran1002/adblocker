@@ -654,9 +654,23 @@ function injectYouTubeAdBlockCSS() {
       overflow-y: scroll !important;
     }
 
-    /* 2. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!) */
-    ytd-enforcement-message-renderer,
+    /* 2. Hide anti-adblock enforcement dialogs, backdrops & interruption toasts (NEVER hide ytd-popup-container or ytd-miniplayer!)
+          NOTE: NEVER set display:none directly on ytd-enforcement-message-view-model because Chs() ("p.h_" in m=kevlar_base_module)
+          checks getComputedStyle(document.getElementsByTagName("ytd-enforcement-message-view-model")[0]).display === "none"! */
     ytd-enforcement-message-view-model,
+    ytd-enforcement-message-renderer {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      max-height: 0 !important;
+      max-width: 0 !important;
+      overflow: hidden !important;
+      position: fixed !important;
+      top: -9999px !important;
+      left: -9999px !important;
+      z-index: -9999 !important;
+    }
+
     snackbar-view-model:has(a[href*="support.google.com"]),
     snackbar-view-model:has(a[href*="answer"]),
     snackbar-view-model:has(#feedback),
@@ -745,6 +759,37 @@ function injectYouTubeAdBlockCSS() {
       visibility: hidden !important;
       pointer-events: none !important;
     }
+
+    /* 3. Prevent fake anti-adblock error screen (Error 282054944 "Đã xảy ra lỗi. Vui lòng thử lại sau")
+          from covering #movie_player or hiding the video container! */
+    #error-screen:has(ytd-enforcement-message-view-model),
+    #error-screen:has(ytd-enforcement-message-renderer),
+    #error-screen:has(a[href*="support.google.com"]),
+    yt-playability-error-supported-renderers:has(a[href*="support.google.com"]),
+    yt-playability-error-supported-renderers:has(ytd-enforcement-message-view-model),
+    ytd-watch-flexy:has(#movie_player video[src]) #error-screen,
+    ytd-watch-flexy:has(#movie_player video[src]) #player-error-message-container,
+    ytd-watch-flexy:has(#movie_player video[src]) yt-playability-error-supported-renderers,
+    #movie_player:has(video[src]) .ytp-error {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      z-index: -1 !important;
+    }
+
+    ytd-watch-flexy:has(#movie_player video[src]) #player-container-outer,
+    ytd-watch-flexy:has(#movie_player video[src]) #player-container-inner,
+    ytd-watch-flexy:has(#movie_player video[src]) #player-container,
+    ytd-watch-flexy:has(#movie_player video[src]) #ytd-player,
+    ytd-watch-flexy:has(#movie_player video[src]) #container.ytd-player,
+    #movie_player:has(video[src]),
+    #movie_player:has(video[src]) .html5-video-container,
+    #movie_player video.html5-main-video[src] {
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
   `;
   (document.head || document.documentElement).appendChild(ytStyleElement);
 }
@@ -773,16 +818,25 @@ function updateEnabledState(enabled, disabledDomains) {
   currentEnabledState = newState;
   try {
     if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('__webshield_enabled__', newState ? 'true' : 'false');
-      sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(customWhitelistedDomains));
+      if (isYt) {
+        // Never leave extension keys in YouTube's sessionStorage where BotGuard can enumerate them
+        sessionStorage.removeItem('__webshield_enabled__');
+        sessionStorage.removeItem('__webshield_disabled_domains__');
+      } else {
+        sessionStorage.setItem('__webshield_enabled__', newState ? 'true' : 'false');
+        sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(customWhitelistedDomains));
+      }
     }
   } catch (e) {}
   if (!isYt && document.documentElement) {
     document.documentElement.setAttribute('data-anti-popunder-enabled', newState ? 'true' : 'false');
   }
   
-  // Broadcast state to main world (inject.js) via postMessage AND custom event
-  window.postMessage({ type: 'ANTI_POPUP_STATE_CHANGE', enabled: newState }, '*');
+  // Broadcast state to main world (inject.js)
+  // On YouTube, ONLY use CustomEvent (never window.postMessage) to prevent YouTube telemetry listeners from detecting extension messages
+  if (!isYt) {
+    window.postMessage({ type: 'ANTI_POPUP_STATE_CHANGE', enabled: newState }, '*');
+  }
   try {
     document.dispatchEvent(new CustomEvent('anti-popup-state-change', { detail: { enabled: newState } }));
   } catch (e) {}
@@ -845,7 +899,28 @@ if (currentEnabledState) {
 
     }
 
-    // Listen for blocking events from inject.js (via window.postMessage)
+    // Stealth capture-phase CustomEvent bridge for YouTube (prevents window.postMessage leakage to page telemetry)
+    document.addEventListener('__ws_internal_sync__', function onInternalSync(e) {
+      if (!isContextValid()) {
+        document.removeEventListener('__ws_internal_sync__', onInternalSync, true);
+        return;
+      }
+      try {
+        e.stopImmediatePropagation();
+      } catch (err) {}
+      const detail = e && e.detail;
+      if (!detail) return;
+      if (detail.type === 'REQUEST_STATE') {
+        try {
+          document.dispatchEvent(new CustomEvent('anti-popup-state-change', { detail: { enabled: currentEnabledState } }));
+        } catch (err) {}
+      } else if (detail.type === 'BLOCKED') {
+        if (!currentEnabledState) return;
+        reportAdBlocked(detail.url, detail.reason, detail.count);
+      }
+    }, true);
+
+    // Listen for blocking events from inject.js on non-YouTube sites (via window.postMessage)
     // Self-removing listener: stops working silently if extension context dies
     function onInjectMessage(event) {
       // If extension context has died, remove this listener and stop
@@ -858,7 +933,9 @@ if (currentEnabledState) {
 
       // Handle handshake request
       if (event.data.type === 'ANTI_POPUP_REQUEST_STATE') {
-        window.postMessage({ type: 'ANTI_POPUP_STATE_CHANGE', enabled: currentEnabledState }, '*');
+        if (!isYtDomain) {
+          window.postMessage({ type: 'ANTI_POPUP_STATE_CHANGE', enabled: currentEnabledState }, '*');
+        }
         return;
       }
 
@@ -868,7 +945,9 @@ if (currentEnabledState) {
         reportAdBlocked(event.data.url, event.data.reason, event.data.count);
       }
     }
-    window.addEventListener('message', onInjectMessage);
+    if (!isYtDomain) {
+      window.addEventListener('message', onInjectMessage);
+    }
 
     // Clickjacking protection disabled in content.js to avoid false positives
     // inject.js now handles popup/redirect blocking with window.open override

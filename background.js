@@ -540,35 +540,49 @@ function isSameBaseDomain(d1, d2) {
   return cd1.endsWith('.' + cd2) || cd2.endsWith('.' + cd1);
 }
 
+function safeSetBadgeText(details) {
+  if (!chrome.action || !chrome.action.setBadgeText) return;
+  try {
+    const p = chrome.action.setBadgeText(details, () => {
+      const _ = chrome.runtime && chrome.runtime.lastError;
+    });
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (e) {}
+}
+
+function safeSetBadgeBg(details) {
+  if (!chrome.action || !chrome.action.setBadgeBackgroundColor) return;
+  try {
+    const p = chrome.action.setBadgeBackgroundColor(details, () => {
+      const _ = chrome.runtime && chrome.runtime.lastError;
+    });
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (e) {}
+}
+
 // Update extension badge text safely for a specific tab
 function updateTabBadge(tabId, count) {
   if (!chrome.action || !chrome.action.setBadgeText) return;
   if (!inMemoryEnabled) {
     if (tabId) {
-      chrome.action.setBadgeText({ tabId: tabId, text: "OFF" });
-      if (chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: "#64748b" });
-      }
+      safeSetBadgeText({ tabId: tabId, text: "OFF" });
+      safeSetBadgeBg({ tabId: tabId, color: "#64748b" });
     } else {
-      chrome.action.setBadgeText({ text: "OFF" });
-      if (chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
-      }
+      safeSetBadgeText({ text: "OFF" });
+      safeSetBadgeBg({ color: "#64748b" });
     }
     return;
   }
 
   if (tabId) {
     if (count > 0) {
-      chrome.action.setBadgeText({ tabId: tabId, text: count.toString() });
-      if (chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: "#6366f1" });
-      }
+      safeSetBadgeText({ tabId: tabId, text: count.toString() });
+      safeSetBadgeBg({ tabId: tabId, color: "#6366f1" });
     } else {
-      chrome.action.setBadgeText({ tabId: tabId, text: "" });
+      safeSetBadgeText({ tabId: tabId, text: "" });
     }
   } else {
-    chrome.action.setBadgeText({ text: "" });
+    safeSetBadgeText({ text: "" });
   }
 }
 
@@ -649,16 +663,10 @@ function ensureStateInitialized() {
       // Synchronize DNR rules and badge icon
       syncDnrState(inMemoryEnabled, inMemoryDisabledDomains);
       if (!inMemoryEnabled) {
-        if (chrome.action && chrome.action.setBadgeText) {
-          chrome.action.setBadgeText({ text: "OFF" });
-          if (chrome.action.setBadgeBackgroundColor) {
-            chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
-          }
-        }
+        safeSetBadgeText({ text: "OFF" });
+        safeSetBadgeBg({ color: "#64748b" });
       } else {
-        if (chrome.action && chrome.action.setBadgeBackgroundColor) {
-          chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
-        }
+        safeSetBadgeBg({ color: "#6366f1" });
       }
     });
   }
@@ -938,17 +946,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       inMemoryEnabled = changes.enabled.newValue !== false;
       dnrNeedsUpdate = true;
       if (!inMemoryEnabled) {
-        if (chrome.action && chrome.action.setBadgeText) {
-          chrome.action.setBadgeText({ text: "OFF" });
-          if (chrome.action.setBadgeBackgroundColor) {
-            chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
-          }
-        }
+        safeSetBadgeText({ text: "OFF" });
+        safeSetBadgeBg({ color: "#64748b" });
       } else {
-        if (chrome.action && chrome.action.setBadgeBackgroundColor) {
-          chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
-        }
-        updateBadge(inMemoryBlockedCount);
+        safeSetBadgeBg({ color: "#6366f1" });
+        safeSetBadgeText({ text: "" });
       }
     }
 
@@ -1112,17 +1114,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.set({ enabled: isEnabled });
     syncDnrState(isEnabled, inMemoryDisabledDomains);
     if (!isEnabled) {
-      if (chrome.action && chrome.action.setBadgeText) {
-        chrome.action.setBadgeText({ text: "OFF" });
-        if (chrome.action.setBadgeBackgroundColor) {
-          chrome.action.setBadgeBackgroundColor({ color: "#64748b" });
-        }
-      }
+      safeSetBadgeText({ text: "OFF" });
+      safeSetBadgeBg({ color: "#64748b" });
     } else {
-      if (chrome.action && chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
-      }
-      chrome.action.setBadgeText({ text: "" });
+      safeSetBadgeBg({ color: "#6366f1" });
+      safeSetBadgeText({ text: "" });
       if (chrome.tabs && chrome.tabs.query) {
         chrome.tabs.query({}, (tabs) => {
           (tabs || []).forEach(t => {
