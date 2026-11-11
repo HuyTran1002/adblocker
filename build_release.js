@@ -54,6 +54,11 @@ function buildPackage(platform) {
 
 const rootManifest = JSON.parse(fs.readFileSync(path.join(SRC, 'manifest.json'), 'utf8'));
 console.log(`Building WebShield v${rootManifest.version} packages for Chrome and Firefox...\n`);
+for (const file of fs.readdirSync(SRC)) {
+  if (/^webshield-v[\d.]+-(chrome|firefox)\.zip$/i.test(file)) {
+    try { fs.unlinkSync(path.join(SRC, file)); } catch (e) {}
+  }
+}
 buildPackage('chrome');
 buildPackage('firefox');
 console.log('\nPackaging complete!');

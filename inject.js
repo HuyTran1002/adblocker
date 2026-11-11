@@ -2992,13 +2992,6 @@
       'no_ads'
     ];
 
-    // Valid BY_-encoded Protobuf `u5o` (`Ch4KGHBsYXlhYmlsaXR5U3RhdHVzLnN0YXR1cxICT0s`) containing:
-    //   aqM { path: "playabilityStatus.status", expectedValue: "OK" }
-    // When `R97(E)` in `m=kevlar_base_module` decodes `responseContext.mainAppWebResponseContext.trackingParam`,
-    // it checks `E.playabilityStatus.status === "OK"`, gets a 100% match, increments "SUCCESS", returns `1`,
-    // and NEVER triggers Error `282054944` or sends `282054944_p` mismatch telemetry to YouTube's server!
-    const CLEAN_TRACKING_PARAM = 'pJmLIBxBLzYRP2nkqBABWmAMFPcG71qBxGv7eK2u3Rm';
-
     // Detect YouTube's client-side anti-adblock honeypot payloads (`dus()`, `A1s()`, `ZvY` in `m=kevlar_base_module`)
     // NEVER modify or prune honeypot objects so `_.a6H()` (JSON.parse), `ujs()` (fetch data: URI),
     // `_.y1Y()` (new Response().json()), and `_.WUu()` always compare `w5(parsed, expected) === true`!
@@ -3140,19 +3133,15 @@
           delete val.playabilityStatus.errorScreen;
           delete val.playabilityStatus.messages;
         }
-        if (val.playabilityStatus.status === 'OK' &&
-            val.responseContext &&
-            val.responseContext.mainAppWebResponseContext &&
-            typeof val.responseContext.mainAppWebResponseContext.trackingParam === 'string') {
-          val.responseContext.mainAppWebResponseContext.trackingParam = CLEAN_TRACKING_PARAM;
-        }
         guardPlayerResponseAgainstCAv(val);
       }
 
+      const hasRealVideoAds = Boolean(val.adPlacements || val.playerAds || val.adSlots || val.adBreakParams || val.adSlotsPreroll);
       for (let i = 0; i < AD_KEYS_TO_DELETE.length; i++) {
         const key = AD_KEYS_TO_DELETE[i];
         if (key in val) {
           if (isLive && key === 'adBreakHeartbeatParams') continue;
+          if (key === 'adBreakHeartbeatParams' && !hasRealVideoAds && val[key] === 'Q0FBJTNE') continue;
           if (Array.isArray(val[key]) && val[key].length > 0) {
             adsRemoved += val[key].length;
           } else {
@@ -3160,6 +3149,32 @@
           }
           delete val[key];
         }
+      }
+
+      // Build-independent `y57(E, k, d)`, `Bd7(E, k)`, & `m8o` (`tuW`) bypass across all `m=kevlar_base_module` builds:
+      // 1. Keep `trackingParam` 100% untouched so clean videos and Shorts return `R97(k) === 1` ("SUCCESS") on all builds.
+      // 2. When ads are removed (`adsRemoved > 0`) from a `playerResponse`, ensure `bkaEnforcementMessageViewModel` has:
+      //    - `displayType: "ENFORCEMENT_MESSAGE_VIEW_MODEL_DISPLAY_TYPE_POPUP"` (passes `y57` when `R97(k) === 2` and skips `Bd7`/`J1u`)
+      //    - `isVisible: false` and no `impressionEndpoints` (in `m8o.prototype.enqueue()`, `this.renderer.isVisible === !1` makes
+      //      `isCounterfactual()` return `true` and `getCounterfactualData()` return `undefined`, immediately returning BEFORE
+      //      `doEnqueue()` -> `tuW()` can call `E.JSC$17031_playerManager.pause()` 1s into playback!)
+      if (adsRemoved > 0 && val.playabilityStatus && typeof val.playabilityStatus === 'object' && (val.streamingData || val.videoDetails)) {
+        if (!val.auxiliaryUi || typeof val.auxiliaryUi !== 'object') {
+          val.auxiliaryUi = {};
+        }
+        if (!val.auxiliaryUi.messageRenderers || typeof val.auxiliaryUi.messageRenderers !== 'object') {
+          val.auxiliaryUi.messageRenderers = {};
+        }
+        if (!val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel) {
+          val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel = {
+            displayType: 'ENFORCEMENT_MESSAGE_VIEW_MODEL_DISPLAY_TYPE_POPUP',
+            isVisible: false
+          };
+        }
+      }
+      if (val.auxiliaryUi && val.auxiliaryUi.messageRenderers && val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel) {
+        val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel.isVisible = false;
+        delete val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel.impressionEndpoints;
       }
 
       // Remove remarketing / conversion ad-tracking URLs from playbackTracking so base.js
@@ -3204,15 +3219,15 @@
         pruneYouTubePayload(val.raw_player_response, depth + 1, isLive);
       }
 
-      // Since `trackingParam` is now re-signed with `CLEAN_TRACKING_PARAM` (`playabilityStatus.status === "OK"`),
-      // `R97(k)` always returns `1` ("SUCCESS"), so we can safely remove `bkaEnforcementMessageViewModel`
-      // so `Bd7(E, k)` (`J1u(k)`) never sees an enforcement model!
-      if (val.auxiliaryUi && val.auxiliaryUi.messageRenderers && val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel) {
-        delete val.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel;
-        adsRemoved++;
-      }
-      if (val.bkaEnforcementMessageViewModel) {
-        delete val.bkaEnforcementMessageViewModel;
+      if (val.openPopupAction && val.openPopupAction.popup && typeof val.openPopupAction.popup === 'object') {
+        if (val.openPopupAction.popup.bkaEnforcementMessageViewModel) {
+          delete val.openPopupAction.popup.bkaEnforcementMessageViewModel;
+          adsRemoved++;
+        }
+        if (val.openPopupAction.popup.enforcementMessageViewModel) {
+          delete val.openPopupAction.popup.enforcementMessageViewModel;
+          adsRemoved++;
+        }
       }
       if (val.enforcementMessageViewModel) {
         delete val.enforcementMessageViewModel;
@@ -3224,8 +3239,8 @@
 
       for (const k in val) {
         if (Object.prototype.hasOwnProperty.call(val, k)) {
-          // Never traverse into heavy media stream URLs, storyboards, or captions
-          if (k === 'streamingData' || k === 'storyboards' || k === 'captions') continue;
+          // Never traverse into heavy media stream URLs, storyboards, captions, or auxiliaryUi
+          if (k === 'streamingData' || k === 'storyboards' || k === 'captions' || k === 'auxiliaryUi') continue;
           const child = val[k];
           if (child && typeof child === 'object') {
             pruneYouTubePayload(child, depth + 1, isLive);
@@ -3236,7 +3251,7 @@
     }
 
     const origJSONParse = JSON.parse;
-    const AD_JSON_REGEX = /"adPlacements"|"playerAds"|"adSlots"|"adBreakParams"|"adBreakHeartbeatParams"|"bkaEnforcementMessageViewModel"|"enforcementMessageViewModel"|"errorScreen"|"playerErrorMessageRenderer"|"mastheadAdRenderer"/;
+    const AD_JSON_REGEX = /"playabilityStatus"|"adPlacements"|"playerAds"|"adSlots"|"adBreakParams"|"adBreakHeartbeatParams"|"bkaEnforcementMessageViewModel"|"enforcementMessageViewModel"|"errorScreen"|"playerErrorMessageRenderer"|"mastheadAdRenderer"/;
     const AD_BAIT_URL_REGEX = /doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google|\/pagead\/|\/ptracking|\/api\/stats\/ads/i;
     const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
@@ -3552,6 +3567,11 @@
     function handleFallbackAdState() {
       if (!isEnabled()) return;
       try {
+        const shortsPlayer = document.getElementById('shorts-player');
+        if (shortsPlayer) {
+          ensurePlayerHooked(shortsPlayer);
+        }
+
         // ONLY inspect #movie_player — NEVER fallback to `.html5-video-player` because `DuY()` ("p.m_" in m=kevlar_base_module)
         // prepends a fake `<ytd-player>` with `.ad-interrupting` and `<video class="html5-main-video">` to `document.body` as a honeypot!
         const ytPlayer = document.getElementById('movie_player');

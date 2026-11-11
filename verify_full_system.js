@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.0');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.1');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.2.0', manifest.version === '5.2.0');
+check('Version is 5.2.1', manifest.version === '5.2.1');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -65,8 +65,10 @@ check('True ES6 Proxy Stealth Wrapper (createStealthProxy) cloaks hooked functio
   injectJs.includes('const proxyToTarget = new WeakMap();') && injectJs.includes('function createStealthProxy('));
 check('Zero prototype pollution: Object.prototype.adPlacements is NOT defined (prevents TypeError crash)',
   !injectJs.includes("Object.defineProperty(Object.prototype, 'adPlacements'"));
-check('CLEAN_TRACKING_PARAM re-signs trackingParam Protobuf to prevent Error 282054944 & 282054944_p telemetry',
-  injectJs.includes("const CLEAN_TRACKING_PARAM = 'pJmLIBxBLzYRP2nkqBABWmAMFPcG71qBxGv7eK2u3Rm';"));
+check('Build-independent y57 & Bd7 bypass preserves trackingParam (fixes Shorts across all m=kevlar_base_module builds) and sets POPUP displayType when ads are stripped',
+  !injectJs.includes('CLEAN_TRACKING_PARAM') &&
+  injectJs.includes("displayType: 'ENFORCEMENT_MESSAGE_VIEW_MODEL_DISPLAY_TYPE_POPUP'") &&
+  injectJs.includes("document.getElementById('shorts-player')"));
 check('isHoneypotPayload detects dus() and ZvY client-side honeypots without false-positives on real videos',
   injectJs.includes('function isHoneypotPayload(val)') &&
   injectJs.includes("val.videoDetails.title === 'Exploring the Outdoors'") &&
@@ -107,16 +109,16 @@ check('Overlaid play button kickstarter runs on bubbling phase without stopPropa
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.2.0 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.2.0</span>'));
+check('popup.html displays version v5.2.1 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.2.1</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.2.0-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.2.0-firefox.zip');
-check('webshield-v5.2.0-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.2.1-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.2.1-firefox.zip');
+check('webshield-v5.2.1-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.2.0-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.2.1-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 const { execSync } = require('child_process');
@@ -126,13 +128,13 @@ const readZipManifest = (zipPath) => {
 };
 
 const chromeManifest = readZipManifest(chromeZip);
-check('Chrome package manifest uses background.service_worker and version 5.2.0',
-  chromeManifest.version === '5.2.0' &&
+check('Chrome package manifest uses background.service_worker and version 5.2.1',
+  chromeManifest.version === '5.2.1' &&
   chromeManifest.background && chromeManifest.background.service_worker === 'background.js');
 
 const firefoxManifest = readZipManifest(firefoxZip);
-check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.0',
-  firefoxManifest.version === '5.2.0' &&
+check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.1',
+  firefoxManifest.version === '5.2.1' &&
   firefoxManifest.browser_specific_settings &&
   firefoxManifest.browser_specific_settings.gecko &&
   firefoxManifest.browser_specific_settings.gecko.id === 'anti-popunder@huytran1002' &&

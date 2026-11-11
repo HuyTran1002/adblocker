@@ -73,9 +73,10 @@ check(
 
 // 5. Error 282054944 & Honeypot Protection
 check(
-  '5.1 inject.js guards playabilityStatus & videoDetails against CAv() Error 282054944 overwrite',
+  '5.1 inject.js guards playabilityStatus & videoDetails against CAv() Error 282054944 overwrite and uses build-independent POPUP bypass',
   injectJs.includes('function guardPlayerResponseAgainstCAv(val)') &&
-  injectJs.includes('CLEAN_TRACKING_PARAM')
+  !injectJs.includes('CLEAN_TRACKING_PARAM') &&
+  injectJs.includes("displayType: 'ENFORCEMENT_MESSAGE_VIEW_MODEL_DISPLAY_TYPE_POPUP'")
 );
 
 check(
