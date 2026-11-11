@@ -372,6 +372,8 @@ const adSelectors = [
   'iframe[src*="splash.php"]', 'iframe[src*="syndication.exosrv"]',
   'iframe[src*="realsrv."]', 'iframe[src*="adxadserv."]',
   'iframe[src*="onclickmax."]', 'iframe[src*="eyebrowscrambledlater."]',
+  'iframe[src*="pemsrv"]', 'iframe[src*="exdynsrv"]', 'iframe[src*="mnaspm"]', 'iframe[src*="mayzaent"]',
+  '#SCSpotScript', '#custom_html-29',
   '#cboxOverlay', '#colorbox:has(iframe)',
   // KVS, Flowplayer & Tube in-player ad iframes & fallback panes
   '.fxPane', '#fxStartPane', '.fxPaneClose', '.fxPaneBody', '.fxFallback',
@@ -392,14 +394,18 @@ function injectAdBlockCSS() {
   // Do not inject generic ad blocking CSS on YouTube or whitelisted pages
   if (window.location.hostname.includes('youtube.com') || isCurrentPageWhitelisted()) return;
 
-  // In embedded player iframes (e.g. dooplayer.com), inject only targeted in-player ad overlay killer CSS
+  // In embedded player iframes (e.g. dooplayer.com, sexkbj.top / vidhide), inject only targeted in-player ad overlay killer CSS
   if (isEmbeddedPlayerFrame) {
     const playerStyle = document.createElement('style');
     playerStyle.id = 'anti-popunder-adblock-css';
     playerStyle.textContent = `
       div[data-cl-overlay], [data-cl-spot], [data-clocid],
       .vast_clickthrough_layer, .fxPane, #fxStartPane, .fxFallback,
-      ins.adsbyexoclick, ins[data-zoneid], [id^="atContainer-"] {
+      ins.adsbyexoclick, ins[data-zoneid], [id^="atContainer-"],
+      #adbd, .overdiv:not([class*="player"] *):not(video),
+      div.video_ad, div.video_ad_fadein, #over_player_msg,
+      body > div[style*="z-index: 2147483647"][style*="opacity: 0.01"],
+      body > div[style*="z-index:2147483647"][style*="opacity:0.01"] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;

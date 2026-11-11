@@ -2459,5 +2459,95 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 337,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*ev-player.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 338,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*/ad?type=*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 339,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "pemsrv.com",
+        "mnaspm.com",
+        "mayzaent.com",
+        "opoxv.com",
+        "exacdn.com",
+        "attirecideryeah.com",
+        "cacklegrievingtank.com",
+        "gigglemagnetismunaired.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "media",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 340,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*/smartpop/*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 341,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "*popunder1000.js*",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
   }
 ]

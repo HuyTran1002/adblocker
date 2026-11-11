@@ -299,24 +299,24 @@
 
   // Universal Clickjacking & Malicious Window-Capture Interceptor
   // Sites like xnhau.pub register window.addEventListener('click'/'mousedown', webGate, true)
-  // which hijacks trusted user clicks on the play button, invokes stopImmediatePropagation(),
-  // triggers window.open(), and dispatches an untrusted synthetic MouseEvent cancelled with preventDefault().
-  // We inspect capture listeners attached to window/document for known ad-hijacking patterns and neutralize them.
+  // or sexkbj.com registers popMagic / univresalP on document/window for click/blur.
+  // We inspect listeners attached to window/document/elements for known ad-hijacking patterns and neutralize them.
   try {
     const origAddEventListener = EventTarget.prototype.addEventListener;
     EventTarget.prototype.addEventListener = function(type, listener, options) {
-      if ((type === 'click' || type === 'mousedown' || type === 'pointerdown' || type === 'pointerup' || type === 'touchstart' || type === 'touchend') && listener && typeof listener === 'function') {
-        const isCapture = options === true || (typeof options === 'object' && options !== null && !!options.capture);
-        if (isCapture && (this === window || this === document || this === document.documentElement || this === document.body)) {
+      if ((type === 'click' || type === 'mousedown' || type === 'mouseup' || type === 'pointerdown' || type === 'pointerup' || type === 'touchstart' || type === 'touchend' || type === 'blur') && listener) {
+        const targetFn = typeof listener === 'function' ? listener : (listener && typeof listener.handleEvent === 'function' ? listener.handleEvent : null);
+        if (targetFn) {
           let fnStr = '';
-          try { fnStr = Function.prototype.toString.call(listener); } catch(e) {}
+          try { fnStr = Function.prototype.toString.call(targetFn); } catch(e) {}
           if (fnStr && (
             /lastPopunder|openUntil|playTap|adLink|__PPU_|TAG_ZONE|TAG_SRC|snvbchm|acquirecarded|badlandlisp/i.test(fnStr) ||
             /skipPopOnRightButtonClick|clicksSinceSessionStart|clicksSinceLastPpu|iOSChromeSwapPopunder|desktopPopunderEverywhere/i.test(fnStr) ||
             /\.gn\.forEach\s*\(\s*function/i.test(fnStr) ||
-            (/stopAll\.call|stopImmediatePropagation/i.test(fnStr) && /MouseEvent/i.test(fnStr) && /is-ad-visible/i.test(fnStr))
+            (/stopAll\.call|stopImmediatePropagation/i.test(fnStr) && /MouseEvent/i.test(fnStr) && /is-ad-visible/i.test(fnStr)) ||
+            /popMagic|isNativeAdTarget|venorShouldShow|puURLstrpcht|handlePopunder|puCountstrpcht|smartpop|mayzaent|mnaspm|pemsrv|exdynsrv/i.test(fnStr)
           )) {
-            console.log('[Anti Pop-Under] Blocked malicious capture click-hijacker listener:', type, listener.name || 'anonymous');
+            console.log('[Anti Pop-Under] Blocked malicious ad event listener:', type, targetFn.name || 'anonymous');
             return; // Drop the malicious listener completely!
           }
         }
@@ -750,6 +750,10 @@
             return origSetup.call(this, sanitizeJwOptions(options));
           };
         }
+        try {
+          inst.playAd = function () { return inst; };
+          inst.pauseAd = function () { return inst; };
+        } catch (e) {}
         if (typeof inst.on === 'function') {
           const autoSkip = function () {
             try {
@@ -940,10 +944,50 @@
         map: function () { return []; },
         slice: function () { return []; }
       });
-      ['_pop', '__htapop', 'exoOpts'].forEach(key => {
+      ['_pop', '__htapop', 'exoOpts', 'uas', 'direct_premium'].forEach(key => {
         try {
           Object.defineProperty(window, key, {
             get() { return dummyPopArray; },
+            set() {},
+            configurable: true
+          });
+        } catch (e) {}
+      });
+      ['pickDirect', 'createLayer'].forEach(fnName => {
+        try {
+          Object.defineProperty(window, fnName, {
+            get() { return function () {}; },
+            set() {},
+            configurable: true
+          });
+        } catch (e) {}
+      });
+      const dummyPopMagic = Object.freeze({
+        version: 12,
+        init: function () {},
+        preparePop: function () {},
+        preparePopWait: function () {},
+        addEventToElement: function () {},
+        addEvent: function () {},
+        shouldShow: function () { return false; },
+        venorShouldShow: function () { return false; },
+        methods: {
+          default: function () {},
+          chromeTab: function () {},
+          popup: function () {}
+        }
+      });
+      try {
+        Object.defineProperty(window, 'popMagic', {
+          get() { return dummyPopMagic; },
+          set() {},
+          configurable: true
+        });
+      } catch (e) {}
+      ['univresalP', 'handlePopunder'].forEach(fn => {
+        try {
+          Object.defineProperty(window, fn, {
+            get() { return function () {}; },
             set() {},
             configurable: true
           });
@@ -1008,7 +1052,8 @@
           'astronautlividlyreformer', 'src/jpm.js', 'src/jph.js',
           'visariomedia', 'xbetween', 'd13k7prax1yi04', 'magnific-popup', 'video-slider', 'ad-provider',
           'detectivefrozepriceless', 'hilltopads', 'clickadu', 'adxad', 'adtng', 'etahub',
-          'ethnicexpressions', 'deloplen', 'adtrue'
+          'ethnicexpressions', 'deloplen', 'adtrue', 'ev-player.js', 'reaveryreplan', 'earnvids.com/p.gif',
+          'pemsrv.com', 'opoxv.com', 'exacdn.com', 'attirecideryeah', 'cacklegrievingtank', 'gigglemagnetismunaired', 'popunder1000'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -1023,7 +1068,7 @@
           get: srcDescriptor.get,
           set: function (val) {
             if (typeof val === 'string' && isAdUrl(val) && isEnabled() && !isCurrentPageWhitelisted()) {
-              srcDescriptor.set.call(this, 'data:text/javascript;charset=utf-8;base64,;');
+              srcDescriptor.set.call(this, 'data:text/javascript;base64,');
               return;
             }
             srcDescriptor.set.call(this, val);
@@ -1042,7 +1087,7 @@
           if (tag === 'script' && typeof name === 'string') {
             const attrLower = name.toLowerCase();
             if (attrLower === 'src' && typeof value === 'string' && isAdUrl(value) && isEnabled() && !isCurrentPageWhitelisted()) {
-              originalSetAttribute.call(this, name, 'data:text/javascript;charset=utf-8;base64,;');
+              originalSetAttribute.call(this, name, 'data:text/javascript;base64,');
               return;
             }
             if (/^data-(?:clocid|clbaid|clipid|clpuid|cltgid|admpid)$/i.test(attrLower) && isEnabled() && !isCurrentPageWhitelisted()) {
@@ -2264,7 +2309,10 @@
     'wpadmngr', 'wpshsdk', 'wpushsdk', 'nawpush', 'ntvpwpush', 'ntvpforever', 'tubecup\.net', 'metricswpsh',
     'capndr\.com', 'korlumo\.com', 'zog\.link', 'nereserv\.com', 'vidvas3\.com', 'amazingcontent\.site',
     'multstorage\.com', 'gstcpx\.site', 'uuidksinc\.net', 'infrapu\.sh', 'realsrv\.com', 'exosrv\.com',
-    'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\d+\?id=\d+'
+    'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\\d+\\?id=\\d+',
+    'pemsrv\\.com', 'exdynsrv', 'mayzaent\\.com', 'mnaspm\\.com', 'opoxv\\.com', 'exacdn\\.com',
+    'attirecideryeah\\.com', 'cacklegrievingtank\\.com', 'gigglemagnetismunaired\\.com',
+    'smartpop', 'popunder1000'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');

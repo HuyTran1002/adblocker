@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.1');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.2');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.2.1', manifest.version === '5.2.1');
+check('Version is 5.2.2', manifest.version === '5.2.2');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -109,16 +109,16 @@ check('Overlaid play button kickstarter runs on bubbling phase without stopPropa
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.2.1 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.2.1</span>'));
+check('popup.html displays version v5.2.2 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.2.2</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.2.1-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.2.1-firefox.zip');
-check('webshield-v5.2.1-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.2.2-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.2.2-firefox.zip');
+check('webshield-v5.2.2-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.2.1-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.2.2-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 const { execSync } = require('child_process');
@@ -128,13 +128,13 @@ const readZipManifest = (zipPath) => {
 };
 
 const chromeManifest = readZipManifest(chromeZip);
-check('Chrome package manifest uses background.service_worker and version 5.2.1',
-  chromeManifest.version === '5.2.1' &&
+check('Chrome package manifest uses background.service_worker and version 5.2.2',
+  chromeManifest.version === '5.2.2' &&
   chromeManifest.background && chromeManifest.background.service_worker === 'background.js');
 
 const firefoxManifest = readZipManifest(firefoxZip);
-check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.1',
-  firefoxManifest.version === '5.2.1' &&
+check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.2',
+  firefoxManifest.version === '5.2.2' &&
   firefoxManifest.browser_specific_settings &&
   firefoxManifest.browser_specific_settings.gecko &&
   firefoxManifest.browser_specific_settings.gecko.id === 'anti-popunder@huytran1002' &&
