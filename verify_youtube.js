@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 
 console.log('===============================================================');
-console.log('🧪 QA SUITE: YOUTUBE ADGUARD-GRADE STEALTH ENGINE (v5.2.3)');
+console.log('🧪 QA SUITE: YOUTUBE ADGUARD-GRADE STEALTH ENGINE (v5.2.4)');
 console.log('===============================================================');
 
 let passCount = 0;

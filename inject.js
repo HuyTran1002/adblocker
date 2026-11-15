@@ -234,6 +234,9 @@
         conf.vast_url = '';
         conf.vast_preroll = '';
         conf.vast_midroll = '';
+        conf.protect_block = '';
+        conf.protect_block_html = '';
+        conf.protect_block_html_after = '0';
       } catch (e) {}
       return conf;
     }
@@ -1088,6 +1091,9 @@
           try {
             const fnStr = typeof fn === 'string' ? fn : (typeof fn === 'function' ? Function.prototype.toString.call(fn) : '');
             if (!fnStr || fnStr.includes('Anti Pop-Under') || fnStr.includes('WebShield')) return false;
+            if (fnStr.length > 1500 || /kvsplayer|flowplayer|fp-engine|skip_preroll|skip_postroll|video_alt_url|timeline_screens_url|jwplayer|videojs|plyr/i.test(fnStr)) {
+              return false;
+            }
             if (/window\.open\s*\([^)]*['"]_self['"]\s*\)/i.test(fnStr)) return false;
             if (/\bopenNewTab\s*\(|\bforceunder\b|\bpopundersPerIP\b|disable your adblocker|adblock.*detected/i.test(fnStr)) {
               return true;

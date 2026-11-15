@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.3');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.4');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.2.3', manifest.version === '5.2.3');
+check('Version is 5.2.4', manifest.version === '5.2.4');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -105,42 +105,62 @@ check('Clickadu ProxyListener (UHJveHlMaXN0ZW5lcg==) trapped inside player frame
   injectJs.includes('ProxyListener') || injectJs.includes('UHJveHlMaXN0ZW5lcg=='));
 check('Overlaid play button kickstarter runs on bubbling phase without stopPropagation',
   injectJs.includes('.plyr__control--overlaid, .play-btn') && !injectJs.includes('overlaidPlay.stopPropagation'));
+check('supjav.com Rocket Loader .movv-ad preservation, notifyBlockedScriptComplete & hydrateLazyThumbnail active',
+  injectJs.includes('function notifyBlockedScriptComplete(') && contentJs.includes('function hydrateLazyThumbnail(img)'));
+check('phimhdcss.com poster click shield & _self navigation timer allowlist active',
+  injectJs.includes("window\\.open\\s*\\([^)]*['\"]_self['\"]\\s*\\)"));
+check('xnhau.pink KVS/Flowplayer deferred builder allow-guard & protect_block sanitizer active',
+  injectJs.includes('kvsplayer|flowplayer|fp-engine') && injectJs.includes("conf.protect_block = '';"));
 
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.2.3 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.2.3</span>'));
+check('popup.html displays version v5.2.4 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.2.4</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.2.3-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.2.3-firefox.zip');
-check('webshield-v5.2.3-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.2.4-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.2.4-firefox.zip');
+check('webshield-v5.2.4-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.2.3-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.2.4-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 const { execSync } = require('child_process');
-const readZipManifest = (zipPath) => {
-  const cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('${zipPath.replace(/\\/g, '\\\\')}'); $e = $z.GetEntry('manifest.json'); $s = $e.Open(); $r = New-Object System.IO.StreamReader($s); $t = $r.ReadToEnd(); $r.Close(); $s.Close(); $z.Dispose(); $t"`;
-  return JSON.parse(execSync(cmd, { stdio: ['pipe', 'pipe', 'ignore'] }).toString());
+const readZipEntryText = (zipPath, entryName) => {
+  const cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('${zipPath.replace(/\\/g, '\\\\')}'); $e = $z.GetEntry('${entryName}'); $s = $e.Open(); $r = New-Object System.IO.StreamReader($s); $t = $r.ReadToEnd(); $r.Close(); $s.Close(); $z.Dispose(); [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Write-Output $t"`;
+  return execSync(cmd, { stdio: ['pipe', 'pipe', 'ignore'], maxBuffer: 10 * 1024 * 1024 }).toString();
 };
 
-const chromeManifest = readZipManifest(chromeZip);
-check('Chrome package manifest uses background.service_worker and version 5.2.3',
-  chromeManifest.version === '5.2.3' &&
+const chromeManifest = JSON.parse(readZipEntryText(chromeZip, 'manifest.json'));
+check('Chrome package manifest uses background.service_worker and version 5.2.4',
+  chromeManifest.version === '5.2.4' &&
   chromeManifest.background && chromeManifest.background.service_worker === 'background.js');
 
-const firefoxManifest = readZipManifest(firefoxZip);
-check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.3',
-  firefoxManifest.version === '5.2.3' &&
+const firefoxManifest = JSON.parse(readZipEntryText(firefoxZip, 'manifest.json'));
+check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.4',
+  firefoxManifest.version === '5.2.4' &&
   firefoxManifest.browser_specific_settings &&
   firefoxManifest.browser_specific_settings.gecko &&
   firefoxManifest.browser_specific_settings.gecko.id === 'anti-popunder@huytran1002' &&
   firefoxManifest.background &&
   Array.isArray(firefoxManifest.background.scripts) &&
   firefoxManifest.background.scripts.includes('background.js'));
+
+const hasLatestInjectFixes = (code) =>
+  code.includes('notifyBlockedScriptComplete') &&
+  code.includes('kvsplayer|flowplayer|fp-engine') &&
+  code.includes("conf.protect_block = '';");
+const chromeInjectJs = readZipEntryText(chromeZip, 'inject.js');
+const firefoxInjectJs = readZipEntryText(firefoxZip, 'inject.js');
+const chromeContentJs = readZipEntryText(chromeZip, 'content.js');
+const firefoxContentJs = readZipEntryText(firefoxZip, 'content.js');
+check('Chrome & Firefox ZIP packages contain latest inject.js & content.js production fixes',
+  hasLatestInjectFixes(chromeInjectJs) &&
+  hasLatestInjectFixes(firefoxInjectJs) &&
+  chromeContentJs.includes('function hydrateLazyThumbnail(img)') &&
+  firefoxContentJs.includes('function hydrateLazyThumbnail(img)'));
 
 console.log('\n======================================================================');
 console.log(`🏁 FINAL AUDIT SUMMARY: ${pass} PASSED, ${fail} FAILED`);

@@ -480,11 +480,23 @@ function createMobileSandbox(options = {}) {
     disconnect() { }
   }
 
+  const createStorage = () => {
+    const store = {};
+    return {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: (k) => { delete store[k]; },
+      clear: () => { for (const k of Object.keys(store)) delete store[k]; }
+    };
+  };
+
   const win = {
     document: doc,
     location: locationObj,
     Location: MockLocation,
     URL,
+    localStorage: createStorage(),
+    sessionStorage: createStorage(),
     Event: MockEvent,
     EventTarget,
     Node: MockNode,
@@ -1136,6 +1148,78 @@ async function run() {
     // 4. Valid lazy thumbnail is hydrated from data-original, while ad lazy image is NOT hydrated
     assert.strictEqual(thumbImg.src, 'https://img.supjav.com/thumb-123.jpg', 'supjav.com img.lazy must be hydrated from data-original');
     assert.notStrictEqual(adLazyImg.src, 'https://exosrv.com/banner.jpg', 'Ad image data-original must NEVER be hydrated');
+  });
+
+  await test('6.5 xnhau.pink xnPlayer deferred builder (setTimeout(dG, 0)) mounts video player, sanitizes xnConf ads & protect_block, and blocks popup gates', () => {
+    const sb = createMobileSandbox({ url: 'https://xnhau.pink/video/606311/demo/', isIframe: false });
+    const playerMount = sb.doc.createElement('div');
+    playerMount.id = 'xn_player';
+    sb.doc.body.appendChild(playerMount);
+
+    sb.runInject();
+
+    // 1. xnhau host pre-seeds popunder suppression keys in localStorage
+    assert.strictEqual(sb.win.localStorage.getItem('xnPopSeen'), '9999', 'xnhau host must pre-seed xnPopSeen=9999');
+    assert(Number(sb.win.localStorage.getItem('lastPopunderTime')) > Date.now(), 'xnhau host must pre-seed future lastPopunderTime');
+
+    // 2. Real-world xnhau.pink xnConf + deferred xnPlayer setTimeout(dG, 0) + popup-gate listeners
+    sb.runScript(`
+      window.__gateTriggered = 0;
+      window.__playerClicked = 0;
+      document.addEventListener('click', function webHtaGate() { window.__gateTriggered++; return lastPopunder; }, true);
+      document.addEventListener('click', function clkGate() { window.__gateTriggered++; return badlandlisp || popunder; }, false);
+      document.getElementById('xn_player').addEventListener('click', function() { window.__playerClicked++; });
+
+      var xnConf = {
+        video_url: 'https://xnhau.pink/get_file/demo_480p.mp4',
+        video_alt_url: 'https://xnhau.pink/get_file/demo_720p.mp4',
+        timeline_screens_url: 'https://xnhau.pink/contents/videos_screenshots/606000/606311/timelines/mp4/182x100/{time}.jpg',
+        preview_url1: 'https://xnhau.pink/contents/videos_screenshots/606000/606311/preview.mp4.jpg',
+        popunder_url: 'https://agileskincareunrented.com/2041048/',
+        popunder_duration: '240',
+        popunder_start_after: '3',
+        adv_start_html: 'https://xnhau.pink/player/html.php?aid=start_html',
+        adv_pause_html: 'https://xnhau.pink/player/html.php?aid=pause_html',
+        protect_block: '1',
+        protect_block_html: '<div>Disable adblock</div>'
+      };
+      window.xnPlayer = function(id, swf, w, h, conf) {
+        function dG() {
+          // Simulates real KVS/Flowplayer internal builder containing kvsplayer_popunder_open & skip_preroll & window.open
+          if (conf.popunder_url) { localStorage.setItem('kvsplayer_popunder_open', '1'); }
+          var holder = document.getElementById(id);
+          var video = document.createElement('video');
+          video.className = 'fp-engine';
+          video.src = conf.video_url;
+          holder.appendChild(video);
+          function skip_preroll() { window.open(conf.popunder_url, '_blank'); }
+          return skip_preroll;
+        }
+        setTimeout(dG, 0);
+      };
+      xnPlayer('xn_player', 'https://xnhau.pink/player/xn_player.swf', '100%', '100%', xnConf);
+    `);
+
+    sb.runPendingTimers();
+
+    const mountedVideo = playerMount.querySelector('video');
+    assert(mountedVideo && mountedVideo.classList.contains('fp-engine'), 'xnPlayer dG() must execute via setTimeout(dG, 0) and mount <video class="fp-engine">');
+
+    // Verify ad/anti-adblock config fields are sanitized while media URLs remain intact
+    assert.strictEqual(sb.win.xnConf.popunder_url, '', 'xnConf.popunder_url must remain sanitized by sanitizeKvsConfig');
+    assert.strictEqual(sb.win.xnConf.adv_start_html, '', 'xnConf.adv_start_html must remain sanitized by sanitizeKvsConfig');
+    assert.strictEqual(sb.win.xnConf.adv_pause_html, '', 'xnConf.adv_pause_html must remain sanitized by sanitizeKvsConfig');
+    assert.strictEqual(sb.win.xnConf.protect_block, '', 'xnConf.protect_block must be sanitized to prevent #ads_iframe overlay');
+    assert.strictEqual(sb.win.xnConf.protect_block_html, '', 'xnConf.protect_block_html must be sanitized by sanitizeKvsConfig');
+    assert.strictEqual(sb.win.xnConf.video_url, 'https://xnhau.pink/get_file/demo_480p.mp4', 'xnConf.video_url must be preserved');
+    assert.strictEqual(sb.win.xnConf.video_alt_url, 'https://xnhau.pink/get_file/demo_720p.mp4', 'xnConf.video_alt_url must be preserved');
+    assert.strictEqual(sb.win.xnConf.preview_url1, 'https://xnhau.pink/contents/videos_screenshots/606000/606311/preview.mp4.jpg', 'xnConf.preview_url1 must be preserved');
+    assert.strictEqual(sb.win.xnConf.timeline_screens_url, 'https://xnhau.pink/contents/videos_screenshots/606000/606311/timelines/mp4/182x100/{time}.jpg', 'xnConf.timeline_screens_url must be preserved');
+
+    // Clicking #xn_player must fire the legitimate player click listener without triggering blocked popup-gate listeners
+    sb.dispatchTouchOrClick('click', playerMount);
+    assert.strictEqual(sb.win.__gateTriggered, 0, 'Malicious webHtaGate / clkGate document listeners must be blocked');
+    assert.strictEqual(sb.win.__playerClicked, 1, 'Legitimate click listener on #xn_player must execute normally');
   });
 
   console.log('\n======================================================================');
