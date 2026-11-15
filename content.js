@@ -159,8 +159,8 @@ function isExtensionElement(el) {
 function ensureMainWorldLoaded() {
   try {
     if (!chrome || !chrome.runtime || !chrome.runtime.id) return;
-    if (window.self !== window.top) return; // NEVER run in iframes!
-    const host = currentHost || ((window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '');
+    if (!window.location || (window.location.protocol !== 'http:' && window.location.protocol !== 'https:')) return;
+    const host = currentHost || (window.location.hostname ? window.location.hostname.toLowerCase() : '');
     const isYt = isYtDomain || isYtSubFrame || host.includes('youtube.com') || host.includes('youtu.be') || host.includes('googlevideo.com');
     // YouTube strictly forbids chrome-extension:// script tags via CSP. inject.js is ALREADY running via manifest.json (world: "MAIN").
     if (isYt || !host || isCurrentPageWhitelisted() || SENSITIVE_DOMAINS.some(d => typeof d === 'string' && (host === d || host.endsWith('.' + d)))) return;
@@ -260,8 +260,8 @@ const isEmbeddedPlayerFrame = (function () {
   try {
     const host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
     const path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : '';
-    if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed/.test(host)) return true;
-    if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\//.test(path)) return true;
+    if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed|emturbovid|turbovid|turboviplay|turtleviplay|stbturbo|fc2stream|japopav|streamtape|strtape|strcloud|shavetape|voe\.sx|supremejav|dood|filemoon|streamwish|luluvid|vidhide|javggvideo/.test(host)) return true;
+    if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\/|\/t\/|\/e\/|\/d\//.test(path)) return true;
     if (document.querySelector && document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
   } catch (e) {}
   return false;
@@ -384,7 +384,8 @@ const adSelectors = [
   // JWPlayer, VideoJS, ArtPlayer & HTML5 In-Player Ad Overlays
   '.jw-ad-container', '.jw-ad-controls', '.jw-flag-ads',
   '.vjs-ima3-html5', '.vjs-ads-label',
-  '.dplayer-ads', '.art-ad'
+  '.dplayer-ads', '.art-ad',
+  '#pop', '#pop1', '#pop2', '.div_pop', '.movv-ad', '[class*="bn-container"]'
 ];
 
 function injectAdBlockCSS() {
@@ -404,8 +405,14 @@ function injectAdBlockCSS() {
       ins.adsbyexoclick, ins[data-zoneid], [id^="atContainer-"],
       #adbd, .overdiv:not([class*="player"] *):not(video),
       div.video_ad, div.video_ad_fadein, #over_player_msg,
+      #pop, #pop1, #pop2, .div_pop, .movv-ad, [class*="bn-container"],
+      div[style*="z-index: 300000"], div[style*="z-index:300000"],
       body > div[style*="z-index: 2147483647"][style*="opacity: 0.01"],
-      body > div[style*="z-index:2147483647"][style*="opacity:0.01"] {
+      body > div[style*="z-index:2147483647"][style*="opacity:0.01"],
+      body > div[style*="z-index: 2147483647"][style*="opacity: 0;"],
+      body > div[style*="z-index:2147483647"][style*="opacity:0;"],
+      div[style*="z-index: 2147483647"][style*="opacity: 0.01"],
+      div[style*="z-index:2147483647"][style*="opacity:0.01"] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
@@ -996,8 +1003,15 @@ if (currentEnabledState) {
       'wpadmngr', 'wpshsdk', 'wpushsdk', 'nawpush', 'ntvpwpush', 'ntvpforever', 'tubecup\.net', 'metricswpsh',
       'capndr\.com', 'korlumo\.com', 'zog\.link', 'nereserv\.com', 'vidvas3\.com', 'amazingcontent\.site',
       'multstorage\.com', 'gstcpx\.site', 'uuidksinc\.net', 'infrapu\.sh', 'realsrv\.com', 'exosrv\.com',
-      'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\d+\?id=\d+',
-      'visariomedia', 'xbetween', 'd13k7prax1yi04', 'magnific-popup', 'video-slider', 'ad-provider', 'magsrv\.com'
+      'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\\d+\\?id=\\d+',
+      'visariomedia', 'xbetween', 'd13k7prax1yi04', 'magnific-popup', 'video-slider', 'ad-provider', 'magsrv\.com',
+      'pemsrv\\.com', 'exdynsrv', 'mayzaent\\.com', 'mnaspm\\.com', 'opoxv\\.com', 'exacdn\\.com',
+      'attirecideryeah\\.com', 'cacklegrievingtank\\.com', 'gigglemagnetismunaired\\.com',
+      'smartpop', 'popunder1000',
+      'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead\\.net', 'advertisertape',
+      'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
+      'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash',
+      '\\/[0-9a-z]{2}\\/[0-9a-f]{32}\\.js'
     ];
 
     // Compile regexes once for high-performance scanning
@@ -1261,6 +1275,37 @@ if (currentEnabledState) {
       return false;
     }
 
+    // Helper to check if an <img> currently holds a blank/placeholder source rather than a real loaded image
+    function isPlaceholderImageSrc(srcVal, pageHref) {
+      if (!srcVal) return true;
+      const s = String(srcVal).trim().toLowerCase();
+      if (!s || s === '#' || s.startsWith('data:image/')) return true;
+      if (pageHref && s === pageHref.toLowerCase()) return true;
+      return /(?:^|\/)(?:blank|grey|gray|spacer|loading|placeholder|transparent|pixel|1x1|lazy)\.(?:gif|png|jpe?g|webp|svg)(?:\?|$)/i.test(s);
+    }
+
+    // Hydrates lazy-loaded movie/video thumbnails (data-original / data-lazy-src) if Rocket Loader or lazyload scripts stalled
+    function hydrateLazyThumbnail(img) {
+      if (!currentEnabledState || isCurrentPageWhitelisted()) return;
+      if (!img || img.nodeType !== 1 || img.tagName !== 'IMG') return;
+      if (img.hasAttribute('data-ad-blocked') || img.hasAttribute('data-ws-lazy-hydrated')) return;
+      if (!(isMovieBannerOrPoster(img) || (img.classList && img.classList.contains('lazy')))) return;
+      if (img.closest && img.closest('.movv-ad, .adsbox, .ad-banner, .ad-slot, .ads-slot, ins.adsbygoogle, [data-zoneid], [data-cl-spot]')) return;
+      try {
+        const lazySrc = (img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || '').trim();
+        if (!lazySrc || !/^(?:https?:\/\/|\/\/|\/)/i.test(lazySrc)) return;
+        const lazyLower = lazySrc.toLowerCase();
+        if (adUrlRegex.test(lazyLower) || gamblingRegex.test(lazyLower)) return;
+
+        const currentSrcAttr = (img.getAttribute('src') || '').trim();
+        const pageHref = (window.location && window.location.href) || '';
+        if (isPlaceholderImageSrc(currentSrcAttr, pageHref) || isPlaceholderImageSrc(img.src, pageHref)) {
+          img.setAttribute('data-ws-lazy-hydrated', '1');
+          img.src = lazySrc;
+        }
+      } catch (e) {}
+    }
+
     // Checks a single element and its inner children to hide it if it's an ad
     function checkAndHideElement(el) {
       if (!el || el.nodeType !== 1) return;
@@ -1478,6 +1523,7 @@ if (currentEnabledState) {
       // Helper to verify and hide an img tag (safely ignores base64/blob)
       const checkImg = (img) => {
         if (img.hasAttribute('data-ad-blocked')) return;
+        hydrateLazyThumbnail(img);
         if (isMovieBannerOrPoster(img)) return;
         try {
           const src = (img.src || '').toLowerCase();
@@ -2138,6 +2184,7 @@ if (currentEnabledState) {
 
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
+      document.querySelectorAll('img[data-original], img[data-lazy-src]').forEach(hydrateLazyThumbnail);
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
       cleanInPlayerAdsAndOverlays();
@@ -2161,6 +2208,11 @@ if (currentEnabledState) {
       pendingNodes.clear();
       for (let i = 0; i < nodes.length; i++) {
         if (nodes[i].isConnected) {
+          if (nodes[i].tagName === 'IMG') {
+            hydrateLazyThumbnail(nodes[i]);
+          } else if (nodes[i].querySelectorAll) {
+            nodes[i].querySelectorAll('img[data-original], img[data-lazy-src]').forEach(hydrateLazyThumbnail);
+          }
           checkAndHideElement(nodes[i]);
         }
       }
@@ -2278,6 +2330,109 @@ if (currentEnabledState) {
     }
 
     // --- GLOBAL CLICK INTERCEPTOR (NON-INVASIVE EVENT PASS-THROUGH) ---
+    const IN_PLAYER_AD_OVERLAY_SEL = '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, #pop, #pop1, #pop2, .div_pop, .movv-ad, [class*="bn-container"], .fxPane, #fxStartPane, .fxFallback, [data-cl-spot], [data-cl-overlay], [data-clocid]';
+    const PROTECTED_PLAYER_CONTROL_SEL = 'video, audio, button, input, .play-overlay, #mainvideo, .plyr__controls, .plyr__control, .jw-controls, .jw-controlbar, .jw-icon, .vjs-control-bar, .art-controls, .dplayer-controller, .fluid_controls_container';
+
+    function isClickjackStyleOverlay(el, allowGenericTopLevel) {
+      if (!el || el.nodeType !== 1 || !el.style) return false;
+      if (el.closest && el.closest(PROTECTED_PLAYER_CONTROL_SEL)) return false;
+      const css = (el.style.cssText || '').toLowerCase();
+      const compactCss = css.replace(/\s+/g, '');
+      const hasHighZ = compactCss.includes('99999999') || compactCss.includes('2147483647') || compactCss.includes('z-index:300000');
+      const isTransparent = compactCss.includes('transparent') || compactCss.includes('opacity:0.01') || /opacity:0(?:\.0+)?(?:;|$)/.test(compactCss);
+      if (hasHighZ && (isTransparent || compactCss.includes('z-index:300000')) && !(el.innerText && el.innerText.trim())) {
+        if (!el.querySelector || !el.querySelector('video, button, input')) return true;
+      }
+      if (allowGenericTopLevel) {
+        return parseInt(el.style.zIndex, 10) >= 9999 && (compactCss.includes('fixed') || compactCss.includes('absolute')) && isTransparent;
+      }
+      return false;
+    }
+
+    function resumePlayerAndFallbackTap(clientX, clientY, removedEl) {
+      try {
+        const vid = document.querySelector('video');
+        if (vid && vid.paused) {
+          const p = vid.play();
+          if (p && p.catch) p.catch(() => {});
+        }
+        if (typeof clientX === 'number' && typeof clientY === 'number' && document.elementFromPoint) {
+          const underlying = document.elementFromPoint(clientX, clientY);
+          if (underlying && underlying !== removedEl && typeof underlying.click === 'function') {
+            underlying.click();
+          }
+        }
+      } catch (err) {}
+    }
+
+    function interceptFrameAdOverlayAndAnchor(e, target, clientX, clientY, isTouch) {
+      // 0. Explicitly remove in-player ad overlays & transparent clickjack layers (even inside embedded player iframes)
+      const adOverlay = (target.closest && target.closest(IN_PLAYER_AD_OVERLAY_SEL)) || (isClickjackStyleOverlay(target, false) ? target : null);
+      if (adOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          adOverlay.style.pointerEvents = 'none';
+          adOverlay.style.display = 'none';
+          adOverlay.remove();
+        } catch (err) {}
+        console.log(`[Anti Pop-Under] Intercepted and removed in-player ad overlay on ${isTouch ? 'touch' : 'click'}:`, adOverlay);
+        resumePlayerAndFallbackTap(clientX, clientY, adOverlay);
+        return true;
+      }
+
+      // 1. Phân tích thẻ liên kết <a> trước tiên để ngăn chặn Link Hijacking & cờ bạc trá hình:
+      const anchor = (target.tagName === 'A') ? target : (target.closest ? target.closest('a') : null);
+      if (anchor) {
+        const href = anchor.href || anchor.getAttribute('href') || '';
+        if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+          if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const safeHref = anchor.dataset.wsOrigHref;
+            anchor.setAttribute('href', safeHref);
+            anchor.href = safeHref;
+            console.log('[Anti Pop-Under] Reverted hijacked link and navigating safely to:', safeHref);
+            window.location.href = safeHref;
+            return true;
+          }
+
+          const isMobileAppIntent = typeof href === 'string' && /^(?:intent|market|itms-apps?|snssdk\d*|tiktok|lazada|shopee|vnd\.youtube|alipay|weixin):\/\//i.test(href.trim());
+          if (isMobileAppIntent) {
+            e.preventDefault();
+            e.stopPropagation();
+            reportAdBlocked(href, 'Chặn link mở ứng dụng quảng cáo');
+            return true;
+          }
+
+          try {
+            const targetUrl = new URL(href, window.location.href);
+            const curHost = window.location.hostname.replace(/^www\./i, '');
+            const targetHost = targetUrl.hostname.replace(/^www\./i, '');
+            const isExternal = targetHost !== curHost && !curHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + curHost);
+            if (isExternal) {
+              const safeDomains = ['facebook.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 't.me', 'zalo.me'];
+              const matchesGamblingHost = targetHost && /\d{2,}/.test(targetHost) && (targetHost.includes('88') || targetHost.includes('99') || targetHost.includes('789') || /club|bet/i.test(targetHost));
+              const isExplicitAd = !safeDomains.some(d => targetHost.includes(d)) &&
+                (gamblingRegex.test(href) || adUrlRegex.test(href) || matchesGamblingHost || href.includes('bit.ly') || href.includes('shortlink') || href.includes('linkroyal') || (href.includes('ab=') && href.includes('rl=')));
+              const isIframeBlankOverlay = (window.self !== window.top) && (anchor.getAttribute('target') === '_blank' || isClickjackStyleOverlay(anchor, true));
+              if (isExplicitAd || isIframeBlankOverlay) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.self !== window.top && !(anchor.innerText && anchor.innerText.trim())) {
+                  try { anchor.style.pointerEvents = 'none'; anchor.remove(); } catch (err) {}
+                  resumePlayerAndFallbackTap(clientX, clientY, anchor);
+                }
+                reportAdBlocked(href, 'Chặn click chuyển hướng quảng cáo');
+                return true;
+              }
+            }
+          } catch (err) {}
+        }
+      }
+      return false;
+    }
+
     document.addEventListener('click', function(e) {
       if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
         // In fullscreen: allow all player controls and play/pause immediately,
@@ -2291,78 +2446,22 @@ if (currentEnabledState) {
           }
           c = c.parentElement;
         }
-        if (!hasAdAnchor) return;
+        if (!hasAdAnchor && !isClickjackStyleOverlay(e.target, true)) return;
       }
       if (isTargetPickerActive) return; // Do not intercept clicks when Target Picker is active
       if (!e.isTrusted) return; // Standard 2: Ignore untrusted/synthetic clicks
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
-      if (window.self !== window.top) return; // Allow 100% native clicks inside embedded video player iframes
 
       try {
-        let target = e.target;
+        const target = e.target;
         if (!target || target.nodeType !== 1) return;
 
-        // 1. Phân tích thẻ liên kết <a> trước tiên để ngăn chặn Link Hijacking & cờ bạc trá hình:
-        let anchor = null;
-        let curr = target;
-        while (curr && curr !== document.body && curr !== document.documentElement) {
-          if (curr.tagName === 'A') {
-            anchor = curr;
-            break;
-          }
-          curr = curr.parentElement;
-        }
+        if (interceptFrameAdOverlayAndAnchor(e, target, e.clientX, e.clientY, false)) return;
 
-        if (anchor) {
-          const href = anchor.href || anchor.getAttribute('href') || '';
-          if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
-            // Chống thủ đoạn Link Hijacking trên Mobile (script quảng cáo tráo đổi href khi chạm)
-            if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
-              e.preventDefault();
-              e.stopPropagation();
-              const safeHref = anchor.dataset.wsOrigHref;
-              anchor.setAttribute('href', safeHref);
-              anchor.href = safeHref;
-              console.log('[Anti Pop-Under] Reverted hijacked link and navigating safely to:', safeHref);
-              window.location.href = safeHref;
-              return;
-            }
-
-            // Chặn các scheme chuyển hướng ứng dụng di động/app stores tự động (intent://, market://,...)
-            const isMobileAppIntent = typeof href === 'string' && /^(?:intent|market|itms-apps?|snssdk\d*|tiktok|lazada|shopee|vnd\.youtube|alipay|weixin):\/\//i.test(href.trim());
-            if (isMobileAppIntent) {
-              e.preventDefault();
-              e.stopPropagation();
-              console.log('[Anti Pop-Under] Blocked mobile app intent link click:', href);
-              reportAdBlocked(href, 'Chặn link mở ứng dụng quảng cáo');
-              return;
-            }
-
-            try {
-              const targetUrl = new URL(href, window.location.href);
-              const currentHost = window.location.hostname.replace(/^www\./i, '');
-              const targetHost = targetUrl.hostname.replace(/^www\./i, '');
-              const isExternal = targetHost !== currentHost && !currentHost.endsWith('.' + targetHost) && !targetHost.endsWith('.' + currentHost);
-
-              if (isExternal) {
-                const safeDomains = ['facebook.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 't.me', 'zalo.me'];
-                if (!safeDomains.some(d => targetHost.includes(d))) {
-                  const matchesGamblingHost = targetHost && /\d{2,}/.test(targetHost) && (targetHost.includes('88') || targetHost.includes('99') || targetHost.includes('789') || /club|bet/i.test(targetHost));
-                  if (gamblingRegex.test(href) || adUrlRegex.test(href) || matchesGamblingHost || href.includes('bit.ly') || href.includes('shortlink') || href.includes('linkroyal') || (href.includes('ab=') && href.includes('rl='))) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('[Anti Pop-Under] Blocked known ad/gambling external link click:', href);
-                    reportAdBlocked(href, 'Chặn click chuyển hướng quảng cáo');
-                    return;
-                  }
-                }
-              }
-            } catch (err) {}
-          }
-        }
+        // Inside embedded player iframes: after clearing ad overlays/anchors above, allow 100% native player controls
+        if (window.self !== window.top) return;
 
         // NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: Video player click pass-through
-        // Sau khi đã loại trừ các liên kết quảng cáo/cờ bạc, cho phép các nút điều khiển player, tua, dừng nhận 100% click tự nhiên
         if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
           return;
         }
@@ -2375,32 +2474,14 @@ if (currentEnabledState) {
           pCheck = pCheck.parentElement;
         }
 
-        // Neutralize TokyoMotion & tube in-player ad overlay clickjackers (#nuevoa / .vast_clickthrough_layer)
-        const adOverlay = target.closest && target.closest('#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot');
-        if (adOverlay) {
-          e.preventDefault();
-          e.stopPropagation();
-          adOverlay.remove();
-          console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay:', adOverlay);
-          return;
-        }
-
         // Neutralize full-screen transparent clickjack overlays (pu.js / pop-under floaters)
-        const css = (target.style && target.style.cssText) ? target.style.cssText.toLowerCase() : '';
-        const isClickjack = css.includes('99999999') || css.includes('2147483647') ||
-          (target.style && parseInt(target.style.zIndex, 10) >= 9999 && (css.includes('fixed') || css.includes('absolute')) && (css.includes('transparent') || css.includes('opacity:0')));
-        if (isClickjack) {
+        if (isClickjackStyleOverlay(target, true)) {
           e.preventDefault();
           e.stopPropagation();
           target.style.pointerEvents = 'none';
           target.remove();
           console.log('[Anti Pop-Under] Intercepted and removed clickjack overlay:', target);
-          try {
-            const underlying = document.elementFromPoint(e.clientX, e.clientY);
-            if (underlying && underlying !== target) {
-              underlying.click();
-            }
-          } catch(err) {}
+          resumePlayerAndFallbackTap(e.clientX, e.clientY, target);
           return;
         }
       } catch (err) {}
@@ -2445,31 +2526,17 @@ if (currentEnabledState) {
       if (isTargetPickerActive) return;
       if (!e.isTrusted) return;
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
-      if (window.self !== window.top) return;
 
       try {
-        let target = e.target;
+        const target = e.target;
         if (!target || target.nodeType !== 1) return;
+        const touch = e.changedTouches && e.changedTouches[0];
+        const cx = touch ? touch.clientX : undefined;
+        const cy = touch ? touch.clientY : undefined;
 
-        // Kiểm tra thẻ liên kết nếu có bị tráo link hoặc link cờ bạc
-        const anchor = (target.tagName === 'A') ? target : (target.closest ? target.closest('a') : null);
-        if (anchor) {
-          const href = anchor.href || anchor.getAttribute('href') || '';
-          if (anchor.dataset && anchor.dataset.wsOrigHref && anchor.dataset.wsOrigHref !== anchor.getAttribute('href')) {
-            e.preventDefault();
-            e.stopPropagation();
-            const safeHref = anchor.dataset.wsOrigHref;
-            anchor.setAttribute('href', safeHref);
-            anchor.href = safeHref;
-            window.location.href = safeHref;
-            return;
-          }
-          if (href && (gamblingRegex.test(href) || adUrlRegex.test(href))) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-        }
+        if (interceptFrameAdOverlayAndAnchor(e, target, cx, cy, true)) return;
+
+        if (window.self !== window.top) return;
 
         // Video player pass-through sau khi loại trừ link quảng cáo
         if (isInsideVideoPlayer(target) || isVideoPlayerOrControls(target) || isMovieBannerOrPoster(target)) {
@@ -2485,15 +2552,13 @@ if (currentEnabledState) {
         }
 
         // Neutralize clickjack overlays on mobile touch
-        const css = (target.style && target.style.cssText) ? target.style.cssText.toLowerCase() : '';
-        const isClickjack = css.includes('99999999') || css.includes('2147483647') ||
-          (target.style && parseInt(target.style.zIndex, 10) >= 9999 && (css.includes('fixed') || css.includes('absolute')) && (css.includes('transparent') || css.includes('opacity:0')));
-        if (isClickjack) {
+        if (isClickjackStyleOverlay(target, true)) {
           e.preventDefault();
           e.stopPropagation();
           target.style.pointerEvents = 'none';
           target.remove();
           console.log('[Anti Pop-Under] Intercepted and removed clickjack overlay on mobile touchend:', target);
+          resumePlayerAndFallbackTap(cx, cy, target);
           return;
         }
       } catch (err) {}

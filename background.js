@@ -70,7 +70,8 @@ const SAFE_EXCLUDED = [
   'gdrive', 'ok.ru', 'fembed', 'mixdrop', 'voe.sx', 'streamvid', 'anivs',
   'centrifuge', 'websocket',
   // Dedicated tube / streaming CDNs & in-player hosts
-  'qooglevideo', 'vlstream', 'vlplayer', 'streamvl', 'dooplayer', 'javmost'
+  'qooglevideo', 'vlstream', 'vlplayer', 'streamvl', 'dooplayer', 'javmost',
+  'supjav', 'supremejav', 'emturbovid', 'turboviplay', 'turbovid', 'fc2stream', 'japopav'
 ];
 
 function isSafeAdDomain(dom) {

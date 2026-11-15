@@ -314,7 +314,9 @@
             /skipPopOnRightButtonClick|clicksSinceSessionStart|clicksSinceLastPpu|iOSChromeSwapPopunder|desktopPopunderEverywhere/i.test(fnStr) ||
             /\.gn\.forEach\s*\(\s*function/i.test(fnStr) ||
             (/stopAll\.call|stopImmediatePropagation/i.test(fnStr) && /MouseEvent/i.test(fnStr) && /is-ad-visible/i.test(fnStr)) ||
-            /popMagic|isNativeAdTarget|venorShouldShow|puURLstrpcht|handlePopunder|puCountstrpcht|smartpop|mayzaent|mnaspm|pemsrv|exdynsrv/i.test(fnStr)
+            /popMagic|isNativeAdTarget|venorShouldShow|puURLstrpcht|handlePopunder|puCountstrpcht|smartpop|mayzaent|mnaspm|pemsrv|exdynsrv/i.test(fnStr) ||
+            /openNewTab|popundersPerIP|forceunder|Adcash|__Y\b|div_pop|puURL|popunder|clickunder|markPopupAsOpened|popupOpened/i.test(fnStr) ||
+            (/_0x[0-9a-f]{4,6}/i.test(fnStr) && /while\s*\(\s*!!\s*\[\s*\]\s*\)\s*\{\s*switch/i.test(fnStr))
           )) {
             console.log('[Anti Pop-Under] Blocked malicious ad event listener:', type, targetFn.name || 'anonymous');
             return; // Drop the malicious listener completely!
@@ -475,16 +477,46 @@
           className.includes('adsbyexoclick') || id.includes('exoclick') || id.includes('splash') ||
           id.includes('clb-spot') || id.startsWith('__clb') || className.includes('clb-spot') || className.startsWith('__cld-') ||
           className.includes('fxpane') || id.includes('fxstartpane') || className.includes('fxfallback') ||
+          id === 'pop' || id === 'pop1' || id === 'pop2' ||
+          className.includes('div_pop') || className.includes('bn-container') ||
           (node.hasAttribute && (node.hasAttribute('data-cl-overlay') || node.hasAttribute('data-cl-spot') || node.hasAttribute('data-clocid') || node.hasAttribute('data-admpid'))) ||
           (node.getAttribute && (node.getAttribute('data-zoneid') || node.getAttribute('data-ad-id') || node.getAttribute('data-cl-spot') || node.getAttribute('data-clocid')))) {
         return true;
       }
 
-      // 1b. Intercept dynamically appended ad <script> tags (Clickadu JSONP /get/{zoneId}?id={zoneId}, WPAdMngr, PopAds, etc.)
+      // 1a. Intercept inline-styled transparent clickjack divs (FC2Stream/JAPopAV/Streamtape) & full-screen _blank anchor overlays
+      const styleAttr = (node.getAttribute && node.getAttribute('style') || '').toLowerCase().replace(/\s+/g, '');
+      if (tag === 'div' && styleAttr && (
+          styleAttr.includes('z-index:300000') ||
+          ((styleAttr.includes('z-index:2147483647') || styleAttr.includes('z-index:99999999')) &&
+           (styleAttr.includes('opacity:0.01') || /opacity:0(?:\.0+)?(?:;|$)/.test(styleAttr) || styleAttr.includes('background:transparent')))
+      )) {
+        return true;
+      }
+      if (tag === 'a' && node.getAttribute && node.getAttribute('target') === '_blank' && styleAttr &&
+          styleAttr.includes('position:fixed') && (styleAttr.includes('inset:0') || (styleAttr.includes('width:100') && styleAttr.includes('height:100')))) {
+        return true;
+      }
+
+      // 1b. Intercept dynamically appended ad <script> tags (Clickadu JSONP /get/{zoneId}?id={zoneId}, WPAdMngr, PopAds, AdSpyglass, Streamtape/Tapepops)
       if (tag === 'script') {
         const sSrc = (node.src || (node.getAttribute && node.getAttribute('src')) || '').toLowerCase();
-        if (sSrc && (/\/get\/\d+\?id=\d+/i.test(sSrc) || /\/on\.js(?:\?|$)/i.test(sSrc) || /wpadmngr|wpshsdk|wpushsdk|nawpush|ntvpwpush|tubecup|metricswpsh|capndr|korlumo|zog\.link|realsrv|exosrv|magsrv|popads|popcash|astronautlividlyreformer|src\/jpm\.js|src\/jph\.js/i.test(sSrc))) {
-          return true;
+        if (sSrc) {
+          let isAdSpyglassRandom = /\/[0-9a-z]{2}\/[0-9a-f]{32}\.js(?:\?|$)/i.test(sSrc);
+          if (!isAdSpyglassRandom && /^(?:https?:)?\/\//i.test(sSrc)) {
+            try {
+              const u = new URL(sSrc, window.location.href);
+              const curHost = (window.location && window.location.hostname || '').toLowerCase();
+              if ((!curHost || u.hostname.toLowerCase() !== curHost) &&
+                  /^\/(?=[0-9a-z]{5,8}\.js(?:\?|$))(?=.*\d)(?=.*[a-z])[0-9a-z]{5,8}\.js/i.test(u.pathname)) {
+                isAdSpyglassRandom = true;
+              }
+            } catch (err) {}
+          }
+          if (isAdSpyglassRandom || /\/get\/\d+\?id=\d+/i.test(sSrc) || /\/on\.js(?:\?|$)/i.test(sSrc) ||
+              /wpadmngr|wpshsdk|wpushsdk|nawpush|ntvpwpush|tubecup|metricswpsh|capndr|korlumo|zog\.link|realsrv|exosrv|magsrv|popads|popcash|astronautlividlyreformer|src\/jpm\.js|src\/jph\.js|tapepops|watchadsontape|advertape|advtpe|tpead\.net|advertisertape|tapeadvertisement|gettapeads|tapeadsenjoyer|tapelovesads|highrevenuecpm|facesnotebook|fc2ppv\.buzz|0i0i0i0|popunder1000|adspyglass|shoukigaigo|onclkds|adcash/i.test(sSrc)) {
+            return true;
+          }
         }
       }
 
@@ -499,14 +531,33 @@
       return false;
     }
 
+    // Fire synthetic load on dropped <script> elements so deferred script loaders (e.g. Cloudflare Rocket Loader) never stall.
+    function notifyBlockedScriptComplete(node) {
+      if (!node || (node.tagName || '').toLowerCase() !== 'script') return;
+      setTimeout(() => {
+        try {
+          if (typeof Event === 'function' && typeof node.dispatchEvent === 'function') {
+            node.dispatchEvent(new Event('load'));
+          } else if (typeof node.onload === 'function') {
+            node.onload({ type: 'load', target: node });
+          }
+        } catch (e) {}
+      }, 0);
+    }
+
+    function suppressSuspectNode(node, actionLabel) {
+      console.log(`[Anti Pop-Under] Preemptively blocked ${actionLabel} clickjack/ad overlay to DOM:`, node);
+      try {
+        node.style.display = 'none';
+        node.style.pointerEvents = 'none';
+      } catch (e) {}
+      notifyBlockedScriptComplete(node);
+    }
+
     const origAppendChild = Node.prototype.appendChild;
     Node.prototype.appendChild = function(child) {
       if (child && isSuspectOverlayNode(child)) {
-        console.log('[Anti Pop-Under] Preemptively blocked appending clickjack/ad overlay to DOM:', child);
-        try {
-          child.style.display = 'none';
-          child.style.pointerEvents = 'none';
-        } catch(e) {}
+        suppressSuspectNode(child, 'appending');
         return child; // Silently drop: never attach to DOM
       }
       return origAppendChild.apply(this, arguments);
@@ -515,11 +566,7 @@
     const origInsertBefore = Node.prototype.insertBefore;
     Node.prototype.insertBefore = function(newNode, referenceNode) {
       if (newNode && isSuspectOverlayNode(newNode)) {
-        console.log('[Anti Pop-Under] Preemptively blocked inserting clickjack/ad overlay to DOM:', newNode);
-        try {
-          newNode.style.display = 'none';
-          newNode.style.pointerEvents = 'none';
-        } catch(e) {}
+        suppressSuspectNode(newNode, 'inserting');
         return newNode; // Silently drop: never attach to DOM
       }
       try {
@@ -544,11 +591,7 @@
       Element.prototype.append = function(...nodes) {
         const safeNodes = nodes.filter(n => {
           if (n && n.nodeType === 1 && isSuspectOverlayNode(n)) {
-            console.log('[Anti Pop-Under] Preemptively blocked appending clickjack/ad overlay via Element.append:', n);
-            try {
-              n.style.display = 'none';
-              n.style.pointerEvents = 'none';
-            } catch(e) {}
+            suppressSuspectNode(n, 'appending via Element.append');
             return false;
           }
           return true;
@@ -602,7 +645,11 @@
       div[style*="bottom: 0px"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
       div[style*="bottom: 0"][style*="position: fixed"]:not([class*="player"]):not([class*="header"]):not([class*="nav"]):not(.top-links),
       div:has(> a[href*="acquirecarded"]), div:has(> a[href*="badlandlisp"]), div:has(> a[href*="sc88"]),
-      a[href*="acquirecardedsullen.com"], a[href*="badlandlispyippee.com"] {
+      a[href*="acquirecardedsullen.com"], a[href*="badlandlispyippee.com"],
+      #pop, #pop1, #pop2, .div_pop, .movv-ad, [class*="bn-container"],
+      div[style*="z-index: 300000"], div[style*="z-index:300000"],
+      div[style*="z-index: 2147483647"][style*="opacity: 0.01"], div[style*="z-index:2147483647"][style*="opacity:0.01"],
+      div[style*="z-index: 2147483647"][style*="opacity: 0;"], div[style*="z-index:2147483647"][style*="opacity:0;"] {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
@@ -655,9 +702,9 @@
       const host = window.location.hostname.toLowerCase();
       const path = window.location.pathname.toLowerCase();
       // Known embedded player domains
-      if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed/.test(host)) return true;
+      if (/streamvl|vlstream|streamc|embed\d*\.|play\d*\.|player|hls|stream|media|cdn|video|vidsrc|2embed|superembed|emturbovid|turbovid|turboviplay|turtleviplay|stbturbo|fc2stream|japopav|streamtape|strtape|strcloud|shavetape|voe\.sx|supremejav|dood|filemoon|streamwish|luluvid|vidhide|javggvideo/.test(host)) return true;
       // Common player URL patterns
-      if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\//.test(path)) return true;
+      if (/\/watch|\/embed|\/player|\/play|\/stream|\/hls|\/video|\/v\/|\/t\/|\/e\/|\/d\//.test(path)) return true;
       // Has a video element already (very likely a player frame)
       if (document.querySelector('video, #video_player, .jwplayer, .video-js, .artplayer, .dplayer, .plyr')) return true;
     } catch (e) {}
@@ -984,7 +1031,7 @@
           configurable: true
         });
       } catch (e) {}
-      ['univresalP', 'handlePopunder'].forEach(fn => {
+      ['univresalP', 'handlePopunder', 'openNewTab', 'forceunder', 'markPopupAsOpened'].forEach(fn => {
         try {
           Object.defineProperty(window, fn, {
             get() { return function () {}; },
@@ -993,6 +1040,84 @@
           });
         } catch (e) {}
       });
+      try {
+        const curHostLower = (window.location && window.location.hostname || '').toLowerCase();
+        if (/phimhdc/i.test(curHostLower)) {
+          try { document.cookie = 'popupOpened=true; path=/'; } catch (e) {}
+        }
+        if (/emturbovid|turbovid|turboviplay|turtleviplay|stbturbo/i.test(curHostLower)) {
+          Object.defineProperty(window, 'premium', {
+            get() { return '1'; },
+            set() {},
+            configurable: true
+          });
+        }
+        Object.defineProperty(window, 'isadb', {
+          get() { return false; },
+          set() {},
+          configurable: true
+        });
+        Object.defineProperty(window, 'googleAd', {
+          get() { return true; },
+          set() {},
+          configurable: true
+        });
+        const noopAdcash = Object.freeze({
+          init: function () {}, show: function () {}, load: function () {}, push: function () {}, open: function () {}
+        });
+        Object.defineProperty(window, 'Adcash', {
+          get() { return noopAdcash; },
+          set() {},
+          configurable: true
+        });
+        const noopY = Object.freeze(Object.assign(function () {}, {
+          init: function () {}, show: function () {}, pop: function () {}, run: function () {}
+        }));
+        Object.defineProperty(window, '__Y', {
+          get() { return noopY; },
+          set() {},
+          configurable: true
+        });
+      } catch (e) {}
+
+      // Wrap setTimeout & setInterval to disarm delayed popunders & anti-adblock overlays
+      try {
+        const curHostLower = (window.location && window.location.hostname || '').toLowerCase();
+        const isStreamingOrEmbedContext = isEmbeddedPlayerFrame || window.self !== window.top || /supjav|supremejav|javmost/i.test(curHostLower);
+        const isMaliciousTimerCallback = function (fn) {
+          try {
+            const fnStr = typeof fn === 'string' ? fn : (typeof fn === 'function' ? Function.prototype.toString.call(fn) : '');
+            if (!fnStr || fnStr.includes('Anti Pop-Under') || fnStr.includes('WebShield')) return false;
+            if (/window\.open\s*\([^)]*['"]_self['"]\s*\)/i.test(fnStr)) return false;
+            if (/\bopenNewTab\s*\(|\bforceunder\b|\bpopundersPerIP\b|disable your adblocker|adblock.*detected/i.test(fnStr)) {
+              return true;
+            }
+            if (/\bwindow\.open\s*\(/i.test(fnStr) &&
+                (isStreamingOrEmbedContext || /pop|adblock|clickunder|popunder|tabunder|tapepops|fc2stream|emturbovid|turbovid/i.test(fnStr))) {
+              return true;
+            }
+          } catch (e) {}
+          return false;
+        };
+        const origSetTimeout = window.setTimeout;
+        const origSetInterval = window.setInterval;
+        if (typeof origSetTimeout === 'function') {
+          window.setTimeout = function (fn) {
+            if (isEnabled() && !isCurrentPageWhitelisted() && isMaliciousTimerCallback(fn)) {
+              return 0;
+            }
+            return origSetTimeout.apply(this === undefined ? window : this, arguments);
+          };
+        }
+        if (typeof origSetInterval === 'function') {
+          window.setInterval = function (fn) {
+            if (isEnabled() && !isCurrentPageWhitelisted() && isMaliciousTimerCallback(fn)) {
+              return 0;
+            }
+            return origSetInterval.apply(this === undefined ? window : this, arguments);
+          };
+        }
+      } catch (e) {}
 
       // 0b1. Disarm PopAds (jpm.js / jph.js / visariomedia / xbetween) tokens and ExoClick
       ['fcc61ea9f74fd6326508704617f53191', 'fcc61ea9f74fd632fcc61ea9f74fd632'].forEach(key => {
@@ -1036,7 +1161,18 @@
       if (!urlStr) return false;
       try {
         const lower = String(urlStr).toLowerCase();
-        if (/\/get\/\d+\?id=\d+/i.test(lower) || /\/solid\.gif\?z=/i.test(lower)) return true;
+        if (/\/get\/\d+\?id=\d+/i.test(lower) || /\/solid\.gif\?z=/i.test(lower) ||
+            /\/[0-9a-z]{2}\/[0-9a-f]{32}\.js(?:\?|$)/i.test(lower)) return true;
+        if (/^(?:https?:)?\/\//i.test(lower)) {
+          try {
+            const u = new URL(lower, window.location.href);
+            const curHost = (window.location && window.location.hostname || '').toLowerCase();
+            if ((!curHost || u.hostname.toLowerCase() !== curHost) && !isWhitelisted(lower) &&
+                /^\/(?=[0-9a-z]{5,8}\.js(?:\?|$))(?=.*\d)(?=.*[a-z])[0-9a-z]{5,8}\.js/i.test(u.pathname)) {
+              return true;
+            }
+          } catch (err) {}
+        }
         const keywords = [
           'doubleclick', 'googlesyndication', 'googleadservices', 'adsterra', 'popads',
           'popcash', 'propellerads', 'exoclick', 'exosrv', 'realsrv', 'clktag', 'onclickads', 'exdynsrv',
@@ -1053,7 +1189,10 @@
           'visariomedia', 'xbetween', 'd13k7prax1yi04', 'magnific-popup', 'video-slider', 'ad-provider',
           'detectivefrozepriceless', 'hilltopads', 'clickadu', 'adxad', 'adtng', 'etahub',
           'ethnicexpressions', 'deloplen', 'adtrue', 'ev-player.js', 'reaveryreplan', 'earnvids.com/p.gif',
-          'pemsrv.com', 'opoxv.com', 'exacdn.com', 'attirecideryeah', 'cacklegrievingtank', 'gigglemagnetismunaired', 'popunder1000'
+          'pemsrv.com', 'opoxv.com', 'exacdn.com', 'attirecideryeah', 'cacklegrievingtank', 'gigglemagnetismunaired', 'popunder1000',
+          'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead.net', 'advertisertape',
+          'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
+          'facesnotebook', 'fc2ppv.buzz', '0i0i0i0.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -1577,7 +1716,7 @@
 
       if (el.closest && el.closest(
         '.movie-banner, .film-banner, .hero-banner, .banner-film, .film-poster, .movie-poster, ' +
-        '.poster-film, .film-item, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
+        '.poster-film, .film-item, .film-item-ver, .list-films, .img-film, .movie-item, .tray-item, .carousel-item, .swiper-slide, ' +
         '.halim-item, .flw-item, .film_info, [class*="banner-slider"], [class*="hero-banner"], ' +
         '[class*="film-banner"], [class*="movie-banner"], [class*="video-slider"], [id*="video-slider"], ' +
         '[class*="film-item"], [class*="movie-item"], [class*="film-poster"], [class*="movie-poster"], ' +
@@ -1687,9 +1826,10 @@
         if (this && (this.type === 'click' || this.type === 'pointerdown' || this.type === 'touchend')) {
           const t = this.target;
           if (t && typeof t.closest === 'function') {
-            const playTarget = t.closest('#show_player, .play-btn, button[onclick*="init_start_select"], .plyr, .plyr__control, [data-plyr="play"], video, .video_thumbnail');
-            if (playTarget) {
-              // Video Play / Native Player Action: NEVER allow ad scripts to cancel the user's click!
+            const playTarget = t.closest('#show_player, .play-btn, .play-overlay, #mainvideo, button[onclick*="init_start_select"], .plyr, .plyr__control, [data-plyr="play"], .jw-icon-playback, .jw-display-icon-container, .vjs-big-play-button, .vjs-play-control, video, .video_thumbnail, .img-film, .icon-play, .list-films a, .film-item-ver a, #no-link');
+            const isDocWinPoster = (this.currentTarget === document || this.currentTarget === window) && typeof isMovieBannerOrPoster === 'function' && isMovieBannerOrPoster(t);
+            if (playTarget || isDocWinPoster) {
+              // Video Play / Native Player / Movie Poster Navigation: NEVER allow ad scripts to cancel the user's click!
               return;
             }
           }
@@ -1727,6 +1867,139 @@
     } catch (e) {}
   }
 
+    const IN_PLAYER_AD_OVERLAY_SEL =
+      '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, ' +
+      '#catfish-banner, .popup-banner, .fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
+      'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
+      'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
+      '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay, ' +
+      '#pop, #pop1, #pop2, .div_pop, .movv-ad, [class*="bn-container"]';
+
+    const PROTECTED_CONTROL_SEL =
+      'video, audio, button, input, .play-overlay, #mainvideo, .plyr__controls, .plyr__control, ' +
+      '.jw-controls, .jw-controlbar, .jw-icon, .vjs-control-bar, .art-controls, .dplayer-controller, .fluid_controls_container';
+
+    function findInlineClickjackDiv(target) {
+      if (!target || target.nodeType !== 1) return null;
+      if (target.closest && target.closest(PROTECTED_CONTROL_SEL)) return null;
+      const checkNode = (node) => {
+        if (!node || node.nodeType !== 1 || node === document.body || node === document.documentElement) return false;
+        const tag = (node.tagName || '').toLowerCase();
+        if (tag !== 'div') return false;
+        if (node.closest && node.closest(PROTECTED_CONTROL_SEL)) return false;
+        if (node.querySelector && node.querySelector('video, button, input')) return false;
+        const styleAttr = (node.getAttribute && node.getAttribute('style') || '').toLowerCase().replace(/\s+/g, '');
+        const z = node.style ? parseInt(node.style.zIndex, 10) : 0;
+        const isHighZ = styleAttr.includes('z-index:300000') || styleAttr.includes('z-index:2147483647') || styleAttr.includes('z-index:99999999') || z >= 300000;
+        const isTransparent = styleAttr.includes('opacity:0.01') || /opacity:0(?:\.0+)?(?:;|$)/.test(styleAttr) || styleAttr.includes('background:transparent');
+        if (isHighZ && (isTransparent || styleAttr.includes('z-index:300000')) && !(node.innerText && node.innerText.trim())) {
+          return true;
+        }
+        // Anonymous clickjack div inside JWPlayer wrapper (.jw-wrapper > div without jw- class)
+        if (node.parentElement && node.parentElement.classList && node.parentElement.classList.contains('jw-wrapper')) {
+          const cls = typeof node.className === 'string' ? node.className : '';
+          if (!cls.includes('jw-') && (styleAttr.includes('position:fixed') || styleAttr.includes('position:absolute') || isHighZ || isTransparent) && !(node.innerText && node.innerText.trim())) {
+            return true;
+          }
+        }
+        return false;
+      };
+      if (checkNode(target)) return target;
+      if (target.parentElement && checkNode(target.parentElement)) return target.parentElement;
+      return null;
+    }
+
+    function interceptInPlayerOverlayOrIframeAnchor(e, target, label) {
+      const explicitOverlay = target.closest && target.closest(IN_PLAYER_AD_OVERLAY_SEL);
+      const inPlayerAdOverlay = (explicitOverlay && !(target.closest && target.closest(PROTECTED_CONTROL_SEL)))
+        ? explicitOverlay
+        : findInlineClickjackDiv(target);
+
+      if (inPlayerAdOverlay) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          inPlayerAdOverlay.style.pointerEvents = 'none';
+          inPlayerAdOverlay.style.display = 'none';
+          inPlayerAdOverlay.remove();
+        } catch (err) {}
+        console.log(`[Anti Pop-Under] Intercepted and removed in-player ad overlay on ${label}:`, inPlayerAdOverlay);
+        try {
+          const playerCont = (target.closest && target.closest('.kt-player, [class*="player" i], .video-holder, .player-holder')) || document;
+          if (playerCont) {
+            if (playerCont.classList) playerCont.classList.remove('is-ad-visible');
+            const touch = e.changedTouches && e.changedTouches[0];
+            const cx = touch ? touch.clientX : e.clientX;
+            const cy = touch ? touch.clientY : e.clientY;
+            let tappedPlayOverlay = false;
+            if (typeof cx === 'number' && typeof cy === 'number' && typeof document.elementFromPoint === 'function') {
+              const under = document.elementFromPoint(cx, cy);
+              if (under && under !== document.body && under !== inPlayerAdOverlay && !findInlineClickjackDiv(under) && typeof under.click === 'function') {
+                tappedPlayOverlay = Boolean(under.closest && under.closest('.play-overlay'));
+                under.click();
+              }
+            }
+            if (!tappedPlayOverlay) {
+              const stOverlay = document.querySelector && document.querySelector('.play-overlay');
+              if (stOverlay && document.getElementById('mainvideo') && typeof stOverlay.click === 'function') {
+                stOverlay.click();
+              }
+            }
+            const vid = playerCont.querySelector('video');
+            if (vid && vid.paused) {
+              const p = vid.play();
+              if (p && p.catch) p.catch(() => {});
+            }
+          }
+        } catch (err) {}
+        return 'HANDLED';
+      }
+
+      if (window.self !== window.top) {
+        const iframeAnchor = target.tagName === 'A' ? target : (target.closest && target.closest('a[href]'));
+        if (iframeAnchor) {
+          const href = iframeAnchor.getAttribute('href') || iframeAnchor.href || '';
+          const origHref = (iframeAnchor.dataset && iframeAnchor.dataset.wsOrigHref) ? iframeAnchor.dataset.wsOrigHref : '';
+          let isExtOrAd = false;
+          if (origHref && origHref !== href) {
+            isExtOrAd = true;
+          } else if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+            if (gamblingRegex.test(href) || adUrlRegex.test(href)) {
+              isExtOrAd = true;
+            } else if (iframeAnchor.getAttribute('target') === '_blank') {
+              try {
+                const uHost = new URL(href, window.location.href).hostname.replace(/^www\./i, '').toLowerCase();
+                const cHost = (window.location.hostname || '').replace(/^www\./i, '').toLowerCase();
+                if (uHost && cHost && uHost !== cHost && !uHost.endsWith('.' + cHost) && !cHost.endsWith('.' + uHost)) {
+                  isExtOrAd = true;
+                }
+              } catch (err) {}
+            }
+          }
+          if (isExtOrAd) {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              const pos = iframeAnchor.style && iframeAnchor.style.position;
+              if (pos === 'fixed' || pos === 'absolute' || !(iframeAnchor.innerText && iframeAnchor.innerText.trim())) {
+                iframeAnchor.style.pointerEvents = 'none';
+                iframeAnchor.remove();
+              }
+              const vid = document.querySelector('video');
+              if (vid && vid.paused) {
+                const p = vid.play();
+                if (p && p.catch) p.catch(() => {});
+              }
+            } catch (err) {}
+            reportBlocked(href, `Blocked external/ad overlay link inside player iframe (${label})`);
+            return 'HANDLED';
+          }
+        }
+        return 'IFRAME_PASSTHROUGH';
+      }
+      return 'CONTINUE';
+    }
+
     // Handle user clicks in bubbling phase (capture: false)
     window.addEventListener('click', (e) => {
       lastInteractionTime = Date.now();
@@ -1754,40 +2027,8 @@
       if (!target) return;
 
       // 0. XỬ LÝ ĐẦU TIÊN: TIÊU DIỆT LỚP PHỦ QUẢNG CÁO NẰM ĐÈ TRÊN HOẶC TRONG PLAYER (KỂ CẢ TRONG EMBEDDED IFRAME)
-      // (KVS fxPane, html.php iframes, VAST clickthrough, ad overlays, [data-cl-spot], [data-cl-overlay], v.v.)
-      const inPlayerAdOverlay = target.closest && target.closest(
-        '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, ' +
-        '#catfish-banner, .popup-banner, .fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
-        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
-        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
-        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay'
-      );
-      if (inPlayerAdOverlay) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          inPlayerAdOverlay.style.pointerEvents = 'none';
-          inPlayerAdOverlay.style.display = 'none';
-          inPlayerAdOverlay.remove();
-        } catch (err) {}
-        console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay on click:', inPlayerAdOverlay);
-        // Self-Healing Recovery: Phục hồi điều khiển và tự động chạy video nếu đang pause
-        try {
-          const playerCont = target.closest('.kt-player, [class*="player" i], .video-holder, .player-holder') || document;
-          if (playerCont) {
-            if (playerCont.classList) playerCont.classList.remove('is-ad-visible');
-            const vid = playerCont.querySelector('video');
-            if (vid && vid.paused) {
-              const p = vid.play();
-              if (p && p.catch) p.catch(() => {});
-            }
-          }
-        } catch (err) {}
-        return;
-      }
-
-      // In embedded player iframes, allow 100% native player controls & progress bar clicks
-      if (window.self !== window.top) return;
+      const frameStatus = interceptInPlayerOverlayOrIframeAnchor(e, target, 'click');
+      if (frameStatus !== 'CONTINUE') return;
 
       // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: NÉ TRÌNH PHÁT VIDEO RA 100%
       // Mọi thao tác click, tua, dừng, điều khiển âm lượng phát sinh từ bên trong Video Player:
@@ -1925,37 +2166,8 @@
       if (!target) return;
 
       // 0. XỬ LÝ ĐẦU TIÊN: TIÊU DIỆT LỚP PHỦ QUẢNG CÁO NẰM ĐÈ TRÊN HOẶC TRONG PLAYER (KỂ CẢ TRONG EMBEDDED IFRAME)
-      const inPlayerAdOverlay = target.closest && target.closest(
-        '#nuevoa, #anuevo, #aclose, .vast_clickthrough_layer, .nva-center, .nva-midroll, .fluid_vpaid_slot, ' +
-        '#catfish-banner, .popup-banner, .fxPane, #fxStartPane, .fxPaneBody, .fxPaneClose, .fxFallback, ' +
-        'iframe[src*="html.php"], iframe[src*="start_html"], iframe[src*="pause_html"], ' +
-        'div:has(> iframe[src*="html.php"]), div:has(> .fxPane), ' +
-        '[data-cl-spot], [data-cl-overlay], [data-clocid], .video-ad-overlay'
-      );
-      if (inPlayerAdOverlay) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          inPlayerAdOverlay.style.pointerEvents = 'none';
-          inPlayerAdOverlay.style.display = 'none';
-          inPlayerAdOverlay.remove();
-        } catch (err) {}
-        console.log('[Anti Pop-Under] Intercepted and removed in-player ad overlay on touch:', inPlayerAdOverlay);
-        try {
-          const playerCont = target.closest('.kt-player, [class*="player" i], .video-holder, .player-holder') || document;
-          if (playerCont) {
-            if (playerCont.classList) playerCont.classList.remove('is-ad-visible');
-            const vid = playerCont.querySelector('video');
-            if (vid && vid.paused) {
-              const p = vid.play();
-              if (p && p.catch) p.catch(() => {});
-            }
-          }
-        } catch (err) {}
-        return;
-      }
-
-      if (window.self !== window.top) return;
+      const frameStatus = interceptInPlayerOverlayOrIframeAnchor(e, target, 'touch');
+      if (frameStatus !== 'CONTINUE') return;
 
       // 1. NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: NÉ TRÌNH PHÁT VIDEO VÀ THUMBNAIL/POSTER RA 100%
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
@@ -2312,7 +2524,11 @@
     'astronautlividlyreformer', 'detectivefrozepriceless', '/get/\\d+\\?id=\\d+',
     'pemsrv\\.com', 'exdynsrv', 'mayzaent\\.com', 'mnaspm\\.com', 'opoxv\\.com', 'exacdn\\.com',
     'attirecideryeah\\.com', 'cacklegrievingtank\\.com', 'gigglemagnetismunaired\\.com',
-    'smartpop', 'popunder1000'
+    'smartpop', 'popunder1000',
+    'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead\\.net', 'advertisertape',
+    'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
+    'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash',
+    '\\/[0-9a-z]{2}\\/[0-9a-f]{32}\\.js'
   ];
 
   const gamblingRegex = new RegExp(gamblingKeywords.join('|'), 'i');
@@ -4015,79 +4231,102 @@
       }, false);
     }
 
-    // 4. In embedded player iframes (e.g. dooplayer.com): Neutralize ad capture-phase click hijackers
+    // 4. In embedded player iframes (e.g. dooplayer.com, fc2stream.tv, emturbovid.com, streamtape.com, voe.sx): Neutralize ad capture-phase click/touch hijackers
     if (window.self !== window.top) {
       try {
-        const origWinAEL = window.addEventListener;
-        const origDocAEL = document.addEventListener;
+        const PLAYER_SAFE_SEL = '.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control, .plyr__control--overlaid, .jwplayer, .jw-wrapper, .jw-controls, .video-js, .vjs-big-play-button, .artplayer, .dplayer, .flowplayer, #mainvideo, .play-overlay, [class*="player" i]';
 
         function isAdClickCapture(type, useCapture) {
-          if (type !== 'click' && type !== 'mousedown' && type !== 'pointerdown') return false;
+          if (type !== 'click' && type !== 'mousedown' && type !== 'pointerdown' &&
+              type !== 'mouseup' && type !== 'pointerup' && type !== 'touchstart' && type !== 'touchend') return false;
           return (typeof useCapture === 'boolean' && useCapture) ||
                  (useCapture && typeof useCapture === 'object' && useCapture.capture);
         }
 
-        function isAdScriptFunction(fn) {
+        function isAdScriptFunction(fn, insidePlayer) {
           try {
             if (typeof fn !== 'function') return false;
             const str = Function.prototype.toString.call(fn);
-            return str.includes('open') || str.includes('location') || str.includes('proxy') || str.includes('cl_') || str.includes('onclopen');
+            if (/openNewTab|popunder|clickunder|forceunder|Adcash|__Y\b|onclopen|cl_/i.test(str)) return true;
+            if (insidePlayer) {
+              return str.includes('open') || str.includes('location') || str.includes('proxy');
+            }
+            return /\bwindow\.open\s*\(/.test(str);
           } catch (e) {
             return false;
           }
         }
 
-        window.addEventListener = function (type, listener, options) {
-          if (isAdClickCapture(type, options) && typeof listener === 'function') {
-            const wrapped = function (e) {
-              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control, .plyr__control--overlaid')) {
-                if (isAdScriptFunction(listener)) {
-                  return; // Disarm ad listener!
+        function wrapIframeAddEventListener(targetObj) {
+          const origAEL = targetObj.addEventListener;
+          if (typeof origAEL !== 'function') return;
+          targetObj.addEventListener = function (type, listener, options) {
+            if (isAdClickCapture(type, options) && typeof listener === 'function') {
+              const wrapped = function (e) {
+                const insidePlayer = Boolean(e && e.target && e.target.closest && e.target.closest(PLAYER_SAFE_SEL));
+                if (isAdScriptFunction(listener, insidePlayer)) {
+                  return; // Disarm ad capture listener!
                 }
-              }
-              return listener.apply(this, arguments);
-            };
-            return origWinAEL.call(this, type, wrapped, options);
-          }
-          return origWinAEL.apply(this, arguments);
-        };
+                return listener.apply(this, arguments);
+              };
+              return origAEL.call(this, type, wrapped, options);
+            }
+            return origAEL.apply(this, arguments);
+          };
+        }
 
-        document.addEventListener = function (type, listener, options) {
-          if (isAdClickCapture(type, options) && typeof listener === 'function') {
-            const wrapped = function (e) {
-              if (e && e.target && e.target.closest && e.target.closest('.plyr, video, .player-wrapper, #player, .plyr__controls, .plyr__control, .plyr__control--overlaid')) {
-                if (isAdScriptFunction(listener)) {
-                  return; // Disarm ad listener!
-                }
-              }
-              return listener.apply(this, arguments);
-            };
-            return origDocAEL.call(this, type, wrapped, options);
-          }
-          return origDocAEL.apply(this, arguments);
-        };
+        wrapIframeAddEventListener(window);
+        wrapIframeAddEventListener(document);
       } catch (e) {}
     }
 
-    // 5. Overlaid Initial Play Button Kick-starter (Zero interference with controls!)
-    // When the user clicks the big overlaid play button before playback starts, ensure video starts playing.
-    document.addEventListener('click', function (e) {
-      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn, button[data-plyr="play"]');
-      if (overlaidPlay) {
-        if (window.plyr && typeof window.plyr.play === 'function') {
-          try { window.plyr.play(); } catch (err) {}
-        }
-        const vid = document.querySelector('video');
-        if (vid && vid.paused) {
-          setTimeout(() => {
-            if (vid.paused) {
-              const p = vid.play();
+    // 5. Overlaid Initial Play Button & Streamtape Kick-starter (Zero interference with controls!)
+    // When the user taps/clicks the overlaid play button before playback starts, ensure video starts playing.
+    let lastKickstartTime = 0;
+    function kickstartOverlaidPlay(e) {
+      const now = Date.now();
+      if (now - lastKickstartTime < 250) return;
+      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn, button[data-plyr="play"], .play-overlay, .jw-display-icon-container, .vjs-big-play-button');
+      if (!overlaidPlay) return;
+      lastKickstartTime = now;
+
+      if (window.plyr && typeof window.plyr.play === 'function') {
+        try { window.plyr.play(); } catch (err) {}
+      }
+
+      // Streamtape safe playback helper: only activate #mainvideo from window.srclink if still unbound after native handler
+      const isStreamtapeOverlay = overlaidPlay.classList && overlaidPlay.classList.contains('play-overlay');
+      const mainVid = document.getElementById('mainvideo');
+      if (isStreamtapeOverlay && mainVid) {
+        setTimeout(() => {
+          try {
+            const hasSrc = Boolean(mainVid.getAttribute('src') || mainVid.src);
+            if (!hasSrc && typeof window.srclink === 'string' && window.srclink) {
+              const proto = (window.location && window.location.protocol && window.location.protocol.startsWith('http')) ? window.location.protocol : 'https:';
+              mainVid.src = window.srclink.startsWith('//') ? (proto + window.srclink) : window.srclink;
+            }
+            if (mainVid.paused && typeof mainVid.play === 'function') {
+              const p = mainVid.play();
               if (p && p.catch) p.catch(() => {});
             }
-          }, 80);
-        }
+          } catch (err) {}
+        }, 50);
+        return;
       }
-    }, false);
+
+      const vid = document.querySelector('video');
+      if (vid && vid.paused) {
+        setTimeout(() => {
+          if (vid.paused && typeof vid.play === 'function') {
+            const p = vid.play();
+            if (p && p.catch) p.catch(() => {});
+          }
+        }, 80);
+      }
+    }
+
+    document.addEventListener('click', kickstartOverlaidPlay, false);
+    document.addEventListener('touchend', kickstartOverlaidPlay, false);
   })();
 
   runGenericAntiAdblockBypass();

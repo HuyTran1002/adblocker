@@ -188,7 +188,12 @@
         "2embed.to",
         "2embed.cc",
         "dooplayer.com",
-        "www.dooplayer.com"
+        "www.dooplayer.com",
+        "supremejav.com",
+        "emturbovid.com",
+        "turbovidhls.com",
+        "fc2stream.tv",
+        "japopav.tv"
       ],
       "resourceTypes": [
         "stylesheet",
@@ -2546,6 +2551,38 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 342,
+    "priority": 150,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "requestDomains": [
+        "tapepops.com",
+        "watchadsontape.com",
+        "advertape.net",
+        "advtpe.com",
+        "tpead.net",
+        "advertisertape.com",
+        "tapeadvertisement.com",
+        "gettapeads.com",
+        "tapeadsenjoyer.com",
+        "tapelovesads.org",
+        "highrevenuecpm.com",
+        "facesnotebook.com",
+        "fc2ppv.buzz",
+        "0i0i0i0.com"
+      ],
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "image",
         "other"
       ]
     }
