@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('======================================================================');
-console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.4');
+console.log('🛡️  FULL SYSTEM QA AUDIT & CROSS-CHECK SUITE — WEBSHIELD v5.2.5');
 console.log('======================================================================\n');
 
 let pass = 0;
@@ -23,7 +23,7 @@ console.log('📦 1. Manifest & Extension Configuration Audit:');
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 check('manifest.json is valid JSON', !!manifest);
 check('manifest_version is 3', manifest.manifest_version === 3);
-check('Version is 5.2.4', manifest.version === '5.2.4');
+check('Version is 5.2.5', manifest.version === '5.2.5');
 check('Permissions include declarativeNetRequest and storage',
   manifest.permissions.includes('declarativeNetRequest') && manifest.permissions.includes('storage'));
 check('Main world inject.js content_script registered at document_start',
@@ -111,20 +111,23 @@ check('phimhdcss.com poster click shield & _self navigation timer allowlist acti
   injectJs.includes("window\\.open\\s*\\([^)]*['\"]_self['\"]\\s*\\)"));
 check('xnhau.pink KVS/Flowplayer deferred builder allow-guard & protect_block sanitizer active',
   injectJs.includes('kvsplayer|flowplayer|fp-engine') && injectJs.includes("conf.protect_block = '';"));
+check('avple.tv mavrtracktor neutralization & _playerOverlay unblur rules active',
+  injectJs.includes('mavrtracktor') && contentJs.includes('mavrtracktor') &&
+  injectJs.includes('div[class*="_playerOverlay"]') && contentJs.includes('div[class*="_playerOverlay"]'));
 
 // 6. POPUP & UI SYNCHRONIZATION AUDIT
 console.log('\n🖥️  6. Popup UI & Version Synchronization Audit:');
 const popupHtml = fs.readFileSync('popup.html', 'utf8');
-check('popup.html displays version v5.2.4 matching manifest.json',
-  popupHtml.includes('<span class="version">v5.2.4</span>'));
+check('popup.html displays version v5.2.5 matching manifest.json',
+  popupHtml.includes('<span class="version">v5.2.5</span>'));
 
 // 7. RELEASE PACKAGES AUDIT
 console.log('\n📦 7. Release Artifacts & Archive Integrity Audit:');
-const chromeZip = path.join(__dirname, 'webshield-v5.2.4-chrome.zip');
-const firefoxZip = path.join(__dirname, 'webshield-v5.2.4-firefox.zip');
-check('webshield-v5.2.4-chrome.zip exists and is non-empty (>100KB)',
+const chromeZip = path.join(__dirname, 'webshield-v5.2.5-chrome.zip');
+const firefoxZip = path.join(__dirname, 'webshield-v5.2.5-firefox.zip');
+check('webshield-v5.2.5-chrome.zip exists and is non-empty (>100KB)',
   fs.existsSync(chromeZip) && fs.statSync(chromeZip).size > 100000);
-check('webshield-v5.2.4-firefox.zip exists and is non-empty (>100KB)',
+check('webshield-v5.2.5-firefox.zip exists and is non-empty (>100KB)',
   fs.existsSync(firefoxZip) && fs.statSync(firefoxZip).size > 100000);
 
 const { execSync } = require('child_process');
@@ -134,13 +137,13 @@ const readZipEntryText = (zipPath, entryName) => {
 };
 
 const chromeManifest = JSON.parse(readZipEntryText(chromeZip, 'manifest.json'));
-check('Chrome package manifest uses background.service_worker and version 5.2.4',
-  chromeManifest.version === '5.2.4' &&
+check('Chrome package manifest uses background.service_worker and version 5.2.5',
+  chromeManifest.version === '5.2.5' &&
   chromeManifest.background && chromeManifest.background.service_worker === 'background.js');
 
 const firefoxManifest = JSON.parse(readZipEntryText(firefoxZip, 'manifest.json'));
-check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.4',
-  firefoxManifest.version === '5.2.4' &&
+check('Firefox package manifest is AMO-compliant: has gecko.id, background.scripts, and version 5.2.5',
+  firefoxManifest.version === '5.2.5' &&
   firefoxManifest.browser_specific_settings &&
   firefoxManifest.browser_specific_settings.gecko &&
   firefoxManifest.browser_specific_settings.gecko.id === 'anti-popunder@huytran1002' &&
@@ -151,7 +154,9 @@ check('Firefox package manifest is AMO-compliant: has gecko.id, background.scrip
 const hasLatestInjectFixes = (code) =>
   code.includes('notifyBlockedScriptComplete') &&
   code.includes('kvsplayer|flowplayer|fp-engine') &&
-  code.includes("conf.protect_block = '';");
+  code.includes("conf.protect_block = '';") &&
+  code.includes('mavrtracktor') &&
+  code.includes('div[class*="_playerOverlay"]');
 const chromeInjectJs = readZipEntryText(chromeZip, 'inject.js');
 const firefoxInjectJs = readZipEntryText(firefoxZip, 'inject.js');
 const chromeContentJs = readZipEntryText(chromeZip, 'content.js');

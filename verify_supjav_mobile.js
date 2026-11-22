@@ -1222,6 +1222,71 @@ async function run() {
     assert.strictEqual(sb.win.__playerClicked, 1, 'Legitimate click listener on #xn_player must execute normally');
   });
 
+  await test('6.6 avple.tv neutralizes mavrtracktor.com with synthetic load, hides _playerOverlay blur spinner, and preserves Plyr playback', () => {
+    const sb = createMobileSandbox({ url: 'https://avple.tv/video/158367802276566', isIframe: false });
+
+    // Build Plyr + Z4GCDW_playerOverlay blurred spinner DOM
+    const plyr = sb.doc.createElement('div');
+    plyr.className = 'plyr';
+    const video = sb.doc.createElement('video');
+    const controls = sb.doc.createElement('div');
+    controls.className = 'plyr__controls';
+    const playBtn = sb.doc.createElement('button');
+    playBtn.className = 'plyr__control plyr__control--overlaid';
+    controls.appendChild(playBtn);
+    const overlay = sb.doc.createElement('div');
+    overlay.className = 'Z4GCDW_playerOverlay Z4GCDW_visible';
+    const spinnerSvg = sb.doc.createElement('svg');
+    spinnerSvg.className = 'inline w-10 h-10 animate-spin fill-blue-600';
+    overlay.appendChild(spinnerSvg);
+    plyr.appendChild(video);
+    plyr.appendChild(controls);
+    plyr.appendChild(overlay);
+    sb.doc.body.appendChild(plyr);
+
+    sb.runInject();
+    sb.runContent();
+
+    // 1. Dynamic setAttribute script pointing to mavrtracktor.com is neutralized to empty data URL
+    const sAttr = sb.doc.createElement('script');
+    sAttr.setAttribute('src', 'https://go.mavrtracktor.com/easy?campaignId=fdc1e66c');
+    assert.strictEqual(sAttr.src, 'data:text/javascript;base64,', 'go.mavrtracktor.com script must be neutralized on setAttribute');
+
+    // 2. Pre-attributed mavrtracktor script dropped at appendChild still fires synthetic load event
+    const sRaw = sb.doc.createElement('script');
+    sRaw._attrs.src = 'https://go.mavrtracktor.com/easy?campaignId=fdc1e66c&userId=test';
+    let mavrOnLoadFired = 0;
+    sRaw.addEventListener('load', () => { mavrOnLoadFired++; });
+    sb.doc.body.appendChild(sRaw);
+    assert(!sb.doc.body.childNodes.includes(sRaw), 'Pre-attributed mavrtracktor script must be dropped from appendChild');
+    sb.runPendingTimers();
+    assert.strictEqual(mavrOnLoadFired, 1, 'Dropped mavrtracktor script must fire synthetic load event so promises do not reject');
+
+    // 3. Inject & Content stylesheets on avple.tv hide div[class*="_playerOverlay"] & unblur .plyr
+    const injectStyle = sb.doc.getElementById('webshield-overlay-killer');
+    const contentStyle = sb.doc.getElementById('anti-popunder-adblock-css');
+    assert(injectStyle && injectStyle.textContent.includes('div[class*="_playerOverlay"]'), 'inject.js overlay killer on avple.tv must hide _playerOverlay');
+    assert(injectStyle && injectStyle.textContent.includes('.plyr, .plyr video, .plyr__controls'), 'inject.js overlay killer on avple.tv must unblur .plyr elements');
+    assert(contentStyle && contentStyle.textContent.includes('div[class*="_playerOverlay"]'), 'content.js CSS on avple.tv must hide _playerOverlay as fallback');
+
+    // 4. Negative check: unrelated hosts (supjav.com) must NOT inject avple-specific _playerOverlay selector
+    const otherSb = createMobileSandbox({ url: 'https://supjav.com/12345.html', isIframe: false });
+    otherSb.runInject();
+    const otherStyle = otherSb.doc.getElementById('webshield-overlay-killer');
+    assert(otherStyle && !otherStyle.textContent.includes('div[class*="_playerOverlay"]'), 'Non-avple hosts must not receive avple-only _playerOverlay selector');
+
+    // 5. Popups to go.mavrtracktor.com are blocked while Plyr overlaid play button works natively
+    sb.runScript("window.open('https://go.mavrtracktor.com/easy?campaignId=1', '_blank');");
+    assert.strictEqual(sb.openedUrls.length, 0, 'window.open to mavrtracktor.com must be blocked');
+    const tapRes = sb.dispatchMobileTap(playBtn);
+    assert.strictEqual(tapRes.click.defaultPrevented, false, 'Plyr play button click must NOT be canceled on avple.tv');
+    assert(!playBtn._removed, 'Plyr play button must NOT be removed');
+
+    // 6. Static DNR Rule 342 includes mavrtracktor.com for instant network blocking on mobile/desktop
+    const rule342 = rulesJson.find(r => r.id === 342);
+    assert(rule342 && rule342.condition && Array.isArray(rule342.condition.requestDomains) && rule342.condition.requestDomains.includes('mavrtracktor.com'), 'Rule 342 must block mavrtracktor.com at network layer');
+  });
+
   console.log('\n======================================================================');
   console.log(`🎉 SUPJAV MOBILE QA RESULT: ${passed} PASSED, ${failed} FAILED`);
   console.log('======================================================================');

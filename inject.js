@@ -517,7 +517,7 @@
             } catch (err) {}
           }
           if (isAdSpyglassRandom || /\/get\/\d+\?id=\d+/i.test(sSrc) || /\/on\.js(?:\?|$)/i.test(sSrc) ||
-              /wpadmngr|wpshsdk|wpushsdk|nawpush|ntvpwpush|tubecup|metricswpsh|capndr|korlumo|zog\.link|realsrv|exosrv|magsrv|popads|popcash|astronautlividlyreformer|src\/jpm\.js|src\/jph\.js|tapepops|watchadsontape|advertape|advtpe|tpead\.net|advertisertape|tapeadvertisement|gettapeads|tapeadsenjoyer|tapelovesads|highrevenuecpm|facesnotebook|fc2ppv\.buzz|0i0i0i0|popunder1000|adspyglass|shoukigaigo|onclkds|adcash/i.test(sSrc)) {
+              /wpadmngr|wpshsdk|wpushsdk|nawpush|ntvpwpush|tubecup|metricswpsh|capndr|korlumo|zog\.link|realsrv|exosrv|magsrv|popads|popcash|astronautlividlyreformer|src\/jpm\.js|src\/jph\.js|tapepops|watchadsontape|advertape|advtpe|tpead\.net|advertisertape|tapeadvertisement|gettapeads|tapeadsenjoyer|tapelovesads|highrevenuecpm|facesnotebook|fc2ppv\.buzz|0i0i0i0|popunder1000|adspyglass|shoukigaigo|onclkds|adcash|mavrtracktor/i.test(sSrc)) {
             return true;
           }
         }
@@ -670,7 +670,21 @@
         pointer-events: auto !important;
         visibility: visible !important;
         opacity: 1 !important;
+      }${/(?:^|\.)avple\./i.test(currentHost) ? `
+      div[class*="_playerOverlay"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        z-index: -999999 !important;
       }
+      .plyr, .plyr video, .plyr__controls {
+        filter: none !important;
+        -webkit-filter: none !important;
+        pointer-events: auto !important;
+      }` : ''}
     `;
       const targetMount = document.head || document.documentElement;
       if (targetMount) {
@@ -1198,7 +1212,7 @@
           'pemsrv.com', 'opoxv.com', 'exacdn.com', 'attirecideryeah', 'cacklegrievingtank', 'gigglemagnetismunaired', 'popunder1000',
           'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead.net', 'advertisertape',
           'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
-          'facesnotebook', 'fc2ppv.buzz', '0i0i0i0.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash'
+          'facesnotebook', 'fc2ppv.buzz', '0i0i0i0.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash', 'mavrtracktor'
         ];
         return keywords.some(kw => lower.includes(kw));
       } catch (e) {
@@ -2533,7 +2547,7 @@
     'smartpop', 'popunder1000',
     'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead\\.net', 'advertisertape',
     'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
-    'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash',
+    'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash', 'mavrtracktor',
     '\\/[0-9a-z]{2}\\/[0-9a-f]{32}\\.js'
   ];
 

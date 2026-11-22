@@ -650,6 +650,24 @@ function injectAdBlockCSS() {
     opacity: 1 !important;
   }
 `;
+  if (/(?:^|\.)avple\./i.test(window.location.hostname || '')) {
+    style.textContent += `
+  div[class*="_playerOverlay"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: -999999 !important;
+  }
+  .plyr, .plyr video, .plyr__controls {
+    filter: none !important;
+    -webkit-filter: none !important;
+    pointer-events: auto !important;
+  }
+`;
+  }
   (document.head || document.documentElement).appendChild(style);
 }
 
@@ -1010,7 +1028,7 @@ if (currentEnabledState) {
       'smartpop', 'popunder1000',
       'tapepops', 'watchadsontape', 'advertape', 'advtpe', 'tpead\\.net', 'advertisertape',
       'tapeadvertisement', 'gettapeads', 'tapeadsenjoyer', 'tapelovesads', 'highrevenuecpm',
-      'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash',
+      'facesnotebook', 'fc2ppv\\.buzz', '0i0i0i0\\.com', 'adspyglass', 'shoukigaigo', 'onclkds', 'adcash', 'mavrtracktor',
       '\\/[0-9a-z]{2}\\/[0-9a-f]{32}\\.js'
     ];
 
