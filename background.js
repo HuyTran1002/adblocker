@@ -71,7 +71,8 @@ const SAFE_EXCLUDED = [
   'centrifuge', 'websocket',
   // Dedicated tube / streaming CDNs & in-player hosts
   'qooglevideo', 'vlstream', 'vlplayer', 'streamvl', 'dooplayer', 'javmost',
-  'supjav', 'supremejav', 'emturbovid', 'turboviplay', 'turbovid', 'fc2stream', 'japopav'
+  'supjav', 'supremejav', 'emturbovid', 'turboviplay', 'turbovid', 'fc2stream', 'japopav',
+  'findjav', 'watchjavnow', 'playersb'
 ];
 
 function isSafeAdDomain(dom) {

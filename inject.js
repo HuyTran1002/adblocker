@@ -4233,7 +4233,7 @@
         if (typeof window.init_start_select === 'function' || typeof window.select_part === 'function') {
           triggerJavmostPlayer();
           clearInterval(interval);
-        } else if (attempts > 30) {
+        } else if (attempts > 75) {
           clearInterval(interval);
         }
       }, 200);
@@ -4300,13 +4300,30 @@
       } catch (e) {}
     }
 
-    // 5. Overlaid Initial Play Button & Streamtape Kick-starter (Zero interference with controls!)
-    // When the user taps/clicks the overlaid play button before playback starts, ensure video starts playing.
+    // 5. Overlaid Initial Play Button & Streamtape Kick-starter (Zero interference with controls or Pause!)
+    // Only kickstart when user clicks/taps an initial overlaid play button while video was ALREADY paused before interaction.
     let lastKickstartTime = 0;
+    let wasPlayingBeforeInteraction = false;
+    function recordPreInteractionPlayState() {
+      try {
+        const vid = document.getElementById('mainvideo') || document.querySelector('video');
+        wasPlayingBeforeInteraction = Boolean(vid && !vid.paused && !vid.ended);
+      } catch (err) {
+        wasPlayingBeforeInteraction = false;
+      }
+    }
+    document.addEventListener('pointerdown', recordPreInteractionPlayState, true);
+    document.addEventListener('touchstart', recordPreInteractionPlayState, true);
+    document.addEventListener('mousedown', recordPreInteractionPlayState, true);
+
     function kickstartOverlaidPlay(e) {
+      if (wasPlayingBeforeInteraction) return;
+      if (e.target && e.target.closest && e.target.closest('.plyr__controls, .jw-controls, .jw-controlbar, .vjs-control-bar, .art-controls, .dplayer-controller, .fluid_controls_container')) {
+        return;
+      }
       const now = Date.now();
       if (now - lastKickstartTime < 250) return;
-      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn, button[data-plyr="play"], .play-overlay, .jw-display-icon-container, .vjs-big-play-button');
+      const overlaidPlay = e.target && e.target.closest && e.target.closest('.plyr__control--overlaid, .play-btn, .play-overlay, .jw-display-icon-container, .vjs-big-play-button');
       if (!overlaidPlay) return;
       lastKickstartTime = now;
 

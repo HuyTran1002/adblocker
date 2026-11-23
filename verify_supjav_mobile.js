@@ -1287,6 +1287,59 @@ async function run() {
     assert(rule342 && rule342.condition && Array.isArray(rule342.condition.requestDomains) && rule342.condition.requestDomains.includes('mavrtracktor.com'), 'Rule 342 must block mavrtracktor.com at network layer');
   });
 
+  await test('6.7 Universal Plyr Pause stays paused (kickstartOverlaidPlay never overrides Pause) & <picture> lazyload thumbnails hydrate', () => {
+    const sb = createMobileSandbox({ url: 'https://www.javmost.ws/NHDTB-586-REDUCING-MOSAIC/', isIframe: false });
+
+    // Build Plyr DOM with both control-bar Play/Pause toggle button and overlaid play button
+    const plyr = sb.doc.createElement('div');
+    plyr.className = 'plyr';
+    const video = sb.doc.createElement('video');
+    video.paused = false; // Currently playing!
+    video.ended = false;
+    const controls = sb.doc.createElement('div');
+    controls.className = 'plyr__controls';
+    const toggleBtn = sb.doc.createElement('button');
+    toggleBtn.setAttribute('data-plyr', 'play');
+    toggleBtn.addEventListener('click', () => { video.pause(); });
+    controls.appendChild(toggleBtn);
+    const overlaidBtn = sb.doc.createElement('button');
+    overlaidBtn.className = 'plyr__control plyr__control--overlaid';
+    plyr.appendChild(video);
+    plyr.appendChild(controls);
+    plyr.appendChild(overlaidBtn);
+    sb.doc.body.appendChild(plyr);
+
+    // Build javmost <picture><source data-srcset><img class="lazyload" data-src="preload.webp"></picture>
+    const pic = sb.doc.createElement('picture');
+    const srcEl = sb.doc.createElement('source');
+    srcEl.setAttribute('data-srcset', 'https://img3.javmost.ws/images/480/HMN-393-UNCENSORED-LEAK.webp');
+    const lazyImg = sb.doc.createElement('img');
+    lazyImg.className = 'card-img lazyload';
+    lazyImg.setAttribute('data-src', 'https://www.javmost.ws/assets/img/preload.webp');
+    lazyImg.setAttribute('src', 'https://www.javmost.ws/assets/img/preload.webp');
+    pic.appendChild(srcEl);
+    pic.appendChild(lazyImg);
+    sb.doc.body.appendChild(pic);
+
+    sb.runInject();
+    sb.runContent();
+
+    // 1. Clicking control-bar Pause button while playing must keep video paused (even after 80ms timers)
+    sb.dispatchMobileTap(toggleBtn);
+    sb.runPendingTimers();
+    assert.strictEqual(video.paused, true, 'Video must remain paused after clicking Plyr Pause button');
+    assert.strictEqual(video.playCalls, 0, 'kickstartOverlaidPlay must NEVER call vid.play() when user pauses');
+
+    // 2. Clicking overlaid play button while already paused must still kickstart playback
+    sb.dispatchMobileTap(overlaidBtn);
+    sb.runPendingTimers();
+    assert.strictEqual(video.paused, false, 'Clicking overlaid play button while paused must start playback');
+    assert(video.playCalls >= 1, 'kickstartOverlaidPlay must call play() on initial overlaid button tap');
+
+    // 3. <picture><source data-srcset> thumbnail must hydrate past preload.webp
+    assert.strictEqual(lazyImg.src, 'https://img3.javmost.ws/images/480/HMN-393-UNCENSORED-LEAK.webp', '<picture> lazyload thumbnail must hydrate from source[data-srcset]');
+  });
+
   console.log('\n======================================================================');
   console.log(`🎉 SUPJAV MOBILE QA RESULT: ${passed} PASSED, ${failed} FAILED`);
   console.log('======================================================================');

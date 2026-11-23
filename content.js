@@ -1299,19 +1299,26 @@ if (currentEnabledState) {
       const s = String(srcVal).trim().toLowerCase();
       if (!s || s === '#' || s.startsWith('data:image/')) return true;
       if (pageHref && s === pageHref.toLowerCase()) return true;
-      return /(?:^|\/)(?:blank|grey|gray|spacer|loading|placeholder|transparent|pixel|1x1|lazy)\.(?:gif|png|jpe?g|webp|svg)(?:\?|$)/i.test(s);
+      return /(?:^|\/)(?:blank|grey|gray|spacer|loading|placeholder|transparent|pixel|1x1|lazy|preload)\.(?:gif|png|jpe?g|webp|svg)(?:\?|$)/i.test(s);
     }
 
-    // Hydrates lazy-loaded movie/video thumbnails (data-original / data-lazy-src) if Rocket Loader or lazyload scripts stalled
+    // Hydrates lazy-loaded movie/video thumbnails (data-original / data-lazy-src / data-src / <picture> source[data-srcset])
     function hydrateLazyThumbnail(img) {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       if (!img || img.nodeType !== 1 || img.tagName !== 'IMG') return;
       if (img.hasAttribute('data-ad-blocked') || img.hasAttribute('data-ws-lazy-hydrated')) return;
-      if (!(isMovieBannerOrPoster(img) || (img.classList && img.classList.contains('lazy')))) return;
+      if (!(isMovieBannerOrPoster(img) || (img.classList && (img.classList.contains('lazy') || img.classList.contains('lazyload'))))) return;
       if (img.closest && img.closest('.movv-ad, .adsbox, .ad-banner, .ad-slot, .ads-slot, ins.adsbygoogle, [data-zoneid], [data-cl-spot]')) return;
       try {
-        const lazySrc = (img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || '').trim();
-        if (!lazySrc || !/^(?:https?:\/\/|\/\/|\/)/i.test(lazySrc)) return;
+        let lazySrc = (img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || img.getAttribute('data-src') || '').trim();
+        if ((!lazySrc || isPlaceholderImageSrc(lazySrc, '')) && img.parentElement && img.parentElement.tagName === 'PICTURE') {
+          const picSource = img.parentElement.querySelector('source[data-srcset]');
+          if (picSource) {
+            const rawSrcset = (picSource.getAttribute('data-srcset') || '').trim();
+            if (rawSrcset) lazySrc = rawSrcset.split(',')[0].trim().split(/\s+/)[0];
+          }
+        }
+        if (!lazySrc || !/^(?:https?:\/\/|\/\/|\/)/i.test(lazySrc) || isPlaceholderImageSrc(lazySrc, '')) return;
         const lazyLower = lazySrc.toLowerCase();
         if (adUrlRegex.test(lazyLower) || gamblingRegex.test(lazyLower)) return;
 
@@ -2202,7 +2209,7 @@ if (currentEnabledState) {
 
     // Scans and removes all ads currently in the document
     function scanAndRemoveAds() {
-      document.querySelectorAll('img[data-original], img[data-lazy-src]').forEach(hydrateLazyThumbnail);
+      document.querySelectorAll('img[data-original], img[data-lazy-src], img.lazyload[data-src], picture > img.lazyload').forEach(hydrateLazyThumbnail);
       checkAndHideElement(document.body || document.documentElement);
       detectAndCleanAdOverlays();
       cleanInPlayerAdsAndOverlays();
@@ -2229,7 +2236,7 @@ if (currentEnabledState) {
           if (nodes[i].tagName === 'IMG') {
             hydrateLazyThumbnail(nodes[i]);
           } else if (nodes[i].querySelectorAll) {
-            nodes[i].querySelectorAll('img[data-original], img[data-lazy-src]').forEach(hydrateLazyThumbnail);
+            nodes[i].querySelectorAll('img[data-original], img[data-lazy-src], img.lazyload[data-src], picture > img.lazyload').forEach(hydrateLazyThumbnail);
           }
           checkAndHideElement(nodes[i]);
         }
