@@ -477,6 +477,14 @@ function injectAdBlockCSS() {
     z-index: 10 !important;
     pointer-events: auto !important;
   }
+  .thumbnail-container:has(> video.videoThumbnails[src=""]) picture img,
+  .thumbnail-container:has(> video.videoThumbnails:not([src])) picture img {
+    display: block !important;
+  }
+  .thumbnail-container > video.videoThumbnails[src=""],
+  .thumbnail-container > video.videoThumbnails:not([src]) {
+    display: none !important;
+  }
   div[data-admpid],
   div[id^="ad_"],
   .exo-native-widget,
@@ -1303,6 +1311,12 @@ if (currentEnabledState) {
     }
 
     // Hydrates lazy-loaded movie/video thumbnails (data-original / data-lazy-src / data-src / <picture> source[data-srcset])
+    function isValidLazyMediaUrl(urlVal) {
+      if (!urlVal) return false;
+      const s = String(urlVal).trim();
+      return /^(?:https?:\/\/[a-z0-9.-]+\.[a-z]{2,}\/|\/\/[a-z0-9.-]+\.[a-z]{2,}\/|\/[^/])/i.test(s);
+    }
+
     function hydrateLazyThumbnail(img) {
       if (!currentEnabledState || isCurrentPageWhitelisted()) return;
       if (!img || img.nodeType !== 1 || img.tagName !== 'IMG') return;
@@ -1311,14 +1325,19 @@ if (currentEnabledState) {
       if (img.closest && img.closest('.movv-ad, .adsbox, .ad-banner, .ad-slot, .ads-slot, ins.adsbygoogle, [data-zoneid], [data-cl-spot]')) return;
       try {
         let lazySrc = (img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || img.getAttribute('data-src') || '').trim();
-        if ((!lazySrc || isPlaceholderImageSrc(lazySrc, '')) && img.parentElement && img.parentElement.tagName === 'PICTURE') {
-          const picSource = img.parentElement.querySelector('source[data-srcset]');
+        let picSource = null;
+        let rawSrcset = '';
+        if (img.parentElement && img.parentElement.tagName === 'PICTURE') {
+          picSource = img.parentElement.querySelector('source[data-srcset]');
           if (picSource) {
-            const rawSrcset = (picSource.getAttribute('data-srcset') || '').trim();
-            if (rawSrcset) lazySrc = rawSrcset.split(',')[0].trim().split(/\s+/)[0];
+            rawSrcset = (picSource.getAttribute('data-srcset') || '').trim();
+            const firstSrcset = rawSrcset ? rawSrcset.split(',')[0].trim().split(/\s+/)[0] : '';
+            if (isValidLazyMediaUrl(firstSrcset) && !isPlaceholderImageSrc(firstSrcset, '')) {
+              lazySrc = firstSrcset;
+            }
           }
         }
-        if (!lazySrc || !/^(?:https?:\/\/|\/\/|\/)/i.test(lazySrc) || isPlaceholderImageSrc(lazySrc, '')) return;
+        if (!isValidLazyMediaUrl(lazySrc) || isPlaceholderImageSrc(lazySrc, '')) return;
         const lazyLower = lazySrc.toLowerCase();
         if (adUrlRegex.test(lazyLower) || gamblingRegex.test(lazyLower)) return;
 
@@ -1326,6 +1345,9 @@ if (currentEnabledState) {
         const pageHref = (window.location && window.location.href) || '';
         if (isPlaceholderImageSrc(currentSrcAttr, pageHref) || isPlaceholderImageSrc(img.src, pageHref)) {
           img.setAttribute('data-ws-lazy-hydrated', '1');
+          if (picSource && rawSrcset && isValidLazyMediaUrl(rawSrcset.split(',')[0].trim().split(/\s+/)[0])) {
+            picSource.setAttribute('srcset', rawSrcset);
+          }
           img.src = lazySrc;
         }
       } catch (e) {}

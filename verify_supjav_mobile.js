@@ -1321,6 +1321,18 @@ async function run() {
     pic.appendChild(lazyImg);
     sb.doc.body.appendChild(pic);
 
+    // Build invalid "httpnull" <picture> from javmost.ws/#3 showlist2 API
+    const badPic = sb.doc.createElement('picture');
+    const badSrc = sb.doc.createElement('source');
+    badSrc.setAttribute('data-srcset', 'httpnull');
+    const badImg = sb.doc.createElement('img');
+    badImg.className = 'card-img-top lazyload';
+    badImg.setAttribute('data-src', 'httpnull');
+    badImg.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
+    badPic.appendChild(badSrc);
+    badPic.appendChild(badImg);
+    sb.doc.body.appendChild(badPic);
+
     sb.runInject();
     sb.runContent();
 
@@ -1336,8 +1348,12 @@ async function run() {
     assert.strictEqual(video.paused, false, 'Clicking overlaid play button while paused must start playback');
     assert(video.playCalls >= 1, 'kickstartOverlaidPlay must call play() on initial overlaid button tap');
 
-    // 3. <picture><source data-srcset> thumbnail must hydrate past preload.webp
+    // 3. <picture><source data-srcset> thumbnail must hydrate past preload.webp and sync source[srcset]
     assert.strictEqual(lazyImg.src, 'https://img3.javmost.ws/images/480/HMN-393-UNCENSORED-LEAK.webp', '<picture> lazyload thumbnail must hydrate from source[data-srcset]');
+    assert.strictEqual(srcEl.getAttribute('srcset'), 'https://img3.javmost.ws/images/480/HMN-393-UNCENSORED-LEAK.webp', '<picture> <source> must also receive srcset attribute');
+
+    // 4. Invalid "httpnull" cover from javmost.ws/#3 showlist2 API must be rejected and never corrupt img.src
+    assert.notStrictEqual(badImg.src, 'httpnull', 'Invalid httpnull URL must never be hydrated into img.src');
   });
 
   console.log('\n======================================================================');

@@ -2,7 +2,7 @@
 if (typeof chrome === "undefined" || !chrome.storage) {
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: "5.2.6" }),
+      getManifest: () => ({ version: "5.2.7" }),
       sendMessage: (msg, cb) => { if (cb) cb({ success: true }); }
     },
     storage: {
@@ -24,11 +24,11 @@ if (typeof chrome === "undefined" || !chrome.storage) {
         },
         set: (obj, cb) => { if (cb) cb(); }
       },
-      onChanged: { addListener: () => {} }
+      onChanged: { addListener: () => { } }
     },
     tabs: {
       query: (opts, cb) => { if (cb) cb([{ id: 1, url: "https://example.com" }]); },
-      reload: () => {},
+      reload: () => { },
       create: (opts) => { window.open(opts.url, '_blank'); }
     }
   };
@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (versionEl && chrome && chrome.runtime && chrome.runtime.getManifest) {
       versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   // View Panels Navigation (Main View <-> Settings View)
   const mainView = document.getElementById("main-view");
@@ -76,7 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       const targetTabId = btn.getAttribute("data-tab");
-      
+
       tabBtns.forEach(b => b.classList.remove("active"));
       tabPanes.forEach(p => p.classList.remove("active"));
 
@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.execCommand("copy");
       document.body.removeChild(ta);
       if (onSuccess) onSuccess();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // Relative Time Formatter in Vietnamese
@@ -200,7 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const urlObj = new URL(displayUrl);
             displayUrl = urlObj.hostname + urlObj.pathname;
             if (displayUrl.length > 32) displayUrl = displayUrl.substring(0, 32) + "...";
-          } catch (e) {}
+          } catch (e) { }
         }
         const countBadge = (item.count && item.count > 1)
           ? `<span class="history-count-badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.5px 5px; font-size: 10px; font-weight: 700; margin-left: 5px;" title="${item.count} quảng cáo">${item.count} QC</span>`
@@ -320,7 +320,7 @@ document.addEventListener("DOMContentLoaded", () => {
     customRulesContainer.innerHTML = "";
     const filters = manualFilters || {};
     const globalList = customBlockedSelectors || [];
-    
+
     const domainRules = (currentDomain && filters[currentDomain]) ? filters[currentDomain] : [];
     const totalCount = domainRules.length + globalList.length;
     customCountEl.textContent = totalCount;
@@ -329,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
       emptyCustomMsg.style.display = "block";
     } else {
       emptyCustomMsg.style.display = "none";
-      
+
       // 1. Render rules on current domain
       domainRules.forEach(selector => {
         const item = document.createElement("div");
@@ -590,7 +590,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dynCountEl.textContent = `${liveDomains.toLocaleString()} máy chủ (${rules.length} quy tắc DNR)`;
           }
         });
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 
@@ -619,7 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
           updateFiltersBtn.disabled = false;
         }, 2000);
       });
-    } catch(e) {
+    } catch (e) {
       updateFiltersBtn.classList.remove("loading");
       updateBtnText.textContent = "Cập nhật";
       updateFiltersBtn.disabled = false;
@@ -662,7 +662,7 @@ document.addEventListener("DOMContentLoaded", () => {
           currentDomain = urlObj.hostname;
           siteToggleLabel.textContent = `Chặn trên ${currentDomain}`;
           siteToggle.disabled = false;
-        } catch(e) {}
+        } catch (e) { }
       }
 
       // 1. Instant zero-latency badge synchronization: if the icon badge displays "3", show "3" immediately!
@@ -675,7 +675,7 @@ document.addEventListener("DOMContentLoaded", () => {
               blockedCountEl.textContent = parsed;
             }
           });
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // 2. Instant response from background in-memory state with current tabId
@@ -685,7 +685,7 @@ document.addEventListener("DOMContentLoaded", () => {
             applyState(res);
           }
         });
-      } catch (e) {}
+      } catch (e) { }
 
       // 3. Storage query as reliable source
       chrome.storage.local.get(["enabled", "blockedCount", "blockedHistory", "disabledDomains", "customBlockedSelectors", "manualFilters", "lastFiltersUpdateTimestamp", "onlineFilterStats"], (rawResult) => {
@@ -727,10 +727,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   if (document.documentElement) {
                     document.documentElement.setAttribute('data-anti-popunder-enabled', enabledVal ? 'true' : 'false');
                   }
-                } catch (e) {}
+                } catch (e) { }
               },
               args: [isEnabled]
-            }).catch(() => {}).finally(() => {
+            }).catch(() => { }).finally(() => {
               chrome.tabs.reload(tabId);
             });
           } else {
@@ -770,10 +770,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   }
                   sessionStorage.setItem('__webshield_disabled_domains__', JSON.stringify(list));
                   sessionStorage.setItem('__webshield_enabled__', blocked ? 'true' : 'false');
-                } catch (e) {}
+                } catch (e) { }
               },
               args: [cleanDomain, isBlocked]
-            }).catch(() => {}).finally(() => {
+            }).catch(() => { }).finally(() => {
               chrome.tabs.reload(tabId);
             });
           } else {
@@ -815,7 +815,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
               }
             });
-          } catch (e) {}
+          } catch (e) { }
         }
       }
 
@@ -852,10 +852,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Check if tab is a restricted browser internal page
         const isRestricted = activeTab.url.startsWith("chrome://") ||
-                             activeTab.url.startsWith("edge://") ||
-                             activeTab.url.startsWith("about:") ||
-                             activeTab.url.startsWith("chrome-extension://") ||
-                             activeTab.url.startsWith("view-source:");
+          activeTab.url.startsWith("edge://") ||
+          activeTab.url.startsWith("about:") ||
+          activeTab.url.startsWith("chrome-extension://") ||
+          activeTab.url.startsWith("view-source:");
 
         if (isRestricted) {
           alert("Không thể chọn phần tử trên trang hệ thống của trình duyệt!");
@@ -871,10 +871,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 target: { tabId: activeTab.id },
                 files: ["content.js"]
               }, () => {
-                if (chrome.runtime.lastError) {}
+                if (chrome.runtime.lastError) { }
                 setTimeout(() => {
                   chrome.tabs.sendMessage(activeTab.id, { type: "START_TARGET_PICKER" }, () => {
-                    if (chrome.runtime.lastError) {}
+                    if (chrome.runtime.lastError) { }
                     window.close();
                   });
                 }, 100);
@@ -910,9 +910,9 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         if (navigator.clipboard && window.ClipboardItem) {
           const item = new ClipboardItem({ [blob.type]: blob });
-          navigator.clipboard.write([item]).catch(() => {});
+          navigator.clipboard.write([item]).catch(() => { });
         }
-      } catch (clipErr) {}
+      } catch (clipErr) { }
 
       const formData = new FormData();
       formData.append('file', blob, 'screenshot.jpg');
@@ -983,7 +983,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getReportData() {
       const manifest = chrome.runtime.getManifest();
-      const version = manifest.version || "5.2.6";
+      const version = manifest.version || "5.2.7";
       const issueType = reportIssueType ? reportIssueType.value : "Quảng cáo lọt lưới";
       const userDesc = reportDescInput ? reportDescInput.value.trim() : "";
       const now = new Date().toLocaleString("vi-VN");
@@ -1032,7 +1032,7 @@ Trân trọng cảm ơn.`;
           const data = getReportData();
           navigator.clipboard.writeText(data.fullText);
         }
-      } catch (e) {}
+      } catch (e) { }
 
       showReportStatus("Đang mở ứng dụng Email trên thiết bị...", "success");
 
@@ -1054,21 +1054,21 @@ Trân trọng cảm ơn.`;
                     a.style.display = "none";
                     document.body.appendChild(a);
                     a.click();
-                    setTimeout(() => { try { a.remove(); } catch(e) {} }, 500);
+                    setTimeout(() => { try { a.remove(); } catch (e) { } }, 500);
                   },
                   args: [mailtoUrl]
                 }, () => {
                   if (chrome.runtime.lastError) {
                     fallbackLaunch();
                   } else if (isMobile) {
-                    setTimeout(() => { try { window.close(); } catch(e) {} }, 400);
+                    setTimeout(() => { try { window.close(); } catch (e) { } }, 400);
                   }
                 });
               } else {
                 fallbackLaunch();
               }
             } else if (isMobile) {
-              setTimeout(() => { try { window.close(); } catch(e) {} }, 400);
+              setTimeout(() => { try { window.close(); } catch (e) { } }, 400);
             }
           });
         } else {
@@ -1080,7 +1080,7 @@ Trân trọng cảm ơn.`;
         if (isMobile) {
           // Trên di động, nếu không mở được app mail, mở Gmail Web để người dùng luôn gửi được báo cáo
           chrome.tabs.create({ url: gmailFallbackUrl }, () => {
-            setTimeout(() => { try { window.close(); } catch(e) {} }, 300);
+            setTimeout(() => { try { window.close(); } catch (e) { } }, 300);
           });
         } else {
           // Trên PC: mở mailto trực tiếp
@@ -1106,14 +1106,14 @@ Trân trọng cảm ơn.`;
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(data.fullText);
           }
-        } catch(e) {}
+        } catch (e) { }
 
         showReportStatus("Đang mở trang soạn thư Gmail...", "success");
 
         const gmailUrl = `https://mail.google.com/mail/?view=cm&to=huytran1002.dev@gmail.com&su=${subjectParam}&body=${bodyParam}`;
         chrome.tabs.create({ url: gmailUrl }, () => {
           if (isMobile) {
-            setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
+            setTimeout(() => { try { window.close(); } catch (e) { } }, 300);
           }
         });
       });
@@ -1147,7 +1147,7 @@ Trân trọng cảm ơn.`;
 
         chrome.tabs.create({ url: githubUrl }, () => {
           if (isMobile) {
-            setTimeout(() => { try { window.close(); } catch (e) {} }, 150);
+            setTimeout(() => { try { window.close(); } catch (e) { } }, 150);
           }
         });
       });

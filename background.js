@@ -72,7 +72,7 @@ const SAFE_EXCLUDED = [
   // Dedicated tube / streaming CDNs & in-player hosts
   'qooglevideo', 'vlstream', 'vlplayer', 'streamvl', 'dooplayer', 'javmost',
   'supjav', 'supremejav', 'emturbovid', 'turboviplay', 'turbovid', 'fc2stream', 'japopav',
-  'findjav', 'watchjavnow', 'playersb'
+  'findjav', 'watchjavnow', 'playersb', 'javtiful', '123av'
 ];
 
 function isSafeAdDomain(dom) {
@@ -117,13 +117,20 @@ function parseFilterContent(text) {
       continue;
     }
 
-    // uBlock/ABP/AdGuard: ||domain.com^ or ||domain.com$ or ||domain.com/
+    // uBlock/ABP/AdGuard whole-domain rules: ||domain.com^ or ||domain.com$ (never convert path rules like ||site.com/ad.js into whole-domain blocks)
     if (line.startsWith('||')) {
-      let endIdx = line.indexOf('^');
-      if (endIdx === -1) endIdx = line.indexOf('$');
-      if (endIdx === -1) endIdx = line.indexOf('/');
-      if (endIdx === -1) endIdx = line.length;
-      const dom = line.substring(2, endIdx).trim().toLowerCase();
+      const body = line.substring(2);
+      const slashIdx = body.indexOf('/');
+      let endIdx = body.indexOf('^');
+      const dollarIdx = body.indexOf('$');
+      if (endIdx === -1 || (dollarIdx !== -1 && dollarIdx < endIdx)) endIdx = dollarIdx;
+      if (endIdx === -1) endIdx = body.length;
+      if (slashIdx !== -1 && slashIdx < endIdx) {
+        const afterSlash = body.substring(slashIdx + 1, endIdx).trim();
+        if (afterSlash.length > 0) continue;
+        endIdx = slashIdx;
+      }
+      const dom = body.substring(0, endIdx).trim().toLowerCase();
       if (isSafeAdDomain(dom)) domains.add(dom);
       continue;
     }
